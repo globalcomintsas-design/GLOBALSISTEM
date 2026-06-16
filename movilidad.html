@@ -315,8 +315,8 @@ function mostrarSistema(user){
   currentUser = user;
   document.getElementById('login').style.display='none';
   document.getElementById('sistema').style.display='block';
-  const rolLabel = user.rol==='admin'?'👑':user.rol==='cargador'?'✏️':'👁';
-  document.getElementById('userBadge').textContent=`${user.rol==='admin'?'👑':user.rol==='cargador'?'✏️':'👁'} ${user.nombre} · ${user.rol}`;
+  const rolLabel = user.rol==='admin'?'👑 Admin':user.rol==='cargador'?'✏️ Cargador':'👁 Viewer';
+  document.getElementById('userBadge').textContent=rolLabel+' '+user.nombre;
   // Mostrar secciones según rol
   const puedeCargar = user.rol==='admin'||user.rol==='cargador';
   document.getElementById('seccionRegistrarMov').style.display = puedeCargar?'':'none';
