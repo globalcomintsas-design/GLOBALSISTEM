@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Movilidad & Fines de Semana · GLOBALCOMINT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px;}
+.login-wrap{height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);}
+.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-logo{font-size:26px;font-weight:700;color:#1e3a8a;margin-bottom:6px;}
+.login-sub{color:#888;font-size:13px;margin-bottom:24px;}
+.login-box input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none;}
+.login-box input:focus{border-color:#1e3a8a;}
+.login-btn{width:100%;padding:13px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.login-error{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
+#sistema{display:none;}
+header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.header-left h1{font-size:20px;font-weight:700;}
+.header-left p{font-size:11px;color:#93c5fd;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.user-badge{background:rgba(255,255,255,0.15);padding:7px 12px;border-radius:20px;font-size:12px;}
+.logout-btn{background:#dc2626;border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;}
+.tabs{background:#1e40af;display:flex;gap:2px;padding:0 16px;overflow-x:auto;}
+.tab{padding:10px 16px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
+.tab.active{color:#fff;border-bottom-color:#fff;}
+.tab:hover{color:#fff;}
+.container{padding:16px;max-width:1100px;margin:0 auto;}
+.page{display:none;}.page.active{display:block;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.card{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.card-value{font-size:20px;font-weight:700;color:#1e3a8a;}
+.card-value.green{color:#16a34a;}
+.card-value.orange{color:#d97706;}
+.section{background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.section-title{font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px;}
+.field label{font-size:11px;color:#666;display:block;margin-bottom:4px;}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:#fafafa;}
+.field input:focus,.field select:focus{border-color:#1e3a8a;background:#fff;}
+.field.full{grid-column:1/-1;}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:#1e3a8a;color:#fff;}
+.btn-primary:hover{background:#1e40af;}
+.btn-success{background:#16a34a;color:#fff;}
+.btn-danger{background:#dc2626;color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
+.btn-outline:hover{background:#1e3a8a;color:#fff;}
+.btn-sm{padding:6px 12px;font-size:11px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+.filtros{background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;}
+.filtros input,.filtros select{padding:8px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;width:100%;outline:none;}
+.filtros input:focus,.filtros select:focus{border-color:#1e3a8a;}
+.filtros label{font-size:11px;color:#666;display:block;margin-bottom:3px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#eff6ff;color:#1e3a8a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:10px;text-align:left;white-space:nowrap;}
+td{padding:9px 10px;border-bottom:1px solid #f0f4f8;font-size:12px;vertical-align:middle;}
+tr:hover td{background:#fafbff;}
+.badge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;}
+.notif{position:fixed;bottom:20px;right:20px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s;}
+.notif.show{transform:translateY(0);opacity:1;}
+.notif.error{background:#dc2626;}
+.notif.success{background:#16a34a;}
+.spinner-overlay{position:fixed;inset:0;background:rgba(240,244,248,0.85);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
+.spinner{width:44px;height:44px;border:4px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:spin .7s linear infinite;}
+.spinner-text{font-size:13px;color:#1e3a8a;font-weight:600;}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media(max-width:500px){
+  .form-grid{grid-template-columns:1fr;}
+  .cards{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN (solo para admin) -->
+<div class="login-wrap" id="login">
+  <div class="login-box">
+    <div class="login-logo">GLOBALCOMINT</div>
+    <div class="login-sub">Movilidad & Fines de Semana</div>
+    <input type="text" id="inpUsuario" placeholder="Usuario" />
+    <div style="position:relative;margin-bottom:12px;"><input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" style="width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:DM Sans,sans-serif;outline:none;box-sizing:border-box;" /><span onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;">👁</span></div>
+    <button class="login-btn" onclick="ingresar()">Ingresar</button>
+    <div class="login-error" id="loginError" style="display:none;">Usuario o contraseña incorrectos</div>
+  </div>
+</div>
+
+<div id="spinnerOverlay" class="spinner-overlay">
+  <div class="spinner"></div>
+  <div class="spinner-text">Cargando datos...</div>
+</div>
+
+<div id="sistema">
+  <header>
+    <div class="header-left">
+      <h1>GLOBALCOMINT</h1>
+      <p>Movilidad · Fines de Semana</p>
+    </div>
+    <div class="header-right">
+      <a href="index.html" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;text-decoration:none;">🏠 Inicio</a>
+      <div class="user-badge" id="userBadge">Usuario</div>
+      <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('movilidad',this)">🚗 Movilidad</div>
+    <div class="tab" onclick="showTab('finesdesemana',this)">📅 Fines de Semana</div>
+  </div>
+
+  <div class="container">
+
+    <!-- MOVILIDAD -->
+    <div class="page active" id="page-movilidad">
+      <div class="cards">
+        <div class="card"><div class="card-label">Registros este mes</div><div class="card-value" id="movRegMes">0</div></div>
+        <div class="card"><div class="card-label">Total este mes</div><div class="card-value green" id="movTotalMes">$ 0</div></div>
+        <div class="card"><div class="card-label">Km este mes</div><div class="card-value orange" id="movKmMes">0</div></div>
+        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="movTotalGral">$ 0</div></div>
+      </div>
+
+      <!-- Destinos - solo admin -->
+      <div class="section" id="seccionDestinos" style="display:none">
+        <div class="section-title">
+          Destinos y Km
+          <button class="btn btn-outline btn-sm" onclick="agregarDestino()">+ Agregar destino</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;">
+          <span style="font-weight:600;color:#1e3a8a;font-size:13px">Precio por Km (igual para todos):</span>
+          <span style="font-size:13px;color:#666;">$</span>
+          <input type="number" id="precioKmGlobal" value="300" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" oninput="renderDestinos();calcularMovilidad()" />
+          <span style="font-size:11px;color:#888;">Podés cambiarlo cuando quieras y guardar</span>
+        </div>
+        <div class="table-wrap" style="margin-bottom:12px;">
+          <table>
+            <thead><tr><th>#</th><th>Destino</th><th>Km</th><th>Total estimado</th><th>Acciones</th></tr></thead>
+            <tbody id="destinosGrid"></tbody>
+          </table>
+        </div>
+        <button class="btn btn-success btn-sm" onclick="guardarDestinos()">💾 Guardar destinos y precio</button>
+      </div>
+
+      <!-- Formulario registro -->
+      <div class="section" id="seccionRegistrarMov" style="display:none">
+        <div class="section-title">Registrar Movilidad</div>
+        <div class="form-grid">
+          <div class="field"><label>Empleado</label>
+            <select id="movEmpleado">
+              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+            </select>
+          </div>
+          <div class="field"><label>Fecha</label><input type="date" id="movFecha" /></div>
+          <div class="field"><label>Destino</label><select id="movDestino" onchange="calcularMovilidad()"></select></div>
+          <div class="field"><label>Km recorridos</label><input type="text" id="movKm" readonly style="background:#f8fafc;color:#1e3a8a;font-weight:600;" placeholder="—" /></div>
+          <div class="field"><label>Total calculado</label><input type="text" id="movTotal" readonly style="background:#f0fdf4;font-weight:700;color:#16a34a" /></div>
+          <div class="field"><label>Observaciones</label><input type="text" id="movObsReg" placeholder="Notas..." /></div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarMovilidad()">💾 Guardar</button>
+      </div>
+
+      <!-- Tabla registros -->
+      <div class="section">
+        <div class="section-title">
+          Registros de Movilidad
+          <button class="btn btn-success btn-sm" onclick="exportarMovExcel()">📊 Excel</button>
+        </div>
+        <div class="filtros">
+          <div><label>Empleado</label>
+            <select id="filtroMovEmpleado" onchange="renderMovilidad()">
+              <option value="">Todos</option>
+              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+            </select>
+          </div>
+          <div><label>Destino</label><select id="filtroMovDestino" onchange="renderMovilidad()"><option value="">Todos</option></select></div>
+          <div><label>Desde</label><input type="date" id="filtroMovDesde" onchange="renderMovilidad()" /></div>
+          <div><label>Hasta</label><input type="date" id="filtroMovHasta" onchange="renderMovilidad()" /></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosMov()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Fecha</th><th>Destino</th><th>Km</th><th>Precio/Km</th><th>Total</th><th>Obs.</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaMov"></tbody>
+          </table>
+        </div>
+        <div id="resumenMov" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resumen por Empleado</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Viajes</th><th>Km totales</th><th>Total cobrado</th></tr></thead>
+            <tbody id="tablaMovResumen"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- FINES DE SEMANA -->
+    <div class="page" id="page-finesdesemana">
+      <div class="cards">
+        <div class="card"><div class="card-label">Registros este mes</div><div class="card-value" id="fsRegMes">0</div></div>
+        <div class="card"><div class="card-label">Total este mes</div><div class="card-value green" id="fsTotalMes">$ 0</div></div>
+        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="fsTotalGral">$ 0</div></div>
+      </div>
+
+      <!-- Formulario registro -->
+      <div class="section" id="seccionRegistrarFS" style="display:none">
+        <div class="section-title">Registrar Fin de Semana</div>
+        <div class="form-grid">
+          <div class="field"><label>Empleado</label>
+            <select id="fsEmpleado">
+              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+            </select>
+          </div>
+          <div class="field"><label>Fecha</label><input type="date" id="fsFecha" /></div>
+          <div class="field"><label>Monto ($)</label><input type="number" id="fsMonto" placeholder="0" inputmode="numeric" /></div>
+          <div class="field"><label>Observaciones</label><input type="text" id="fsObs" placeholder="Notas..." /></div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarFS()">💾 Guardar</button>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Registros de Fines de Semana
+          <button class="btn btn-success btn-sm" onclick="exportarFSExcel()">📊 Excel</button>
+        </div>
+        <div class="filtros">
+          <div><label>Empleado</label>
+            <select id="filtroFSEmpleado" onchange="renderFS()">
+              <option value="">Todos</option>
+              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+            </select>
+          </div>
+          <div><label>Desde</label><input type="date" id="filtroFSDesde" onchange="renderFS()" /></div>
+          <div><label>Hasta</label><input type="date" id="filtroFSHasta" onchange="renderFS()" /></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosFS()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Fecha</th><th>Monto</th><th>Observaciones</th><th>Cargado por</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaFS"></tbody>
+          </table>
+        </div>
+        <div id="resumenFS" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resumen por Empleado</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Cantidad de días</th><th>Total cobrado</th></tr></thead>
+            <tbody id="tablaFSResumen"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Usuarios de este módulo
+// Dnievas: entra sin contraseña vía ?user=dnievas, rol cargador
+// Bcola: login normal, rol admin
+const USERS = {
+  'Bcola': { password:'River83$', nombre:'Bruno', rol:'admin' },
+  'Dnievas': { password:null, nombre:'Daniel', rol:'cargador' }
+};
+
+const DESTINOS_DEFAULT = [
+  {nombre:'CEPAS', km:120},
+  {nombre:'AEROPUERTO', km:28},
+  {nombre:'ADUANA', km:20},
+  {nombre:'PEÑAFLOR', km:23},
+  {nombre:'SANTA ANA', km:15},
+  {nombre:'MOV ADC', km:400}
+];
+
+let currentUser = null;
+let allFS = [];
+let allMovilidad = [];
+let destinos = [...DESTINOS_DEFAULT];
+
+function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function today(){ return new Date().toLocaleDateString('es-AR'); }
+
+function toast(msg,type=''){
+  const el=document.getElementById('notif');
+  el.textContent=msg; el.className='notif '+type;
+  setTimeout(()=>el.classList.add('show'),10);
+  setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+function mostrarSistema(user){
+  currentUser = user;
+  document.getElementById('login').style.display='none';
+  document.getElementById('sistema').style.display='block';
+  const rolLabel = user.rol==='admin'?'👑':'user.rol==='cargador'?'✏️':'👁';
+  document.getElementById('userBadge').textContent=`${user.rol==='admin'?'👑':user.rol==='cargador'?'✏️':'👁'} ${user.nombre} · ${user.rol}`;
+  // Mostrar secciones según rol
+  const puedeCargar = user.rol==='admin'||user.rol==='cargador';
+  document.getElementById('seccionRegistrarMov').style.display = puedeCargar?'':'none';
+  document.getElementById('seccionRegistrarFS').style.display = puedeCargar?'':'none';
+  document.getElementById('seccionDestinos').style.display = user.rol==='admin'?'':'none';
+  document.getElementById('spinnerOverlay').style.display='flex'; initFirestore();
+}
+
+// Auto-login por URL ?user=dnievas
+window.addEventListener('DOMContentLoaded', ()=>{
+  const params = new URLSearchParams(window.location.search);
+  const u = params.get('user');
+  if(u && USERS[u] && USERS[u].password===null){
+    mostrarSistema({username:u, ...USERS[u]});
+  }
+});
+
+window.ingresar=function(){
+  const u=document.getElementById('inpUsuario').value.trim();
+  const p=document.getElementById('inpPassword').value;
+  const user=USERS[u];
+  if(user && user.password!==null && user.password===p){
+    mostrarSistema({username:u,...user});
+  } else {
+    document.getElementById('loginError').style.display='block';
+  }
+};
+window.cerrarSesion=function(){ location.href='movilidad.html'; };
+
+window.showTab=function(name,el){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+  if(name==='movilidad'){ renderDestinos(); renderMovilidad(); }
+  if(name==='finesdesemana') renderFS();
+};
+
+function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
+
+function initFirestore(){
+  onSnapshot(collection(db,'finesdesemana'), snap=>{
+    allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
+    allFS.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    renderFS();
+  });
+  onSnapshot(collection(db,'movilidad'), snap=>{
+    allMovilidad=snap.docs.map(d=>({id:d.id,...d.data()}));
+    allMovilidad.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    renderMovilidad();
+    ocultarSpinner();
+  });
+  onSnapshot(doc(db,'config','destinos'), snap=>{
+    if(snap.exists()){
+      destinos=snap.data().lista||[...DESTINOS_DEFAULT];
+      const pKm=snap.data().precioKm||300;
+      const el=document.getElementById('precioKmGlobal');
+      if(el) el.value=pKm;
+    } else {
+      destinos=[...DESTINOS_DEFAULT];
+    }
+    renderDestinos();
+    actualizarSelectDestinos();
+  });
+}
+
+// ── MOVILIDAD ──────────────────────────────────────────
+
+window.renderDestinos=function(){
+  const tbody=document.getElementById('destinosGrid');
+  if(!tbody) return;
+  const precioGlobal=parseFloat(document.getElementById('precioKmGlobal')?.value)||300;
+  tbody.innerHTML=destinos.map((d,i)=>{
+    const total=(d.km||0)*precioGlobal;
+    return `<tr>
+      <td style="color:#888;font-size:11px">${i+1}</td>
+      <td><strong style="color:#1e3a8a">${d.nombre}</strong></td>
+      <td><input type="number" value="${d.km||0}" placeholder="0" onchange="destinos[${i}].km=parseFloat(this.value)||0;renderDestinos();" style="width:80px;padding:6px 8px;border-radius:6px;border:1.5px solid #e2e8f0;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1e3a8a'" onblur="this.style.borderColor='#e2e8f0'" /></td>
+      <td style="color:#16a34a;font-weight:600">${total>0?fmtMoney(total):'-'}</td>
+      <td><button onclick="eliminarDestino(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:2px 6px;line-height:1;">✕</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin destinos</td></tr>';
+  actualizarSelectDestinos();
+};
+
+window.agregarDestino=function(){
+  const nombre=prompt('Nombre del destino:');
+  if(!nombre||!nombre.trim()) return;
+  destinos.push({nombre:nombre.trim().toUpperCase(),km:0});
+  renderDestinos();
+};
+
+window.eliminarDestino=function(i){
+  if(!confirm('¿Eliminar destino '+destinos[i].nombre+'?')) return;
+  destinos.splice(i,1); renderDestinos();
+};
+
+window.guardarDestinos=async function(){
+  const precioGlobal=parseFloat(document.getElementById('precioKmGlobal')?.value)||300;
+  const inputs=document.querySelectorAll('#destinosGrid input[type="number"]');
+  inputs.forEach((inp,i)=>{ if(destinos[i]) destinos[i].km=parseFloat(inp.value)||0; });
+  const lista=destinos.map(d=>({nombre:d.nombre,km:d.km||0}));
+  await setDoc(doc(db,'config','destinos'),{lista,precioKm:precioGlobal});
+  toast('Destinos y precio guardados ✓','success');
+};
+
+function actualizarSelectDestinos(){
+  const s1=document.getElementById('movDestino');
+  const s2=document.getElementById('filtroMovDestino');
+  const opts=destinos.map(d=>`<option value="${d.nombre}">${d.nombre} (${d.km||0} km)</option>`).join('');
+  if(s1) s1.innerHTML=opts;
+  if(s2) s2.innerHTML='<option value="">Todos</option>'+destinos.map(d=>`<option value="${d.nombre}">${d.nombre}</option>`).join('');
+  calcularMovilidad();
+}
+
+window.calcularMovilidad=function(){
+  const dest=document.getElementById('movDestino')?.value||'';
+  const d=destinos.find(x=>x.nombre===dest);
+  const kmEl=document.getElementById('movKm');
+  const precioGlobal=parseFloat(document.getElementById('precioKmGlobal')?.value)||300;
+  if(d && kmEl) kmEl.value=d.km||0;
+  const km=parseFloat(kmEl?.value)||0;
+  const total=document.getElementById('movTotal');
+  if(total) total.value=km>0?fmtMoney(km*precioGlobal):'';
+};
+
+window.guardarMovilidad=async function(){
+  const empleado=document.getElementById('movEmpleado').value;
+  const fecha=document.getElementById('movFecha').value;
+  const destino=document.getElementById('movDestino').value;
+  const km=parseFloat(document.getElementById('movKm').value)||0;
+  const precioKm=parseFloat(document.getElementById('precioKmGlobal')?.value)||300;
+  const total=km*precioKm;
+  const obs=document.getElementById('movObsReg').value.trim();
+  if(!fecha||km<=0){ toast('Seleccioná fecha y un destino con km cargados','error'); return; }
+  await addDoc(collection(db,'movilidad'),{empleado,fecha,destino,km,precioKm,total,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  document.getElementById('movFecha').value='';
+  document.getElementById('movKm').value='';
+  document.getElementById('movTotal').value='';
+  document.getElementById('movObsReg').value='';
+  toast('Movilidad guardada ✓','success');
+};
+
+window.renderMovilidad=function(){
+  const fEmp=document.getElementById('filtroMovEmpleado')?.value||'';
+  const fDest=document.getElementById('filtroMovDestino')?.value||'';
+  const fD=document.getElementById('filtroMovDesde')?.value||'';
+  const fH=document.getElementById('filtroMovHasta')?.value||'';
+  const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
+  let fil=allMovilidad.filter(r=>{
+    if(fEmp&&r.empleado!==fEmp) return false;
+    if(fDest&&r.destino!==fDest) return false;
+    if(fD&&r.fecha<fD) return false;
+    if(fH&&r.fecha>fH) return false;
+    return true;
+  });
+  const delMes=allMovilidad.filter(r=>{
+    if(!r.fecha) return false;
+    const d=new Date(r.fecha+'T00:00:00');
+    return d.getMonth()===mes&&d.getFullYear()===anio;
+  });
+  document.getElementById('movRegMes').textContent=delMes.length;
+  document.getElementById('movTotalMes').textContent=fmtMoney(delMes.reduce((s,r)=>s+Number(r.total||0),0));
+  document.getElementById('movKmMes').textContent=delMes.reduce((s,r)=>s+Number(r.km||0),0)+' km';
+  document.getElementById('movTotalGral').textContent=fmtMoney(allMovilidad.reduce((s,r)=>s+Number(r.total||0),0));
+  const esAdmin=currentUser?.rol==='admin';
+  document.getElementById('tablaMov').innerHTML=fil.map(r=>`<tr>
+    <td><strong>${r.empleado}</strong></td>
+    <td>${r.fecha?r.fecha.split('-').reverse().join('/'):'-'}</td>
+    <td>${r.destino||'-'}</td>
+    <td>${r.km||0} km</td>
+    <td>${fmtMoney(r.precioKm||0)}</td>
+    <td style="color:#16a34a"><strong>${fmtMoney(r.total||0)}</strong></td>
+    <td>${r.obs||'-'}</td>
+    <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarMov('${r.id}')">🗑</button>`:''}</td>
+  </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
+  const totKm=fil.reduce((s,r)=>s+Number(r.km||0),0);
+  const totMonto=fil.reduce((s,r)=>s+Number(r.total||0),0);
+  document.getElementById('resumenMov').innerHTML=`<span>📄 ${fil.length} viajes</span><span style="color:#d97706">Km: ${totKm}</span><span style="color:#16a34a">Total: ${fmtMoney(totMonto)}</span>`;
+  const mapa={};
+  allMovilidad.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={viajes:0,km:0,total:0};mapa[r.empleado].viajes++;mapa[r.empleado].km+=Number(r.km||0);mapa[r.empleado].total+=Number(r.total||0);});
+  document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos</td></tr>';
+};
+
+window.eliminarMov=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
+window.limpiarFiltrosMov=function(){['filtroMovEmpleado','filtroMovDestino','filtroMovDesde','filtroMovHasta'].forEach(id=>document.getElementById(id).value='');renderMovilidad();};
+window.exportarMovExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const data=[['Empleado','Fecha','Destino','Km','Precio/Km','Total','Observaciones','Cargado por']];
+  allMovilidad.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',r.destino||'',Number(r.km||0),Number(r.precioKm||0),Number(r.total||0),r.obs||'',r.creadoPor||'']));
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!autofilter']={ref:'A1:H1'};
+  ws['!cols']=[{wch:14},{wch:12},{wch:14},{wch:8},{wch:12},{wch:12},{wch:20},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Movilidad');
+  XLSX.writeFile(wb,'Movilidad_'+today().replace(/\//g,'-')+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+// ── FINES DE SEMANA ────────────────────────────────────
+
+window.guardarFS=async function(){
+  const empleado=document.getElementById('fsEmpleado').value;
+  const fecha=document.getElementById('fsFecha').value;
+  const monto=parseFloat(document.getElementById('fsMonto').value)||0;
+  const obs=document.getElementById('fsObs').value.trim();
+  if(!fecha||monto<=0){ toast('Completá fecha y monto','error'); return; }
+  await addDoc(collection(db,'finesdesemana'),{empleado,fecha,monto,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  document.getElementById('fsFecha').value='';
+  document.getElementById('fsMonto').value='';
+  document.getElementById('fsObs').value='';
+  toast('Fin de semana guardado ✓','success');
+};
+
+window.renderFS=function(){
+  const fEmp=document.getElementById('filtroFSEmpleado')?.value||'';
+  const fD=document.getElementById('filtroFSDesde')?.value||'';
+  const fH=document.getElementById('filtroFSHasta')?.value||'';
+  const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
+  let fil=allFS.filter(r=>{
+    if(fEmp&&r.empleado!==fEmp) return false;
+    if(fD&&r.fecha<fD) return false;
+    if(fH&&r.fecha>fH) return false;
+    return true;
+  });
+  const delMes=allFS.filter(r=>{if(!r.fecha)return false;const d=new Date(r.fecha+'T00:00:00');return d.getMonth()===mes&&d.getFullYear()===anio;});
+  document.getElementById('fsRegMes').textContent=delMes.length;
+  document.getElementById('fsTotalMes').textContent=fmtMoney(delMes.reduce((s,r)=>s+Number(r.monto||0),0));
+  document.getElementById('fsTotalGral').textContent=fmtMoney(allFS.reduce((s,r)=>s+Number(r.monto||0),0));
+  const esAdmin=currentUser?.rol==='admin';
+  document.getElementById('tablaFS').innerHTML=fil.map(r=>`<tr>
+    <td><strong>${r.empleado}</strong></td>
+    <td>${r.fecha?r.fecha.split('-').reverse().join('/'):'-'}</td>
+    <td>${fmtMoney(r.monto)}</td>
+    <td>${r.obs||'-'}</td>
+    <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
+    <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarFS('${r.id}')">🗑</button>`:''}</td>
+  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
+  const tot=fil.reduce((s,r)=>s+Number(r.monto||0),0);
+  document.getElementById('resumenFS').innerHTML=`<span>📄 ${fil.length} registros</span><span style="color:#16a34a">Total: ${fmtMoney(tot)}</span>`;
+  const mapa={};
+  allFS.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={cant:0,total:0};mapa[r.empleado].cant++;mapa[r.empleado].total+=Number(r.monto||0);});
+  document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
+};
+
+window.eliminarFS=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
+window.limpiarFiltrosFS=function(){['filtroFSEmpleado','filtroFSDesde','filtroFSHasta'].forEach(id=>document.getElementById(id).value='');renderFS();};
+window.exportarFSExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const data=[['Empleado','Fecha','Monto','Observaciones','Cargado por']];
+  allFS.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',Number(r.monto||0),r.obs||'',r.creadoPor||'']));
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!autofilter']={ref:'A1:E1'};
+  ws['!cols']=[{wch:14},{wch:12},{wch:12},{wch:20},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Fines de semana');
+  XLSX.writeFile(wb,'FinesDeSemana_'+today().replace(/\//g,'-')+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+</script>
+</body>
+</html>

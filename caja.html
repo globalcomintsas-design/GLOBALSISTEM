@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBALCOMINT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px;}
+.login-wrap{height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);}
+.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-logo{font-size:26px;font-weight:700;color:#1e3a8a;margin-bottom:6px;}
+.login-sub{color:#888;font-size:13px;margin-bottom:24px;}
+.login-box input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none;}
+.login-box input:focus{border-color:#1e3a8a;}
+.login-btn{width:100%;padding:13px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.login-error{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
+#sistema{display:none;}
+.spinner-overlay{position:fixed;inset:0;background:rgba(240,244,248,0.85);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
+.spinner{width:44px;height:44px;border:4px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:spin .7s linear infinite;}
+.spinner-text{font-size:13px;color:#1e3a8a;font-weight:600;}
+@keyframes spin{to{transform:rotate(360deg);}}
+header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.header-left h1{font-size:20px;font-weight:700;}
+.header-left p{font-size:11px;color:#93c5fd;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.user-badge{background:rgba(255,255,255,0.15);padding:7px 12px;border-radius:20px;font-size:12px;}
+.logout-btn{background:#dc2626;border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;}
+.tabs{background:#1e40af;display:flex;gap:2px;padding:0 16px;overflow-x:auto;}
+.tab{padding:10px 16px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
+.tab.active{color:#fff;border-bottom-color:#fff;}
+.tab:hover{color:#fff;}
+.container{padding:16px;max-width:1100px;margin:0 auto;}
+.page{display:none;}.page.active{display:block;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.card{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.card-value{font-size:20px;font-weight:700;color:#1e3a8a;}
+.card-value.red{color:#dc2626;}
+.card-value.green{color:#16a34a;}
+.card-value.orange{color:#d97706;}
+.card-value.blue{color:#0284c7;}
+.section{background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.section-title{font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px;}
+.field label{font-size:11px;color:#666;display:block;margin-bottom:4px;}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:#fafafa;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#1e3a8a;background:#fff;}
+.field textarea{min-height:70px;resize:vertical;}
+.field.full{grid-column:1/-1;}
+.cheque-fields-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;grid-column:1/-1;background:#eff6ff;border-radius:10px;padding:12px;border:1px solid #bfdbfe;}
+.cheque-fields-title{font-size:11px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;grid-column:1/-1;}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:#1e3a8a;color:#fff;}
+.btn-primary:hover{background:#1e40af;}
+.btn-success{background:#16a34a;color:#fff;}
+.btn-danger{background:#dc2626;color:#fff;}
+.btn-warning{background:#d97706;color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
+.btn-outline:hover{background:#1e3a8a;color:#fff;}
+.btn-sm{padding:6px 12px;font-size:11px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+.filtros{background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;}
+.filtros input,.filtros select{padding:8px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;width:100%;outline:none;}
+.filtros input:focus,.filtros select:focus{border-color:#1e3a8a;}
+.filtros label{font-size:11px;color:#666;display:block;margin-bottom:3px;}
+.search-bar{position:relative;margin-bottom:14px;}
+.search-bar input{width:100%;padding:10px 14px 10px 36px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.search-bar input:focus{border-color:#1e3a8a;}
+.search-bar::before{content:'🔍';position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:13px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#eff6ff;color:#1e3a8a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:10px;text-align:left;white-space:nowrap;}
+td{padding:9px 10px;border-bottom:1px solid #f0f4f8;font-size:12px;vertical-align:middle;}
+tr:hover td{background:#fafbff;}
+.badge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;}
+.badge-ingreso{background:#dcfce7;color:#166534;}
+.badge-egreso{background:#fee2e2;color:#991b1b;}
+.badge-pendiente{background:#fef9c3;color:#854d0e;}
+.badge-vencido{background:#fee2e2;color:#991b1b;}
+.badge-pagado{background:#dcfce7;color:#166534;}
+.badge-en-cartera{background:#dbeafe;color:#1e40af;}
+.badge-depositado{background:#fef9c3;color:#854d0e;}
+.badge-acreditado{background:#dcfce7;color:#166534;}
+.badge-rechazado{background:#fee2e2;color:#991b1b;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center;padding:20px;}
+.modal-bg.open{display:flex;}
+.modal{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:560px;max-height:90vh;overflow-y:auto;}
+.modal-title{font-size:16px;font-weight:700;color:#1e3a8a;margin-bottom:16px;display:flex;justify-content:space-between;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#888;}
+.cc-saldo-pos{color:#16a34a;font-weight:700;}
+.cc-saldo-neg{color:#dc2626;font-weight:700;}
+.venc-pronto{background:#fef9c3;}
+.venc-vencido{background:#fee2e2;}
+.notif{position:fixed;bottom:20px;right:20px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s;}
+.notif.show{transform:translateY(0);opacity:1;}
+.notif.error{background:#dc2626;}
+.notif.success{background:#16a34a;}
+.cheque-detalle-box{background:#eff6ff;border-radius:10px;padding:12px;margin-bottom:8px;border:1px solid #bfdbfe;font-size:12px;}
+.cheque-detalle-box .row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:4px;}
+.cheque-detalle-box .lbl{color:#666;min-width:100px;}
+.cheque-detalle-box .val{font-weight:600;color:#1e3a8a;}
+.dolar-badge{background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
+.destino-pill input{width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;}
+@media(max-width:500px){
+  .form-grid{grid-template-columns:1fr;}
+  .cards{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="login">
+  <div class="login-box">
+    <div class="login-logo">GLOBALCOMINT</div>
+    <div class="login-sub">Sistema de gestión · Ingreso seguro</div>
+    <input type="text" id="inpUsuario" placeholder="Usuario" />
+    <div style="position:relative;margin-bottom:12px;"><input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" style="width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:DM Sans,sans-serif;outline:none;box-sizing:border-box;" /><span onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;">👁</span></div>
+    <button class="login-btn" onclick="ingresar()">Ingresar al sistema</button>
+    <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+  </div>
+</div>
+
+<div id="spinnerOverlay" class="spinner-overlay">
+  <div class="spinner"></div>
+  <div class="spinner-text">Cargando datos...</div>
+</div>
+
+<div id="sistema">
+  <header>
+    <div class="header-left">
+      <h1>GLOBALCOMINT</h1>
+      <p>Caja · Banco · Dólares · Cheques · Mercado Pago</p>
+
+    </div>
+    <div class="header-right">
+      <a href="index.html" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;text-decoration:none;">🏠 Inicio</a>
+      <div class="user-badge" id="userBadge">Usuario</div>
+      <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('movimientos',this)">💰 Movimientos</div>
+    <div class="tab" onclick="showTab('cheques',this)">📄 Cheques</div>
+    <div class="tab" onclick="showTab('cuentacorriente',this)">📋 Cta. Corriente</div>
+    <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
+    <div class="tab" onclick="showTab('reportes',this)">📊 Reportes</div>
+    <div class="tab" onclick="showTab('usuarios',this)" id="tabUsuarios" style="display:none">👥 Usuarios</div>
+  </div>
+
+  <div class="container">
+
+    <!-- MOVIMIENTOS -->
+    <div class="page active" id="page-movimientos">
+      <div class="cards">
+        <div class="card"><div class="card-label">Caja</div><div class="card-value" id="saldoCaja">$ 0</div></div>
+        <div class="card"><div class="card-label">Banco</div><div class="card-value" id="saldoBanco">$ 0</div></div>
+        <div class="card"><div class="card-label">Cheques</div><div class="card-value" id="saldoCheque">$ 0</div></div>
+        <div class="card"><div class="card-label">Mercado Pago</div><div class="card-value" id="saldoMP">$ 0</div></div>
+        <div class="card"><div class="card-label">Dólares</div><div class="card-value blue" id="saldoDolar">U$D 0</div></div>
+        <div class="card"><div class="card-label">Total Pesos</div><div class="card-value green" id="saldoTotal">$ 0</div></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Nuevo Movimiento</div>
+        <div class="form-grid">
+          <div class="field"><label>Tipo</label><select id="tipo"><option>Ingreso</option><option>Egreso</option></select></div>
+          <div class="field"><label>Cuenta</label><select id="cuenta" onchange="toggleChequeFields()"><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
+          <div class="field"><label>N° Factura</label><input type="text" id="factura" placeholder="0001-00000123" /></div>
+          <div class="field"><label>Cliente / Proveedor</label><input type="text" id="cliente" placeholder="Nombre..." /></div>
+          <div class="field"><label>Detalle</label><input type="text" id="detalle" placeholder="Descripción..." /></div>
+          <div class="field"><label>Importe</label><input type="number" id="importe" placeholder="0" inputmode="numeric" /></div>
+          <div class="field full"><label>Observaciones</label><textarea id="observaciones" placeholder="Notas adicionales..."></textarea></div>
+          <div class="field full" id="chequeFieldsWrap" style="display:none">
+            <div class="cheque-fields-grid">
+              <div class="cheque-fields-title">🏦 Datos del Cheque</div>
+              <div class="field"><label>N° Cheque</label><input type="text" id="numeroCheque" placeholder="00000001" /></div>
+              <div class="field"><label>Banco Emisor</label><input type="text" id="bancoCheque" placeholder="Banco..." /></div>
+              <div class="field"><label>Fecha Vencimiento</label><input type="date" id="fechaVencCheque" /></div>
+              <div class="field"><label>Quién lo pagó</label><input type="text" id="pagadorCheque" placeholder="Nombre del pagador..." /></div>
+              <div class="field"><label>Estado</label>
+                <select id="estadoCheque">
+                  <option value="En cartera">En cartera</option>
+                  <option value="Depositado">Depositado</option>
+                  <option value="Acreditado">Acreditado</option>
+                  <option value="Rechazado">Rechazado</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="guardarMovimiento()">💾 Guardar Movimiento</button>
+          <button class="btn btn-outline" onclick="limpiarForm()">✕ Limpiar</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Movimientos Registrados
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarExcel()">📊 Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
+          </div>
+        </div>
+        <div class="search-bar"><input type="text" id="buscar" placeholder="Buscar por cliente, detalle, factura..." oninput="filtrar()" /></div>
+        <div class="filtros">
+          <div><label>Desde</label><input type="date" id="filtroDesde" onchange="filtrar()" /></div>
+          <div><label>Hasta</label><input type="date" id="filtroHasta" onchange="filtrar()" /></div>
+          <div><label>Tipo</label><select id="filtroTipo" onchange="filtrar()"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></div>
+          <div><label>Cuenta</label><select id="filtroCuenta" onchange="filtrar()"><option value="">Todas</option><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltros()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Factura</th><th>Cliente</th><th>Detalle</th><th>Cuenta</th><th>Monto</th><th>Obs.</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaMovimientos"></tbody>
+          </table>
+        </div>
+        <div id="resumenFiltro" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <!-- CHEQUES -->
+    <div class="page" id="page-cheques">
+      <div class="cards">
+        <div class="card"><div class="card-label">En Cartera</div><div class="card-value" id="chEnCartera">$ 0</div></div>
+        <div class="card"><div class="card-label">Depositados</div><div class="card-value orange" id="chDepositados">$ 0</div></div>
+        <div class="card"><div class="card-label">Acreditados</div><div class="card-value green" id="chAcreditados">$ 0</div></div>
+        <div class="card"><div class="card-label">Rechazados</div><div class="card-value red" id="chRechazados">$ 0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">Cartera de Cheques <button class="btn btn-success btn-sm" onclick="exportarChequesExcel()">📊 Excel</button></div>
+        <div class="filtros">
+          <div><label>Estado</label><select id="filtroChEstado" onchange="renderCheques()"><option value="">Todos</option><option>En cartera</option><option>Depositado</option><option>Acreditado</option><option>Rechazado</option></select></div>
+          <div><label>Banco</label><input type="text" id="filtroChBanco" placeholder="Banco..." oninput="renderCheques()" /></div>
+          <div><label>Cliente</label><input type="text" id="filtroChCliente" placeholder="Cliente..." oninput="renderCheques()" /></div>
+          <div><label>Venc. desde</label><input type="date" id="filtroChDesde" onchange="renderCheques()" /></div>
+          <div><label>Venc. hasta</label><input type="date" id="filtroChHasta" onchange="renderCheques()" /></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosCheques()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>N° Cheque</th><th>Cliente</th><th>Banco</th><th>Vencimiento</th><th>Importe</th><th>Estado</th><th>Quién pagó</th><th>Fecha carga</th><th>Obs.</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaCheques"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section" id="seccionRechazados" style="display:none">
+        <div class="section-title" style="color:#dc2626">⚠️ Cheques Rechazados</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>N° Cheque</th><th>Cliente</th><th>Banco</th><th>Vencimiento</th><th>Importe</th><th>Quién pagó</th><th>Fecha carga</th><th>Obs.</th></tr></thead>
+            <tbody id="tablaRechazados"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- CUENTA CORRIENTE -->
+    <div class="page" id="page-cuentacorriente">
+      <div class="section">
+        <div class="section-title">Cuenta Corriente por Cliente <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
+        <div class="search-bar"><input type="text" id="buscarCC" placeholder="Buscar cliente..." oninput="renderCC()" /></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Total Egresos</th><th>Saldo</th><th>Último mov.</th><th>Detalle</th></tr></thead>
+            <tbody id="tablaCC"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section" id="detalleCC" style="display:none">
+        <div class="section-title">
+          <span id="titleDetalleCC">Detalle cliente</span>
+          <button class="btn btn-outline btn-sm" onclick="document.getElementById('detalleCC').style.display='none'">Cerrar</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Tipo</th><th>Factura</th><th>Detalle</th><th>Cuenta</th><th>Monto</th></tr></thead>
+            <tbody id="tablaDetalleCC"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- VENCIMIENTOS -->
+    <div class="page" id="page-vencimientos">
+      <div class="section">
+        <div class="section-title">Nuevo Vencimiento / Recordatorio</div>
+        <div class="form-grid">
+          <div class="field"><label>Descripción</label><input type="text" id="vencDesc" placeholder="Ej: IVA, IIBB, Alquiler..." /></div>
+          <div class="field"><label>Fecha de vencimiento</label><input type="date" id="vencFecha" /></div>
+          <div class="field"><label>Monto estimado ($)</label><input type="number" id="vencMonto" placeholder="0" /></div>
+          <div class="field"><label>Categoría</label><select id="vencCateg"><option>Impuesto</option><option>Alquiler</option><option>Servicio</option><option>Proveedor</option><option>Otro</option></select></div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarVencimiento()">💾 Guardar</button>
+      </div>
+      <div class="section">
+        <div class="section-title">Vencimientos Próximos</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Descripción</th><th>Fecha</th><th>Días restantes</th><th>Monto</th><th>Categoría</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaVencimientos"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTES -->
+    <div class="page" id="page-reportes">
+      <div class="cards">
+        <div class="card"><div class="card-label">Ingresos del mes</div><div class="card-value green" id="repIngMes">$ 0</div></div>
+        <div class="card"><div class="card-label">Egresos del mes</div><div class="card-value red" id="repEgrMes">$ 0</div></div>
+        <div class="card"><div class="card-label">Neto del mes</div><div class="card-value" id="repNetoMes">$ 0</div></div>
+        <div class="card"><div class="card-label">Mov. este mes</div><div class="card-value" id="repCantMes">0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          Exportar Reporte
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarReporteExcel()">📊 Excel completo</button>
+            <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label>Desde</label><input type="date" id="repDesde" /></div>
+          <div class="field"><label>Hasta</label><input type="date" id="repHasta" /></div>
+          <div class="field"><label>Tipo de reporte</label>
+            <select id="repTipo">
+              <option value="todos">Todos los movimientos</option>
+              <option value="ingresos">Solo ingresos</option>
+              <option value="egresos">Solo egresos</option>
+              <option value="porCuenta">Por cuenta</option>
+              <option value="porCliente">Por cliente</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="exportarReporteExcel()">Generar Excel</button>
+      </div>
+      <div class="section">
+        <div class="section-title">Resumen por Cuenta</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cuenta</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th></tr></thead>
+            <tbody id="tablaResCuenta"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-title">Top Clientes por Ingreso</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Movimientos</th></tr></thead>
+            <tbody id="tablaTopClientes"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- USUARIOS -->
+    <div class="page" id="page-usuarios">
+      <div class="section">
+        <div class="section-title">Gestión de Usuarios</div>
+        <div class="form-grid">
+          <div class="field"><label>Usuario</label><input type="text" id="nuUsuario" placeholder="nombre_usuario" /></div>
+          <div class="field"><label>Contraseña</label><input type="password" id="nuPassword" placeholder="Contraseña segura" /></div>
+          <div class="field"><label>Nombre completo</label><input type="text" id="nuNombre" placeholder="Nombre y apellido" /></div>
+          <div class="field"><label>Rol</label>
+            <select id="nuRol">
+              <option value="admin">Administrador (todo)</option>
+              <option value="cargador">Cargador (cargar y ver)</option>
+              <option value="viewer">Solo lectura</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarUsuario()">💾 Guardar usuario</button>
+      </div>
+      <div class="section">
+        <div class="section-title">Usuarios registrados</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaUsuarios"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL EDITAR MOVIMIENTO -->
+<div class="modal-bg" id="modalEditar">
+  <div class="modal">
+    <div class="modal-title">Editar Movimiento <button class="modal-close" onclick="cerrarModal()">✕</button></div>
+    <div class="form-grid">
+      <div class="field"><label>Tipo</label><select id="eTipo"><option>Ingreso</option><option>Egreso</option></select></div>
+      <div class="field"><label>Cuenta</label><select id="eCuenta" onchange="toggleChequeFieldsModal()"><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
+      <div class="field"><label>N° Factura</label><input type="text" id="eFactura" /></div>
+      <div class="field"><label>Cliente / Proveedor</label><input type="text" id="eCliente" /></div>
+      <div class="field"><label>Detalle</label><input type="text" id="eDetalle" /></div>
+      <div class="field"><label>Importe</label><input type="number" id="eImporte" /></div>
+      <div class="field full"><label>Observaciones</label><textarea id="eObservaciones"></textarea></div>
+      <div class="field full" id="eChequeFieldsWrap" style="display:none">
+        <div class="cheque-fields-grid">
+          <div class="cheque-fields-title">🏦 Datos del Cheque</div>
+          <div class="field"><label>N° Cheque</label><input type="text" id="eNumeroCheque" /></div>
+          <div class="field"><label>Banco Emisor</label><input type="text" id="eBancoCheque" /></div>
+          <div class="field"><label>Fecha Vencimiento</label><input type="date" id="eFechaVencCheque" /></div>
+          <div class="field"><label>Quién lo pagó</label><input type="text" id="ePagadorCheque" /></div>
+          <div class="field"><label>Estado</label>
+            <select id="eEstadoCheque">
+              <option value="En cartera">En cartera</option>
+              <option value="Depositado">Depositado</option>
+              <option value="Acreditado">Acreditado</option>
+              <option value="Rechazado">Rechazado</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="guardarEdicion()">💾 Guardar cambios</button>
+      <button class="btn btn-outline" onclick="cerrarModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETALLE CHEQUE -->
+<div class="modal-bg" id="modalDetalleCheque">
+  <div class="modal">
+    <div class="modal-title">Detalle del Cheque <button class="modal-close" onclick="cerrarModalCheque()">✕</button></div>
+    <div id="detalleChequeContenido"></div>
+    <div class="btn-row" style="margin-top:16px"><button class="btn btn-outline" onclick="cerrarModalCheque()">Cerrar</button></div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const USERS_DEFAULT = {
+  'Bcola': { password:'River83$', nombre:'Bruno', rol:'admin' },
+  'Mcatala': { password:'Global01', nombre:'Maria', rol:'cargador' }
+};
+
+const EMPLEADOS = ['ADRIAN','DANIEL','BRUNO','DIEGO','PABLO','SEBASTIAN'];
+
+let currentUser = null;
+let allMovimientos = [];
+let allVencimientos = [];
+let allUsuarios = {};
+let editandoId = null;
+
+function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
+function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function today() { return new Date().toLocaleDateString('es-AR'); }
+
+function toast(msg, type='') {
+  const el = document.getElementById('notif');
+  el.textContent = msg; el.className = 'notif ' + type;
+  setTimeout(()=>el.classList.add('show'),10);
+  setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+// LOGIN
+window.ingresar = function() {
+  const u = document.getElementById('inpUsuario').value.trim();
+  const p = document.getElementById('inpPassword').value;
+  const users = getUsers();
+  const user = users[u];
+  if (user && user.password === p) {
+    currentUser = { username: u, ...user };
+    document.getElementById('login').style.display = 'none';
+    document.getElementById('sistema').style.display = 'block';
+    document.getElementById('userBadge').textContent = (user.rol==='admin'?'👑 ':'👤 ') + user.nombre + ' · ' + user.rol;
+    if (user.rol === 'admin') document.getElementById('tabUsuarios').style.display = '';
+    document.getElementById('spinnerOverlay').style.display='flex'; initFirestore();
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+  }
+};
+window.cerrarSesion = function() { location.reload(); };
+
+// TABS
+window.showTab = function(name, el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+  if (name==='cuentacorriente') renderCC();
+  if (name==='reportes') renderReportes();
+  if (name==='vencimientos') renderVencimientos();
+  if (name==='usuarios') renderUsuarios();
+  if (name==='cheques') { procesarVencimientosCheques(); renderCheques(); }
+};
+
+// TOGGLE CHEQUE FIELDS
+window.toggleChequeFields = function() {
+  const cuenta = document.getElementById('cuenta').value;
+  document.getElementById('chequeFieldsWrap').style.display = cuenta==='Cheque' ? '' : 'none';
+};
+window.toggleChequeFieldsModal = function() {
+  const cuenta = document.getElementById('eCuenta').value;
+  document.getElementById('eChequeFieldsWrap').style.display = cuenta==='Cheque' ? '' : 'none';
+};
+
+// FIRESTORE
+function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
+
+function initFirestore() {
+  // Timeout de seguridad: si en 8s no cargó, oculta el spinner igual
+  setTimeout(ocultarSpinner, 8000);
+  onSnapshot(collection(db,'usuarios'), snap => {
+    allUsuarios = {};
+    snap.docs.forEach(d => { allUsuarios[d.id] = d.data(); });
+    if (document.getElementById('page-usuarios').classList.contains('active')) renderUsuarios();
+  });
+  onSnapshot(collection(db,'movimientos'), snap => {
+    allMovimientos = snap.docs.map(d=>({id:d.id,...d.data()}));
+    allMovimientos.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    procesarVencimientosCheques();
+    renderSaldos(); filtrar(); renderCC(); renderReportes(); renderCheques();
+    ocultarSpinner();
+  });
+  onSnapshot(collection(db,'vencimientos'), snap => {
+    allVencimientos = snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderVencimientos();
+  });
+}
+
+// CHEQUES VENCIMIENTOS
+async function procesarVencimientosCheques() {
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  for (const m of allMovimientos) {
+    if (m.cuenta !== 'Cheque' || !m.fechaVencCheque) continue;
+    if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado') continue;
+    const fv = new Date(m.fechaVencCheque+'T00:00:00');
+    if (fv <= hoy) await updateDoc(doc(db,'movimientos',m.id), { estadoCheque: 'Acreditado' });
+  }
+}
+
+// SALDOS
+function renderSaldos() {
+  const c = { Caja:0, Banco:0, Cheque:0, 'Mercado Pago':0, Dolares:0 };
+  for (const m of allMovimientos) {
+    const v = Number(m.importe)||0;
+    if (m.cuenta === 'Dólares') {
+      m.tipo==='Ingreso' ? c.Dolares+=v : c.Dolares-=v;
+      continue;
+    }
+    if (m.cuenta === 'Cheque') {
+      const e = m.estadoCheque||'En cartera';
+      if (e==='Rechazado') continue;
+      if (e==='Acreditado') { m.tipo==='Ingreso' ? c.Banco+=v : c.Banco-=v; continue; }
+      m.tipo==='Ingreso' ? c.Cheque+=v : c.Cheque-=v;
+      continue;
+    }
+    if (c[m.cuenta]!==undefined) m.tipo==='Ingreso' ? c[m.cuenta]+=v : c[m.cuenta]-=v;
+  }
+  document.getElementById('saldoCaja').textContent = fmtMoney(c.Caja);
+  document.getElementById('saldoBanco').textContent = fmtMoney(c.Banco);
+  document.getElementById('saldoCheque').textContent = fmtMoney(c.Cheque);
+  document.getElementById('saldoMP').textContent = fmtMoney(c['Mercado Pago']);
+  document.getElementById('saldoDolar').textContent = fmtUSD(c.Dolares);
+  const total = c.Caja + c.Banco + c.Cheque + c['Mercado Pago'];
+  document.getElementById('saldoTotal').textContent = fmtMoney(total);
+  document.getElementById('saldoTotal').className = 'card-value '+(total>=0?'green':'red');
+}
+
+// GUARDAR MOVIMIENTO
+window.guardarMovimiento = async function() {
+  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
+  const tipo = document.getElementById('tipo').value;
+  const cuenta = document.getElementById('cuenta').value;
+  const factura = document.getElementById('factura').value.trim();
+  const cliente = document.getElementById('cliente').value.trim();
+  const detalle = document.getElementById('detalle').value.trim();
+  const importe = parseFloat(document.getElementById('importe').value);
+  const observaciones = document.getElementById('observaciones').value.trim();
+  if (!cliente || isNaN(importe) || importe<=0) { toast('Completá cliente e importe','error'); return; }
+  const data = { tipo, cuenta, factura, cliente, detalle, importe, observaciones, fecha:today(), ts:Date.now(), creadoPor:currentUser.nombre };
+  if (cuenta==='Cheque') {
+    data.numeroCheque = document.getElementById('numeroCheque').value.trim();
+    data.bancoCheque = document.getElementById('bancoCheque').value.trim();
+    data.fechaVencCheque = document.getElementById('fechaVencCheque').value;
+    data.pagadorCheque = document.getElementById('pagadorCheque').value.trim();
+    data.estadoCheque = document.getElementById('estadoCheque').value;
+    if (!data.numeroCheque) { toast('Completá el número de cheque','error'); return; }
+  }
+  await addDoc(collection(db,'movimientos'), data);
+  limpiarForm();
+  toast('Movimiento guardado ✓','success');
+};
+
+window.limpiarForm = function() {
+  ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const ec=document.getElementById('estadoCheque');if(ec)ec.value='En cartera';
+  document.getElementById('chequeFieldsWrap').style.display='none';
+  document.getElementById('cuenta').value='Caja';
+};
+
+window.filtrar = function() {
+  const buscar=document.getElementById('buscar').value.toLowerCase();
+  const desde=document.getElementById('filtroDesde').value;
+  const hasta=document.getElementById('filtroHasta').value;
+  const tipo=document.getElementById('filtroTipo').value;
+  const cuenta=document.getElementById('filtroCuenta').value;
+  let f=allMovimientos.filter(m=>{
+    const txt=(m.cliente+m.detalle+m.factura+(m.observaciones||'')).toLowerCase();
+    if(buscar&&!txt.includes(buscar))return false;
+    if(tipo&&m.tipo!==tipo)return false;
+    if(cuenta&&m.cuenta!==cuenta)return false;
+    if(desde||hasta){const p=(m.fecha||'').split('/');if(p.length===3){const d=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');if(desde&&d<desde)return false;if(hasta&&d>hasta)return false;}}
+    return true;
+  });
+  const esAdmin=currentUser?.rol==='admin';
+  document.getElementById('tablaMovimientos').innerHTML=f.map(m=>{
+    let extra='';
+    if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
+    const isDolar=m.cuenta==='Dólares';
+    const montoStr=isDolar?`<span class="dolar-badge">${fmtUSD(m.importe)}</span>`:`<strong>${fmtMoney(m.importe)}</strong>`;
+    return `<tr>
+      <td>${m.fecha||''}</td>
+      <td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td>
+      <td>${m.factura||'-'}</td>
+      <td><strong>${m.cliente}</strong></td>
+      <td>${m.detalle||'-'}${extra}</td>
+      <td>${m.cuenta}</td>
+      <td>${montoStr}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${m.observaciones||''}">${m.observaciones||'-'}</td>
+      <td>${esAdmin?`<button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="9" style="text-align:center;color:#888;padding:20px">Sin resultados</td></tr>';
+  const tI=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  const tE=f.filter(m=>m.tipo==='Egreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  const tIusd=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta==='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  const tEusd=f.filter(m=>m.tipo==='Egreso'&&m.cuenta==='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  let resumen=`<span>📄 ${f.length} mov.</span><span style="color:#16a34a">Ing: ${fmtMoney(tI)}</span><span style="color:#dc2626">Egr: ${fmtMoney(tE)}</span><span style="color:#1e3a8a">Neto: ${fmtMoney(tI-tE)}</span>`;
+  if(tIusd||tEusd) resumen+=`<span style="color:#0284c7">USD Ing: ${fmtUSD(tIusd)} / Egr: ${fmtUSD(tEusd)}</span>`;
+  document.getElementById('resumenFiltro').innerHTML=resumen;
+};
+
+window.limpiarFiltros=function(){['buscar','filtroDesde','filtroHasta'].forEach(id=>document.getElementById(id).value='');document.getElementById('filtroTipo').value='';document.getElementById('filtroCuenta').value='';filtrar();};
+window.eliminar=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movimientos',id));toast('Eliminado','error');};
+
+window.abrirEditar=function(id){
+  const m=allMovimientos.find(x=>x.id===id);if(!m)return;
+  editandoId=id;
+  document.getElementById('eTipo').value=m.tipo;
+  document.getElementById('eCuenta').value=m.cuenta;
+  document.getElementById('eFactura').value=m.factura||'';
+  document.getElementById('eCliente').value=m.cliente;
+  document.getElementById('eDetalle').value=m.detalle||'';
+  document.getElementById('eImporte').value=m.importe;
+  document.getElementById('eObservaciones').value=m.observaciones||'';
+  const wrap=document.getElementById('eChequeFieldsWrap');
+  if(m.cuenta==='Cheque'){wrap.style.display='';document.getElementById('eNumeroCheque').value=m.numeroCheque||'';document.getElementById('eBancoCheque').value=m.bancoCheque||'';document.getElementById('eFechaVencCheque').value=m.fechaVencCheque||'';document.getElementById('ePagadorCheque').value=m.pagadorCheque||'';document.getElementById('eEstadoCheque').value=m.estadoCheque||'En cartera';}
+  else wrap.style.display='none';
+  document.getElementById('modalEditar').classList.add('open');
+};
+window.cerrarModal=function(){document.getElementById('modalEditar').classList.remove('open');editandoId=null;};
+window.guardarEdicion=async function(){
+  if(!editandoId)return;
+  const cuenta=document.getElementById('eCuenta').value;
+  const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:document.getElementById('eCliente').value,detalle:document.getElementById('eDetalle').value,importe:parseFloat(document.getElementById('eImporte').value),observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
+  if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;}
+  await updateDoc(doc(db,'movimientos',editandoId),data);
+  cerrarModal();toast('Actualizado ✓','success');
+};
+
+// CHEQUES
+window.renderCheques=function(){
+  const cheques=allMovimientos.filter(m=>m.cuenta==='Cheque');
+  const fE=document.getElementById('filtroChEstado')?.value||'';
+  const fB=(document.getElementById('filtroChBanco')?.value||'').toLowerCase();
+  const fC=(document.getElementById('filtroChCliente')?.value||'').toLowerCase();
+  const fD=document.getElementById('filtroChDesde')?.value||'';
+  const fH=document.getElementById('filtroChHasta')?.value||'';
+  let ec=0,dep=0,acr=0,rech=0;
+  cheques.forEach(m=>{const v=Number(m.importe)||0;const e=m.estadoCheque||'En cartera';if(e==='En cartera')ec+=v;else if(e==='Depositado')dep+=v;else if(e==='Acreditado')acr+=v;else if(e==='Rechazado')rech+=v;});
+  document.getElementById('chEnCartera').textContent=fmtMoney(ec);
+  document.getElementById('chDepositados').textContent=fmtMoney(dep);
+  document.getElementById('chAcreditados').textContent=fmtMoney(acr);
+  document.getElementById('chRechazados').textContent=fmtMoney(rech);
+  const fil=cheques.filter(m=>{const e=m.estadoCheque||'En cartera';if(fE&&e!==fE)return false;if(fB&&!(m.bancoCheque||'').toLowerCase().includes(fB))return false;if(fC&&!(m.cliente||'').toLowerCase().includes(fC))return false;if(fD&&m.fechaVencCheque&&m.fechaVencCheque<fD)return false;if(fH&&m.fechaVencCheque&&m.fechaVencCheque>fH)return false;return true;}).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
+  const esAdmin=currentUser?.rol==='admin';
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  document.getElementById('tablaCheques').innerHTML=fil.map(m=>{
+    const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');
+    let di='';if(m.fechaVencCheque){const fv=new Date(m.fechaVencCheque+'T00:00:00');const d=Math.round((fv-hoy)/(1000*60*60*24));di=d>=0?`<br><span style="font-size:10px;color:#888">Vence en ${d} días</span>`:`<br><span style="font-size:10px;color:#dc2626">Venció hace ${Math.abs(d)} días</span>`;}
+    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td><span class="badge ${bc}">${e}</span></td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
+  }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">Sin cheques</td></tr>';
+  const rl=cheques.filter(m=>(m.estadoCheque||'')==='Rechazado');
+  const sr=document.getElementById('seccionRechazados');
+  if(rl.length>0){sr.style.display='';document.getElementById('tablaRechazados').innerHTML=rl.map(m=>`<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</td><td><strong style="color:#dc2626">${fmtMoney(m.importe)}</strong></td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td>${m.observaciones||'-'}</td></tr>`).join('');}
+  else sr.style.display='none';
+};
+window.verDetalleCheque=function(id){const m=allMovimientos.find(x=>x.id===id);if(!m)return;const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div><div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;document.getElementById('modalDetalleCheque').classList.add('open');};
+window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque').classList.remove('open');};
+window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');renderCheques();};
+window.exportarChequesExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const data=[['N° Cheque','Cliente','Banco','Vencimiento','Importe','Estado','Quién pagó','Fecha carga','Observaciones']];
+  allMovimientos.filter(m=>m.cuenta==='Cheque').forEach(m=>data.push([m.numeroCheque||'',m.cliente,m.bancoCheque||'',m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'',Number(m.importe),m.estadoCheque||'En cartera',m.pagadorCheque||'',m.fecha||'',m.observaciones||'']));
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:I1'};
+  XLSX.utils.book_append_sheet(wb,ws,'Cheques');
+  XLSX.writeFile(wb,'Cheques_'+today().replace(/\//g,'-')+'.xlsx');toast('Excel generado ✓','success');
+};
+
+// CUENTA CORRIENTE
+window.renderCC=function(){
+  const buscar=(document.getElementById('buscarCC')?.value||'').toLowerCase();
+  const mapa={};
+  for(const m of allMovimientos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0,ultimo:'',movs:[]};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;mapa[cl].movs.push(m);if(!mapa[cl].ultimo||m.fecha>mapa[cl].ultimo)mapa[cl].ultimo=m.fecha;}
+  const sorted=Object.entries(mapa).filter(([cl])=>!buscar||cl.toLowerCase().includes(buscar)).sort((a,b)=>b[1].ing-a[1].ing);
+  document.getElementById('tablaCC').innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.ing)}</td><td style="color:#dc2626">${fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtMoney(s)}</td><td>${d.ultimo||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCC('${cl}')">Ver detalle</button></td></tr>`;}).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">Sin datos</td></tr>';
+};
+window.verDetalleCC=function(cliente){
+  const movs=allMovimientos.filter(m=>m.cliente===cliente).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  document.getElementById('titleDetalleCC').textContent='📋 '+cliente;
+  document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('');
+  document.getElementById('detalleCC').style.display='block';
+  document.getElementById('detalleCC').scrollIntoView({behavior:'smooth'});
+};
+window.exportarCCExcel=function(){
+  const mapa={};
+  for(const m of allMovimientos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
+  const wb=XLSX.utils.book_new();const data=[['Cliente','Ingresos','Egresos','Saldo']];
+  for(const[cl,d]of Object.entries(mapa).sort((a,b)=>b[1].ing-a[1].ing))data.push([cl,d.ing,d.egr,d.ing-d.egr]);
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:D1'};
+  XLSX.utils.book_append_sheet(wb,ws,'Cuenta Corriente');
+  XLSX.writeFile(wb,'CuentaCorriente_'+today().replace(/\//g,'-')+'.xlsx');
+};
+
+// VENCIMIENTOS
+window.guardarVencimiento=async function(){
+  const desc=document.getElementById('vencDesc').value.trim();const fecha=document.getElementById('vencFecha').value;const monto=parseFloat(document.getElementById('vencMonto').value)||0;const categ=document.getElementById('vencCateg').value;
+  if(!desc||!fecha){toast('Completá descripción y fecha','error');return;}
+  await addDoc(collection(db,'vencimientos'),{desc,fecha,monto,categ,pagado:false,ts:Date.now()});
+  document.getElementById('vencDesc').value='';document.getElementById('vencFecha').value='';document.getElementById('vencMonto').value='';
+  toast('Vencimiento guardado ✓','success');
+};
+window.renderVencimientos=function(){
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const sorted=[...allVencimientos].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+  document.getElementById('tablaVencimientos').innerHTML=sorted.map(v=>{
+    const fv=new Date(v.fecha+'T00:00:00');const diff=Math.round((fv-hoy)/(1000*60*60*24));
+    let clase='',estado='',badge='';
+    if(v.pagado){estado='Pagado';badge='badge-pagado';}else if(diff<0){estado='Vencido';badge='badge-vencido';clase='venc-vencido';}else if(diff<=7){estado='Próximo';badge='badge-pendiente';clase='venc-pronto';}else{estado='Pendiente';badge='badge-pendiente';}
+    return `<tr class="${clase}"><td><strong>${v.desc}</strong></td><td>${v.fecha.split('-').reverse().join('/')}</td><td>${v.pagado?'-':diff>=0?diff+' días':'Vencido hace '+Math.abs(diff)+' días'}</td><td>${v.monto?fmtMoney(v.monto):'-'}</td><td>${v.categ}</td><td><span class="badge ${badge}">${estado}</span></td><td>${!v.pagado?`<button class="btn btn-success btn-sm" onclick="marcarPagado('${v.id}')">✓ Pagado</button> `:''}<button class="btn btn-danger btn-sm" onclick="eliminarVenc('${v.id}')">🗑</button></td></tr>`;
+  }).join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">Sin vencimientos cargados</td></tr>';
+};
+window.marcarPagado=async function(id){await updateDoc(doc(db,'vencimientos',id),{pagado:true});toast('Marcado como pagado ✓','success');};
+window.eliminarVenc=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'vencimientos',id));};
+
+// REPORTES
+window.renderReportes=function(){
+  const hoy=new Date();const mes=hoy.getMonth();const anio=hoy.getFullYear();
+  const delMes=allMovimientos.filter(m=>{const p=(m.fecha||'').split('/');if(p.length<3)return false;const d=new Date(p[2],p[1]-1,p[0]);return d.getMonth()===mes&&d.getFullYear()===anio;});
+  const ingMes=delMes.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  const egrMes=delMes.filter(m=>m.tipo==='Egreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
+  document.getElementById('repIngMes').textContent=fmtMoney(ingMes);
+  document.getElementById('repEgrMes').textContent=fmtMoney(egrMes);
+  const neto=ingMes-egrMes;const netoEl=document.getElementById('repNetoMes');netoEl.textContent=fmtMoney(neto);netoEl.className='card-value '+(neto>=0?'green':'red');
+  document.getElementById('repCantMes').textContent=delMes.length;
+  const cuentas={Caja:{ing:0,egr:0},Banco:{ing:0,egr:0},Cheque:{ing:0,egr:0},'Mercado Pago':{ing:0,egr:0},'Dólares':{ing:0,egr:0}};
+  for(const m of allMovimientos){if(!cuentas[m.cuenta])continue;const v=Number(m.importe)||0;m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v;}
+  document.getElementById('tablaResCuenta').innerHTML=Object.entries(cuentas).map(([c,d])=>{const s=d.ing-d.egr;const isDolar=c==='Dólares';return `<tr><td><strong>${c}</strong></td><td style="color:#16a34a">${isDolar?fmtUSD(d.ing):fmtMoney(d.ing)}</td><td style="color:#dc2626">${isDolar?fmtUSD(d.egr):fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${isDolar?fmtUSD(s):fmtMoney(s)}</td></tr>`;}).join('');
+  const clientes={};
+  for(const m of allMovimientos.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares')){if(!clientes[m.cliente])clientes[m.cliente]={total:0,cant:0};clientes[m.cliente].total+=Number(m.importe)||0;clientes[m.cliente].cant++;}
+  document.getElementById('tablaTopClientes').innerHTML=Object.entries(clientes).sort((a,b)=>b[1].total-a[1].total).slice(0,10).map(([cl,d])=>`<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.total)}</td><td>${d.cant}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
+};
+window.exportarReporteExcel=function(){
+  const desde=document.getElementById('repDesde').value;const hasta=document.getElementById('repHasta').value;const tipo=document.getElementById('repTipo').value;
+  let movs=allMovimientos.filter(m=>{if(tipo==='ingresos'&&m.tipo!=='Ingreso')return false;if(tipo==='egresos'&&m.tipo!=='Egreso')return false;if(desde||hasta){const p=(m.fecha||'').split('/');if(p.length===3){const d=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');if(desde&&d<desde)return false;if(hasta&&d>hasta)return false;}}return true;});
+  const wb=XLSX.utils.book_new();
+  const movData=[['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por']];
+  for(const m of movs)movData.push([m.fecha,m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,Number(m.importe),m.numeroCheque||'',m.bancoCheque||'',m.fechaVencCheque||'',m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
+  const ws1=XLSX.utils.aoa_to_sheet(movData);ws1['!autofilter']={ref:'A1:N1'};
+  XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
+  if(tipo==='todos'||tipo==='porCuenta'){const cuentas={};for(const m of movs){if(!cuentas[m.cuenta])cuentas[m.cuenta]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v;}const resData=[['Cuenta','Ingresos','Egresos','Saldo']];for(const[c,d]of Object.entries(cuentas))resData.push([c,d.ing,d.egr,d.ing-d.egr]);const ws2=XLSX.utils.aoa_to_sheet(resData);XLSX.utils.book_append_sheet(wb,ws2,'Por cuenta');}
+  if(tipo==='todos'||tipo==='porCliente'){const clMap={};for(const m of movs){if(!clMap[m.cliente])clMap[m.cliente]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?clMap[m.cliente].ing+=v:clMap[m.cliente].egr+=v;}const clData=[['Cliente','Ingresos','Egresos','Saldo']];for(const[cl,d]of Object.entries(clMap).sort((a,b)=>b[1].ing-a[1].ing))clData.push([cl,d.ing,d.egr,d.ing-d.egr]);const ws3=XLSX.utils.aoa_to_sheet(clData);ws3['!autofilter']={ref:'A1:D1'};XLSX.utils.book_append_sheet(wb,ws3,'Por cliente');}
+  XLSX.writeFile(wb,'Globalcomint_Reporte_'+today().replace(/\//g,'-')+'.xlsx');toast('Excel generado ✓','success');
+};
+window.exportarExcel=function(){document.getElementById('repDesde').value='';document.getElementById('repHasta').value='';document.getElementById('repTipo').value='todos';exportarReporteExcel();};
+window.exportarPDF=function(){window.print();};
+
+// USUARIOS
+window.guardarUsuario=async function(){
+  const u=document.getElementById('nuUsuario').value.trim();const p=document.getElementById('nuPassword').value;const n=document.getElementById('nuNombre').value.trim();const r=document.getElementById('nuRol').value;
+  if(!u||!p||!n){toast('Completá todos los campos','error');return;}
+  if(USERS_DEFAULT[u]){toast('Ese nombre de usuario es reservado','error');return;}
+  await setDoc(doc(db,'usuarios',u),{password:p,nombre:n,rol:r});
+  document.getElementById('nuUsuario').value='';document.getElementById('nuPassword').value='';document.getElementById('nuNombre').value='';
+  toast('Usuario guardado ✓','success');
+};
+window.renderUsuarios=function(){
+  const users=getUsers();
+  document.getElementById('tablaUsuarios').innerHTML=Object.entries(users).map(([u,d])=>`<tr><td><strong>${u}</strong></td><td>${d.nombre}</td><td><span class="badge ${d.rol==='admin'?'badge-ingreso':'badge-pendiente'}">${d.rol}</span></td><td>${u!=='Bcola'?`<button class="btn btn-danger btn-sm" onclick="eliminarUsuario('${u}')">🗑</button>`:'<span style="color:#888">Protegido</span>'}</td></tr>`).join('');
+};
+window.eliminarUsuario=async function(u){if(!confirm('¿Eliminar usuario '+u+'?'))return;await deleteDoc(doc(db,'usuarios',u));toast('Usuario eliminado','error');};
+
+</script>
+</body>
+</html>

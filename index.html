@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBALCOMINT · Inicio</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);padding:24px;}
+
+.logo-wrap{text-align:center;margin-bottom:48px;}
+.logo-title{font-size:32px;font-weight:700;color:#fff;letter-spacing:1px;}
+.logo-sub{font-size:13px;color:#93c5fd;margin-top:6px;}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;width:100%;max-width:780px;}
+
+.card{background:#fff;border-radius:20px;padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;text-decoration:none;box-shadow:0 8px 32px rgba(0,0,0,0.18);transition:transform .18s, box-shadow .18s;border:2px solid transparent;}
+.card:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,0.28);border-color:#bfdbfe;}
+.card:active{transform:scale(.97);}
+
+.card-icon{font-size:42px;line-height:1;}
+.card-title{font-size:17px;font-weight:700;color:#1e3a8a;text-align:center;}
+.card-desc{font-size:12px;color:#888;text-align:center;line-height:1.5;}
+.card-arrow{margin-top:6px;background:#eff6ff;color:#1e3a8a;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;}
+
+.footer{margin-top:44px;font-size:11px;color:#93c5fd;opacity:.7;}
+</style>
+</head>
+<body>
+
+<div class="logo-wrap">
+  <div class="logo-title">GLOBALCOMINT</div>
+  <div class="logo-sub">Seleccioná el módulo al que querés acceder</div>
+</div>
+
+<div class="cards">
+  <a class="card" href="caja.html">
+    <div class="card-icon">💰</div>
+    <div class="card-title">Caja & Finanzas</div>
+    <div class="card-desc">Movimientos, cheques, cuenta corriente y reportes</div>
+    <div class="card-arrow">Ingresar →</div>
+  </a>
+  <a class="card" href="movilidad.html">
+    <div class="card-icon">🚗</div>
+    <div class="card-title">Movilidad & FS</div>
+    <div class="card-desc">Viáticos por km, fines de semana y resumen por empleado</div>
+    <div class="card-arrow">Ingresar →</div>
+  </a>
+  <a class="card" href="sueldos.html">
+    <div class="card-icon">👥</div>
+    <div class="card-title">Sueldos</div>
+    <div class="card-desc">Liquidación mensual, adelantos, préstamos y dividendos</div>
+    <div class="card-arrow">Ingresar →</div>
+  </a>
+  <a class="card" href="VLP.html">
+    <div class="card-icon">📑</div>
+    <div class="card-title">Control VLP</div>
+    <div class="card-desc">Volantes de liquidación, operaciones DUX y reconciliación de pagos</div>
+    <div class="card-arrow">Ingresar →</div>
+  </a>
+</div>
+
+<div class="footer">GLOBALCOMINT SAS · Despachantes de Aduana · Mendoza</div>
+
+</body>
+</html>

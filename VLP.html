@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBALCOMINT · Control VLP</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px;}
+.login-wrap{height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);}
+.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+.login-logo{font-size:22px;font-weight:700;color:#1e3a8a;margin-bottom:4px;}
+.login-sub{color:#888;font-size:12px;margin-bottom:20px;}
+.login-box input{width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:10px;outline:none;}
+.login-box input:focus{border-color:#1e3a8a;}
+.login-btn{width:100%;padding:12px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.login-error{color:#dc2626;font-size:11px;margin-top:6px;text-align:center;display:none;}
+#sistema{display:none;}
+header{background:#1e3a8a;color:#fff;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.header-left h1{font-size:18px;font-weight:700;}
+.header-left p{font-size:11px;color:#93c5fd;margin-top:1px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.user-badge{background:rgba(255,255,255,0.15);padding:6px 12px;border-radius:20px;font-size:11px;}
+.logout-btn{background:#dc2626;border:none;color:#fff;padding:6px 12px;border-radius:20px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:600;}
+.volver-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;padding:6px 12px;border-radius:20px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif;text-decoration:none;display:inline-block;}
+.tabs{background:#1e40af;display:flex;gap:2px;padding:0 16px;overflow-x:auto;}
+.tab{padding:9px 14px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
+.tab.active{color:#fff;border-bottom-color:#fff;}
+.tab:hover{color:#fff;}
+.container{padding:16px;max-width:1200px;margin:0 auto;}
+.page{display:none;}.page.active{display:block;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.card{background:#fff;border-radius:12px;padding:13px 14px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.card-value{font-size:20px;font-weight:700;color:#1e3a8a;}
+.card-value.green{color:#16a34a;}.card-value.red{color:#dc2626;}.card-value.orange{color:#d97706;}.card-value.blue{color:#0284c7;}.card-value.purple{color:#7c3aed;}
+.section{background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.section-title{font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px;}
+.field label{font-size:11px;color:#666;display:block;margin-bottom:3px;}
+.field input,.field select,.field textarea{width:100%;padding:9px 11px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:#fafafa;}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:#1e3a8a;background:#fff;}
+.field.full{grid-column:1/-1;}
+.btn{padding:9px 16px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:#1e3a8a;color:#fff;}
+.btn-primary:hover{background:#1e40af;}
+.btn-success{background:#16a34a;color:#fff;}
+.btn-danger{background:#dc2626;color:#fff;}
+.btn-warning{background:#d97706;color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
+.btn-outline:hover{background:#1e3a8a;color:#fff;}
+.btn-sm{padding:5px 10px;font-size:11px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.filtros{background:#f8fafc;border-radius:10px;padding:10px;margin-bottom:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;align-items:end;}
+.filtros input,.filtros select{padding:7px 9px;border-radius:7px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;width:100%;outline:none;}
+.filtros label{font-size:10px;color:#666;display:block;margin-bottom:2px;}
+.search-bar{position:relative;margin-bottom:12px;}
+.search-bar input{width:100%;padding:9px 14px 9px 34px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.search-bar input:focus{border-color:#1e3a8a;}
+.search-bar::before{content:'🔍';position:absolute;left:11px;top:50%;transform:translateY(-50%);font-size:12px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#eff6ff;color:#1e3a8a;font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:9px 10px;text-align:left;white-space:nowrap;}
+td{padding:8px 10px;border-bottom:1px solid #f0f4f8;font-size:12px;vertical-align:middle;}
+tr:hover td{background:#fafbff;}
+.badge{padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+.badge-pagado{background:#dcfce7;color:#166534;}
+.badge-pendiente{background:#fef9c3;color:#854d0e;}
+.badge-expo{background:#dbeafe;color:#1e40af;}
+.badge-impo{background:#f3e8ff;color:#6b21a8;}
+.badge-zf{background:#dcfce7;color:#166534;}
+.badge-revisar{background:#fee2e2;color:#991b1b;}
+.badge-solo-vlp{background:#fef9c3;color:#854d0e;}
+.badge-solo-dux{background:#f0f9ff;color:#0369a1;}
+.badge-completo{background:#f0fdf4;color:#166534;}
+.badge-canc{background:#dcfce7;color:#166534;}
+.badge-auto{background:#dbeafe;color:#1e40af;}
+.badge-sali{background:#fef9c3;color:#854d0e;}
+.badge-pres{background:#f3e8ff;color:#6b21a8;}
+.badge-anul{background:#fee2e2;color:#991b1b;}
+.badge-factura{background:#fef3c7;color:#92400e;}
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:flex-start;padding:20px;overflow-y:auto;}
+.modal-bg.open{display:flex;}
+.modal{background:#fff;border-radius:16px;padding:22px;width:90%;max-width:700px;margin:0 auto;}
+.modal-title{font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#888;}
+.ficha-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.ficha-item{background:#f8fafc;border-radius:8px;padding:10px 12px;}
+.ficha-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px;}
+.ficha-val{font-size:13px;font-weight:600;color:#1a1a2e;}
+.ficha-item.full{grid-column:1/-1;}
+.notif{position:fixed;bottom:20px;right:20px;background:#1e3a8a;color:#fff;padding:11px 18px;border-radius:12px;font-size:12px;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s;max-width:340px;}
+.notif.show{transform:translateY(0);opacity:1;}
+.notif.error{background:#dc2626;}
+.notif.success{background:#16a34a;}
+.notif.warning{background:#d97706;}
+.progress-bar{height:6px;background:#e2e8f0;border-radius:3px;margin:10px 0;overflow:hidden;}
+.progress-bar-inner{height:100%;background:#1e3a8a;border-radius:3px;transition:width .3s;}
+.upload-zone{border:2px dashed #bfdbfe;border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:all .2s;background:#f8fafc;}
+.upload-zone:hover{border-color:#1e3a8a;background:#eff6ff;}
+.upload-zone.dragover{border-color:#1e3a8a;background:#eff6ff;}
+.upload-zone input[type=file]{display:none;}
+.upload-icon{font-size:32px;margin-bottom:8px;}
+.upload-text{font-size:13px;color:#666;margin-bottom:4px;}
+.upload-sub{font-size:11px;color:#aaa;}
+.resultado-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px;margin-top:12px;}
+.resultado-box.error{background:#fff5f5;border-color:#fecaca;}
+.resultado-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #e2e8f0;}
+.resultado-row:last-child{border-bottom:none;font-weight:700;}
+.log-item{padding:8px 0;border-bottom:1px solid #f0f4f8;font-size:12px;}
+.log-item:last-child{border-bottom:none;}
+.log-tipo{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;margin-right:6px;background:#eff6ff;color:#1e40af;}
+.log-tipo.factura{background:#fef3c7;color:#92400e;}
+.antig-bar{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.antig-label{font-size:11px;color:#666;min-width:80px;}
+.antig-count{font-size:12px;font-weight:700;min-width:30px;}
+.antig-visual{flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;}
+.antig-fill{height:100%;border-radius:4px;}
+@media(max-width:500px){.cards{grid-template-columns:1fr 1fr;}.ficha-grid{grid-column:1/-1;grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="login" style="display:none"></div>
+
+<div id="sistema">
+  <header>
+    <div class="header-left">
+      <h1>📦 Control VLP</h1>
+      <p>GLOBALCOMINT · Aduana 038 · Operaciones realizadas</p>
+    </div>
+    <div class="header-right">
+      <a href="index.html" class="volver-btn">← Sistema principal</a>
+      <div class="user-badge" id="userBadge">Usuario</div>
+      <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('dashboard',this)">📊 Dashboard</div>
+    <div class="tab" onclick="showTab('importar',this)">⬆️ Importar</div>
+    <div class="tab" onclick="showTab('pendientes',this)">⏳ Pendientes</div>
+    <div class="tab" onclick="showTab('pagadas',this)">✅ Pagadas</div>
+    <div class="tab" onclick="showTab('cepas',this)">🌿 CEPAS</div>
+    <div class="tab" onclick="showTab('historial',this)">📋 Historial</div>
+    <div class="tab" onclick="showTab('log',this)">🔍 Log</div>
+  </div>
+
+  <div class="container">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="cards">
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('total')"><div class="card-label">Total Operaciones 2026</div><div class="card-value" id="dTotal">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('pagadas')"><div class="card-label">Pagadas 2026</div><div class="card-value green" id="dPagadas">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('pendientes')"><div class="card-label">Pendientes</div><div class="card-value orange" id="dPendientes">0</div></div>
+        <div class="card"><div class="card-label">% Cobrado</div><div class="card-value blue" id="dPorcentaje">0%</div></div>
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('revisar')"><div class="card-label">REVISAR</div><div class="card-value red" id="dRevisar">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('sinDux')"><div class="card-label">Sin DUX</div><div class="card-value purple" id="dSoloDUX">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="abrirModalDash('anul')"><div class="card-label">ANUL Pagadas</div><div class="card-value" style="color:#0891b2" id="dAnul">0</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+        <div class="section">
+          <div class="section-title">Pendientes por antigüedad</div>
+          <div id="antiguedad"></div>
+        </div>
+        <div class="section">
+          <div class="section-title">Por tipo de operación</div>
+          <div id="porTipo"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Alertas</div>
+        <div id="alertas" style="font-size:12px;color:#666;">Sin alertas.</div>
+      </div>
+    </div>
+
+    <!-- IMPORTAR -->
+    <div class="page" id="page-importar">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+        <div class="section">
+          <div class="section-title">⬆️ Importar Realizadas DUX</div>
+          <div class="upload-zone" id="zoneDUX" onclick="document.getElementById('fileDUX').click()" ondragover="dragOver(event,'zoneDUX')" ondragleave="dragLeave('zoneDUX')" ondrop="dropFile(event,'DUX')">
+            <input type="file" id="fileDUX" accept=".xlsx,.xls" onchange="procesarDUX(this)" />
+            <div class="upload-icon">📂</div>
+            <div class="upload-text">Arrastrá o hacé clic para subir</div>
+            <div class="upload-sub">Archivo DUX · Excel (.xlsx)</div>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:#888;">
+            ✓ Solo procesa Aduana 038 · ✓ No duplica · ✓ Concilia con VLP existentes
+          </div>
+          <div id="progresoDUX" style="display:none">
+            <div class="progress-bar"><div class="progress-bar-inner" id="barDUX" style="width:0%"></div></div>
+            <div id="statusDUX" style="font-size:11px;color:#666;text-align:center;"></div>
+          </div>
+          <div id="resultadoDUX"></div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">⬆️ Importar VLP</div>
+          <div class="upload-zone" id="zonaVLP" onclick="document.getElementById('fileVLP').click()" ondragover="dragOver(event,'zonaVLP')" ondragleave="dragLeave('zonaVLP')" ondrop="dropFile(event,'VLP')">
+            <input type="file" id="fileVLP" accept=".xlsx,.xls" onchange="procesarVLP(this)" />
+            <div class="upload-icon">💳</div>
+            <div class="upload-text">Arrastrá o hacé clic para subir</div>
+            <div class="upload-sub">Archivo VLP · Excel (.xlsx)</div>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:#888;">
+            ✓ Concilia automáticamente · ✓ Crea SOLO_VLP si no hay DUX · ✓ Historial completo
+          </div>
+          <div id="progresoVLP" style="display:none">
+            <div class="progress-bar"><div class="progress-bar-inner" id="barVLP" style="width:0%"></div></div>
+            <div id="statusVLP" style="font-size:11px;color:#666;text-align:center;"></div>
+          </div>
+          <div id="resultadoVLP"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PENDIENTES -->
+    <div class="page" id="page-pendientes">
+      <div class="cards">
+        <div class="card"><div class="card-label">Total pendientes</div><div class="card-value orange" id="pTotal">0</div></div>
+        <div class="card"><div class="card-label">Expo pendientes</div><div class="card-value blue" id="pExpo">0</div></div>
+        <div class="card"><div class="card-label">Impo pendientes</div><div class="card-value purple" id="pImpo">0</div></div>
+        <div class="card"><div class="card-label">ZF pendientes</div><div class="card-value green" id="pZF">0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          Operaciones Pendientes
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarPendientesExcel()">📊 Excel</button>
+          </div>
+        </div>
+        <div class="search-bar"><input type="text" id="buscarPend" placeholder="Buscar operación, cliente, mercadería..." oninput="renderPendientes()" /></div>
+        <div class="filtros">
+          <div><label>Mes operativo</label><input type="month" id="filtroMesPend" onchange="renderPendientes()" /></div>
+          <div><label>Tipo</label><select id="filtroTipoPend" onchange="renderPendientes()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option><option>REVISAR</option></select></div>
+          <div><label>Estado SIM</label><select id="filtroSimPend" onchange="renderPendientes()"><option value="">Todos</option><option>CANC</option><option>AUTO</option><option>SALI</option><option>PRES</option><option>ANUL</option></select></div>
+          <div><label>Origen</label><select id="filtroOrigenPend" onchange="renderPendientes()"><option value="">Todos</option><option value="SOLO_DUX">Solo DUX</option><option value="SOLO_VLP">Solo VLP</option><option value="COMPLETO">Completo</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosPend()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+
+        <!-- BARRA PAGO MASIVO -->
+        <div id="barraMasiva" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="selCount" style="font-size:13px;font-weight:600;color:#1e3a8a">0 seleccionadas</span>
+          <input type="text" id="vlpMasivo" placeholder="N° VLP o Factura..." style="border:1.5px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;min-width:200px" />
+          <input type="date" id="fechaMasiva" style="border:1.5px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none" />
+          <button class="btn btn-success btn-sm" onclick="pagarMasivo()">✓ Marcar pagadas</button>
+          <button class="btn btn-outline btn-sm" onclick="deseleccionarTodo()">✕ Limpiar selección</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th><input type="checkbox" id="checkTodos" onchange="toggleTodos(this.checked)" title="Seleccionar todos" /></th><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Fecha Operativa</th><th>Mes</th><th>Estado SIM</th><th>Origen</th><th>Días pend.</th><th>Mercadería</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaPendientes"></tbody>
+          </table>
+        </div>
+        <div id="resumenPend" style="margin-top:8px;font-size:12px;color:#666;"></div>
+      </div>
+    </div>
+
+    <!-- PAGADAS -->
+    <div class="page" id="page-pagadas">
+      <div class="cards">
+        <div class="card"><div class="card-label">Total pagadas</div><div class="card-value green" id="pgTotal">0</div></div>
+        <div class="card"><div class="card-label">Promedio días cobro</div><div class="card-value blue" id="pgPromDias">-</div></div>
+        <div class="card"><div class="card-label">Fuera de término</div><div class="card-value red" id="pgFueraTerm">0</div></div>
+        <div class="card"><div class="card-label">Por Factura Propia</div><div class="card-value orange" id="pgFactura">0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          Operaciones Pagadas
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarPagadasExcel()">📊 Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="exportarFueraTerminoExcel()">⚠️ Fuera de término</button>
+          </div>
+        </div>
+        <div class="search-bar"><input type="text" id="buscarPag" placeholder="Buscar operación, cliente, VLP..." oninput="renderPagadas()" /></div>
+        <div class="filtros">
+          <div><label>Mes operativo</label><input type="month" id="filtroMesPag" onchange="renderPagadas()" /></div>
+          <div><label>Tipo</label><select id="filtroTipoPag" onchange="renderPagadas()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option></select></div>
+          <div><label>VLP</label><select id="filtroVLPPag" onchange="renderPagadas()"><option value="">Todos</option></select></div>
+          <div><label>Origen pago</label><select id="filtroOrigenPago" onchange="renderPagadas()"><option value="">Todos</option><option value="VLP">VLP</option><option value="FACTURA_PROPIA">Factura Propia</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosPag()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Fecha Operativa</th><th>Fecha Pago</th><th>Días tardó</th><th>VLP / Factura</th><th>Origen Pago</th><th>Importe</th><th>Acción</th></tr></thead>
+            <tbody id="tablaPagadas"></tbody>
+          </table>
+        </div>
+        <div id="resumenPag" style="margin-top:8px;font-size:12px;color:#666;"></div>
+      </div>
+    </div>
+
+    <!-- CEPAS -->
+    <div class="page" id="page-cepas">
+      <div class="cards">
+        <div class="card"><div class="card-label">Ops. CEPAS</div><div class="card-value" id="cepTotal">0</div></div>
+        <div class="card"><div class="card-label">Con AD cargado</div><div class="card-value green" id="cepConAD">0</div></div>
+        <div class="card"><div class="card-label">Sin AD</div><div class="card-value orange" id="cepSinAD">0</div></div>
+        <div class="card"><div class="card-label">Pendientes liquid.</div><div class="card-value red" id="cepPendLiquid">0</div></div>
+        <div class="card"><div class="card-label">Viajes pend. cobro</div><div class="card-value red" id="cepViajesPend">0</div></div>
+      </div>
+
+      <!-- VIAJES CEPAS -->
+      <div class="section">
+        <div class="section-title">
+          🚛 Viajes CEPAS
+          <div class="btn-row">
+            <button class="btn btn-primary btn-sm" onclick="abrirModalViaje()">+ Nuevo Viaje</button>
+            <button class="btn btn-success btn-sm" onclick="exportarViajesExcel()">📊 Excel Viajes</button>
+          </div>
+        </div>
+        <div class="filtros">
+          <div><label>Mes</label><input type="month" id="filtroMesViajes" onchange="renderViajes()" /></div>
+          <div><label>Cobrado</label><select id="filtroCobradoViajes" onchange="renderViajes()"><option value="">Todos</option><option value="si">Cobrado</option><option value="no">Pendiente</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosViajes()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Operación</th><th>Destinación</th><th>AD Camión</th><th>Cobrado</th><th>Observaciones</th><th>Cargado por</th><th>Acción</th></tr></thead>
+            <tbody id="tablaViajes"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- OPERACIONES CEPAS -->
+      <div class="section">
+        <div class="section-title">
+          Operaciones CEPAS
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarCepasExcel()">📊 Planilla CEPAS</button>
+          </div>
+        </div>
+        <div class="filtros">
+          <div><label>Mes operativo</label><input type="month" id="filtroMesCepas" onchange="renderCepas()" /></div>
+          <div><label>AD Camión</label><select id="filtroADCepas" onchange="renderCepas()"><option value="">Todos</option><option value="con">Con AD</option><option value="sin">Sin AD</option></select></div>
+          <div><label>Liquidado</label><select id="filtroLiquidCepas" onchange="renderCepas()"><option value="">Todos</option><option value="si">Liquidado</option><option value="no">Pendiente</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosCepas()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Operación</th><th>Mes</th><th>Fecha Op.</th><th>AD Camión</th><th>Patente</th><th>Transportista</th><th>F. Retiro</th><th>Liquidado</th><th>Observaciones</th><th>Acción</th></tr></thead>
+            <tbody id="tablaCepas"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORIAL IMPORTACIONES -->
+    <div class="page" id="page-historial">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="section">
+          <div class="section-title">Importaciones DUX</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Archivo</th><th>Fecha</th><th>Usuario</th><th>038</th><th>Nuevas</th><th>Actualizadas</th><th>Reconcil.</th></tr></thead>
+              <tbody id="tablaHistDUX"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="section">
+          <div class="section-title">Importaciones VLP</div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Archivo</th><th>Fecha</th><th>Usuario</th><th>Registros</th><th>Conciliadas</th><th>Sin DUX</th></tr></thead>
+              <tbody id="tablaHistVLP"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="page" id="page-log">
+      <div class="section">
+        <div class="section-title">Log de Conciliaciones</div>
+        <div class="filtros">
+          <div><label>Operación</label><input type="text" id="filtroLogOp" placeholder="Número..." oninput="renderLog()" /></div>
+          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option></select></div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosLog()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div id="logContainer" style="max-height:500px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL DETALLE DASHBOARD -->
+<div class="modal-bg" id="modalDash">
+  <div class="modal" style="max-width:700px">
+    <div class="modal-title">
+      <span id="modalDashTitulo">Operaciones</span>
+      <button class="modal-close" onclick="document.getElementById('modalDash').classList.remove('open')">✕</button>
+    </div>
+    <div class="search-bar" style="margin-bottom:10px">
+      <input type="text" id="buscarModalDash" placeholder="Buscar operación o cliente..." oninput="filtrarModalDash()" />
+    </div>
+    <div class="table-wrap" style="max-height:460px;overflow-y:auto">
+      <table>
+        <thead><tr><th>Operación</th><th>Cliente</th><th>Tipo</th><th>Mes</th><th>Estado SIM</th><th>Origen</th></tr></thead>
+        <tbody id="tablaModalDash"></tbody>
+      </table>
+    </div>
+    <div id="resumenModalDash" style="margin-top:8px;font-size:11px;color:#888;text-align:right"></div>
+  </div>
+</div>
+
+<!-- MODAL VIAJE CEPAS -->
+<div class="modal-bg" id="modalViaje">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-title">
+      <span>🚛 Viaje CEPAS — <span id="viajeModalTitulo">Nuevo</span></span>
+      <button class="modal-close" onclick="cerrarModalViaje()">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>N° Operación <span style="color:#dc2626">*</span></label>
+        <input type="text" id="viajeOperacion" placeholder="Ej: 1143673" />
+      </div>
+      <div class="field">
+        <label>AD Camión <span style="color:#dc2626">*</span></label>
+        <input type="text" id="viajeAD" placeholder="Número AD..." />
+      </div>
+      <div class="field full">
+        <label>Destinación (PE) <span style="color:#dc2626">*</span></label>
+        <input type="text" id="viajeDestinacion" placeholder="Ej: EC03005487A" />
+      </div>
+      <div class="field full">
+        <label>Observaciones</label>
+        <input type="text" id="viajeObs" placeholder="Notas opcionales..." />
+      </div>
+    </div>
+    <div style="font-size:11px;color:#888;margin-top:-4px">📅 Fecha: <strong id="viajeFechaHoy"></strong> (automática)</div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-primary" onclick="guardarViaje()">💾 Guardar</button>
+      <button class="btn btn-outline" onclick="cerrarModalViaje()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL FICHA OPERACION -->
+<div class="modal-bg" id="modalFicha">
+  <div class="modal">
+    <div class="modal-title">
+      <span>📋 Ficha de Operación — <span id="fichaOpNum"></span></span>
+      <button class="modal-close" onclick="cerrarFicha()">✕</button>
+    </div>
+    <div class="ficha-grid" id="fichaGrid"></div>
+    <div id="fichaCepasSection" style="display:none">
+      <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">🌿 Datos CEPAS</div>
+      <div class="form-grid">
+        <div class="field"><label>AD Camión</label><input type="text" id="fichaAD" placeholder="Número AD..." /></div>
+        <div class="field"><label>Patente</label><input type="text" id="fichaPatente" placeholder="ABC123..." /></div>
+        <div class="field"><label>Transportista</label><input type="text" id="fichaTransp" placeholder="Nombre..." /></div>
+        <div class="field"><label>Fecha Retiro</label><input type="date" id="fichaFechaRetiro" /></div>
+        <div class="field full"><label>Observaciones CEPAS</label><input type="text" id="fichaObsCepas" placeholder="Notas..." /></div>
+        <div class="field"><label>Liquidado</label><select id="fichaLiquidado"><option value="false">Pendiente</option><option value="true">Liquidado</option></select></div>
+        <div class="field"><label>Fecha Liquidación</label><input type="date" id="fichaFechaLiquid" /></div>
+      </div>
+    </div>
+    <div class="field" style="margin-top:8px;"><label>Observaciones generales</label><textarea id="fichaObs" rows="2" placeholder="Notas..."></textarea></div>
+    <div class="btn-row" style="margin-top:12px;">
+      <button class="btn btn-primary" onclick="guardarFicha()">💾 Guardar</button>
+      <button class="btn btn-outline" onclick="cerrarFicha()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════
+     MODAL PAGO POR FACTURA PROPIA
+     ══════════════════════════════════════════════════════ -->
+<div class="modal-bg" id="modalFactura">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">
+      <span>💵 Pago por Factura — <span id="facturaOpNum"></span></span>
+      <button class="modal-close" onclick="cerrarModalFactura()">✕</button>
+    </div>
+    <div class="form-grid">
+      <div class="field">
+        <label>N° Factura <span style="color:#dc2626">*</span></label>
+        <input type="text" id="facturaNumero" placeholder="Ej: FA-0001-00012345" />
+      </div>
+      <div class="field">
+        <label>Fecha de pago <span style="color:#dc2626">*</span></label>
+        <input type="date" id="facturaFecha" />
+      </div>
+      <div class="field">
+        <label>Importe ($)</label>
+        <input type="number" id="facturaImporte" placeholder="0.00" step="0.01" min="0" />
+      </div>
+      <div class="field full">
+        <label>Observaciones</label>
+        <input type="text" id="facturaObs" placeholder="Notas opcionales..." />
+      </div>
+    </div>
+    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;font-size:11px;color:#92400e;margin-bottom:14px;line-height:1.5;">
+      ⚠️ Esta operación se marcará como <strong>PAGADA</strong> con origen <strong>Factura Propia</strong>.<br>
+      El VLP quedará registrado como <em>FACTURA: {número}</em> y quedará trazado en el log.
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-success" onclick="confirmarPagoFactura()">✅ Confirmar Pago</button>
+      <button class="btn btn-outline" onclick="cerrarModalFactura()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {
+  getFirestore, collection, doc, setDoc, getDoc, getDocs,
+  addDoc, updateDoc, deleteDoc, query, orderBy, limit, onSnapshot, where, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+const USERS = {
+  'Bcola': { password:'River83$', nombre:'Bruno', rol:'admin' },
+  'Mcatala': { password:'Global01', nombre:'Maria', rol:'cargador' }
+};
+
+const REGIMENES = {
+  EG01:'EXPORTACION',EG03:'EXPORTACION',
+  EC01:'EXPORTACION',EC02:'EXPORTACION',EC03:'EXPORTACION',EC04:'EXPORTACION',EC07:'EXPORTACION',
+  ET01:'EXPORTACION',ET02:'EXPORTACION',
+  IC03:'IMPORTACION',IC04:'IMPORTACION',IC06:'IMPORTACION',IC81:'IMPORTACION',IC84:'IMPORTACION',
+  IT04:'IMPORTACION',IT11:'IMPORTACION',IT14:'IMPORTACION',IT16:'IMPORTACION',
+  ZFE1:'ZONA_FRANCA',ZFI1:'ZONA_FRANCA'
+};
+
+let currentUser = null;
+let allOps = [];
+let allHistDUX = [];
+let allHistVLP = [];
+let allLog = [];
+let allViajes = [];
+let fichaId = null;
+let facturaOpId = null;
+let viajeEditId = null;
+
+// ---- UTILIDADES ----
+function normOp(x) {
+  if(x===null||x===undefined||x==='')return null;
+  try { return String(Math.round(Number(String(x).replace(/[^0-9.]/g,'')))).trim(); }
+  catch(e){ return null; }
+}
+function fmtFecha(ts) {
+  if(!ts)return '-';
+  let d;
+  if(ts.toDate) d=ts.toDate();
+  else if(ts instanceof Date) d=ts;
+  else d=new Date(ts);
+  if(isNaN(d))return '-';
+  return d.toLocaleDateString('es-AR');
+}
+function fmtFechaISO(ts) {
+  if(!ts)return null;
+  let d;
+  if(ts.toDate) d=ts.toDate();
+  else if(ts instanceof Date) d=ts;
+  else d=new Date(ts);
+  if(isNaN(d))return null;
+  return d.toISOString().split('T')[0];
+}
+function calcMes(d) {
+  if(!d)return null;
+  const dt = d instanceof Date ? d : (d.toDate?d.toDate():new Date(d));
+  if(isNaN(dt))return null;
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+}
+function diasEntre(d1,d2) {
+  if(!d1||!d2)return null;
+  const a=d1 instanceof Date?d1:(d1.toDate?d1.toDate():new Date(d1));
+  const b=d2 instanceof Date?d2:(d2.toDate?d2.toDate():new Date(d2));
+  return Math.round((b-a)/(1000*60*60*24));
+}
+function clienteCorto(c) {
+  if(!c)return '-';
+  const p=c.indexOf(' - ');
+  return p>-1?c.substring(p+3):c;
+}
+function toast(msg,type='') {
+  const el=document.getElementById('notif');
+  el.textContent=msg;el.className='notif '+type;
+  setTimeout(()=>el.classList.add('show'),10);
+  setTimeout(()=>el.classList.remove('show'),4000);
+}
+function now() { return new Date(); }
+function todayISO() { return now().toISOString().split('T')[0]; }
+
+// ---- LOGIN ----
+function autoLogin() {
+  const user=USERS['Bcola'];
+  currentUser={username:'Bcola',...user};
+  document.getElementById('login').style.display='none';
+  document.getElementById('sistema').style.display='block';
+  document.getElementById('userBadge').textContent='👑 '+user.nombre;
+  initListeners();
+}
+
+window.cerrarSesion=function(){location.reload();};
+
+// ---- TABS ----
+window.showTab=function(name,el) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+  if(name==='dashboard')renderDashboard();
+  if(name==='pendientes')renderPendientes();
+  if(name==='pagadas')renderPagadas();
+  if(name==='cepas')renderCepas();
+  if(name==='historial')renderHistorial();
+  if(name==='log')renderLog();
+};
+
+// ---- LISTENERS FIRESTORE ----
+function initListeners() {
+  onSnapshot(collection(db,'operaciones_vlp'), snap=>{
+    allOps=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderDashboard();
+    renderPendientes();
+    renderPagadas();
+    renderCepas();
+    actualizarSelectVLP();
+  });
+  onSnapshot(query(collection(db,'importaciones_dux'),orderBy('fecha_importacion','desc')), snap=>{
+    allHistDUX=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderHistorial();
+  });
+  onSnapshot(query(collection(db,'vlp_importados'),orderBy('fecha_importacion','desc')), snap=>{
+    allHistVLP=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderHistorial();
+  });
+  onSnapshot(query(collection(db,'log_conciliaciones'),orderBy('fecha_evento','desc'),limit(200)), snap=>{
+    allLog=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderLog();
+  });
+  onSnapshot(query(collection(db,'viajes_cepas'),orderBy('fecha_viaje','desc')), snap=>{
+    allViajes=snap.docs.map(d=>({id:d.id,...d.data()}));
+    renderViajes();
+    actualizarCardViajesPend();
+  });
+}
+
+// ---- LOG HELPER ----
+async function logEvento(tipo, operacion, descripcion, vlp='', dux='', antes={}, despues={}) {
+  await addDoc(collection(db,'log_conciliaciones'),{
+    tipo_evento:tipo, operacion, descripcion, vlp_archivo:vlp, dux_archivo:dux,
+    fecha_evento:new Date(), usuario:currentUser.nombre,
+    datos_antes:antes, datos_despues:despues
+  });
+}
+
+// ---- DRAG & DROP ----
+window.dragOver=function(e,id){e.preventDefault();document.getElementById(id).classList.add('dragover');};
+window.dragLeave=function(id){document.getElementById(id).classList.remove('dragover');};
+window.dropFile=function(e,tipo){
+  e.preventDefault();
+  const id=tipo==='DUX'?'zoneDUX':'zonaVLP';
+  document.getElementById(id).classList.remove('dragover');
+  const f=e.dataTransfer.files[0];
+  if(!f)return;
+  if(tipo==='DUX') leerArchivoExcel(f,'DUX');
+  else leerArchivoExcel(f,'VLP');
+};
+
+// ---- LEER EXCEL ----
+function leerArchivoExcel(file,tipo) {
+  const reader=new FileReader();
+  reader.onload=function(e) {
+    if(tipo==='DUX') {
+      // raw:true es mucho más rápido — XLSX no convierte fechas, las convertimos nosotros
+      const wb=XLSX.read(e.target.result,{type:'array',dense:true,sheetStubs:false});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
+      // setTimeout libera el hilo antes de procesar
+      setTimeout(()=>procesarDatosExcelDUX(raw,file.name,ws['!ref']),50);
+    } else {
+      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false,dateNF:'yyyy-mm-dd'});
+      procesarDatosExcelVLP(raw,file.name);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Convierte número serial de Excel a Date
+function xlsxDateToDate(v) {
+  if(!v) return null;
+  if(v instanceof Date) return v;
+  if(typeof v==='string') { const d=new Date(v); return isNaN(d)?null:d; }
+  if(typeof v==='number') {
+    // Excel serial date: días desde 1900-01-01 (con bug del año bisiesto 1900)
+    const d=new Date(Math.round((v-25569)*86400*1000));
+    return isNaN(d)?null:d;
+  }
+  return null;
+}
+
+window.procesarDUX=function(input){
+  const f=input.files[0];if(!f)return;
+  leerArchivoExcel(f,'DUX');
+};
+window.procesarVLP=function(input){
+  const f=input.files[0];if(!f)return;
+  leerArchivoExcel(f,'VLP');
+};
+
+// ====================================================
+// IMPORTACION DUX
+// ====================================================
+async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
+  document.getElementById('progresoDUX').style.display='';
+  document.getElementById('resultadoDUX').innerHTML='';
+  const setBar=(p,msg)=>{
+    document.getElementById('barDUX').style.width=p+'%';
+    document.getElementById('statusDUX').textContent=msg;
+  };
+  setBar(5,'Leyendo archivo...');
+
+  const headers=raw[2];
+  if(!headers){toast('Archivo DUX inválido','error');document.getElementById('progresoDUX').style.display='none';return;}
+
+  const col={};
+  headers.forEach((h,i)=>{if(h)col[h.trim()]=i;});
+
+  const COL_OP=col['Operación']??0;
+  const COL_CLI=col['Cliente']??1;
+  const COL_DEST=col['Destinación']??2;
+  const COL_OFIC=col['Oficializ.']??3;
+  const COL_SITU=col['Situación']??8;
+  const COL_ADUANA=col['Aduana']??9;
+  const COL_ESTADO=col['Estado']??13;
+  const COL_MERC=col['Mercaderia']??19;
+  const COL_PLAZA=col['Plaza / Cumplido']??20;
+  const COL_OBS=col['Observaciones']??27;
+  const COL_BORDO=col['Fecha de mercadería a bordo']??32;
+  const COL_SIM=col['Estado SIM']??33;
+
+  const datos=raw.slice(3).filter(r=>r&&r[COL_OP]&&String(r[COL_OP]).trim()!=='');
+  const total038=datos.filter(r=>String(r[COL_ADUANA]||'').startsWith('038') && !String(r[COL_OP]||'').trim().startsWith('8'));
+  const descartadas=datos.length-total038.length;
+
+  setBar(10,`Total filas: ${datos.length} · Aduana 038: ${total038.length}`);
+
+  // 1. TRAER TODOS LOS DOCS EXISTENTES DE UNA SOLA VEZ
+  setBar(15,'Consultando operaciones existentes...');
+  const snapAll=await getDocs(collection(db,'operaciones_vlp'));
+  const existentes={};
+  snapAll.forEach(d=>{existentes[d.id]=d.data();});
+
+  setBar(25,'Preparando datos...');
+
+  const ahora=new Date();
+  let nuevas=0,actualizadas=0,reconciliadas=0;
+  const logItems=[];
+  const operaciones=[];
+
+  for(const r of total038) {
+    const opNorm=normOp(r[COL_OP]);
+    if(!opNorm)continue;
+    const dest=String(r[COL_DEST]||'');
+    const codigoReg=dest.length>=9?dest.substring(5,9):'';
+    const tipoOp=REGIMENES[codigoReg]||'REVISAR';
+    let fechaOp=null;
+    if(tipoOp==='EXPORTACION'&&r[COL_BORDO]){fechaOp=xlsxDateToDate(r[COL_BORDO]);if(fechaOp&&isNaN(fechaOp))fechaOp=null;}
+    else if(r[COL_PLAZA]){fechaOp=xlsxDateToDate(r[COL_PLAZA]);if(fechaOp&&isNaN(fechaOp))fechaOp=null;}
+    let fechaOfic=xlsxDateToDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
+    let fechaBordo=xlsxDateToDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
+    let fechaPlaza=xlsxDateToDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
+    const nuevosDatos={
+      operacion:opNorm,operacion_raw:r[COL_OP],cliente:String(r[COL_CLI]||''),
+      destinacion:dest,aduana:String(r[COL_ADUANA]||''),codigo_regimen:codigoReg,
+      tipo_operacion:tipoOp,mercaderia:String(r[COL_MERC]||''),
+      estado_sim:String(r[COL_SIM]||''),situacion:String(r[COL_SITU]||''),
+      estado:String(r[COL_ESTADO]||''),fecha_oficializacion:fechaOfic,
+      fecha_mer_a_bordo:fechaBordo,cumplido_plaza:fechaPlaza,
+      fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMes(fechaOp):null,
+      observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
+      importado_por:currentUser.nombre,dux_archivo:nombreArchivo
+    };
+    operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp});
+  }
+
+  // 2. ESCRIBIR EN BATCHES DE 490
+  setBar(35,'Escribiendo en Firestore...');
+  const BATCH_SIZE=490;
+  for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
+    const chunk=operaciones.slice(i,i+BATCH_SIZE);
+    const batch=writeBatch(db);
+    for(const {opNorm,nuevosDatos,codigoReg,tipoOp} of chunk) {
+      const ref=doc(db,'operaciones_vlp',opNorm);
+      const existente=existentes[opNorm];
+      if(!existente) {
+        batch.set(ref,{...nuevosDatos,pagada:false,fecha_pago:null,vlp_pago:null,
+          numero_doc_vlp:null,razon_social_vlp:null,importe_vlp:null,origen:'SOLO_DUX',
+          origen_pago:null,cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
+          cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
+          cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora});
+        logItems.push({tipo:'DUX_IMPORTADO_NUEVO',op:opNorm,desc:`Nueva op desde DUX. Régimen: ${codigoReg} (${tipoOp})`,despues:{tipo_operacion:tipoOp}});
+        nuevas++;
+      } else if(existente.origen==='SOLO_VLP') {
+        batch.update(ref,{...nuevosDatos,origen:'COMPLETO'});
+        logItems.push({tipo:'RECONCILIACION_AUTO',op:opNorm,desc:`Reconciliada auto. VLP previo: ${existente.vlp_pago}`,vlp:existente.vlp_pago||''});
+        reconciliadas++;
+      } else {
+        batch.update(ref,nuevosDatos);
+        logItems.push({tipo:'DUX_ACTUALIZADO',op:opNorm,desc:'Operación actualizada desde DUX'});
+        actualizadas++;
+      }
+    }
+    await batch.commit();
+    setBar(35+Math.round(((i+chunk.length)/operaciones.length)*45),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
+  }
+
+  // 3. LOG EN BATCH
+  setBar(85,'Guardando log...');
+  for(let i=0;i<logItems.length;i+=BATCH_SIZE) {
+    const batch=writeBatch(db);
+    for(const l of logItems.slice(i,i+BATCH_SIZE)) {
+      batch.set(doc(collection(db,'log_conciliaciones')),{
+        tipo_evento:l.tipo,operacion:l.op,descripcion:l.desc,
+        vlp_archivo:l.vlp||'',dux_archivo:nombreArchivo,
+        fecha_evento:ahora,usuario:currentUser.nombre,
+        datos_antes:l.antes||{},datos_despues:l.despues||{}
+      });
+    }
+    await batch.commit();
+  }
+
+  setBar(95,'Registrando importación...');
+  await addDoc(collection(db,'importaciones_dux'),{
+    nombre_archivo:nombreArchivo,fecha_importacion:ahora,
+    usuario:currentUser.nombre,total_archivo:datos.length,
+    importadas_038:total038.length,nuevas,actualizadas,descartadas,reconciliadas
+  });
+
+  setBar(100,'Completado');
+  document.getElementById('progresoDUX').style.display='none';
+  document.getElementById('resultadoDUX').innerHTML=`
+    <div class="resultado-box">
+      <div class="resultado-row"><span>Total filas en archivo</span><span>${datos.length}</span></div>
+      <div class="resultado-row"><span>Aduana 038 procesadas</span><span>${total038.length}</span></div>
+      <div class="resultado-row"><span>Operaciones nuevas</span><span style="color:#16a34a">${nuevas}</span></div>
+      <div class="resultado-row"><span>Actualizadas</span><span style="color:#0284c7">${actualizadas}</span></div>
+      <div class="resultado-row"><span>Reconciliadas auto (VLP previo)</span><span style="color:#7c3aed">${reconciliadas}</span></div>
+      <div class="resultado-row"><span>Descartadas (otras aduanas)</span><span style="color:#888">${descartadas}</span></div>
+    </div>`;
+  toast(`DUX importado ✓ — ${nuevas} nuevas, ${reconciliadas} reconciliadas`,'success');
+}
+
+// ====================================================
+// IMPORTACION VLP
+// ====================================================
+async function procesarDatosExcelVLP(raw, nombreArchivo) {
+  document.getElementById('progresoVLP').style.display='';
+  document.getElementById('resultadoVLP').innerHTML='';
+  const setBar=(p,msg)=>{
+    document.getElementById('barVLP').style.width=p+'%';
+    document.getElementById('statusVLP').textContent=msg;
+  };
+  setBar(5,'Leyendo archivo...');
+
+  const nombreVLP=raw[0]&&raw[0][0]?String(raw[0][0]).trim():nombreArchivo;
+
+  const headers=raw[2];
+  if(!headers){toast('Archivo VLP inválido','error');document.getElementById('progresoVLP').style.display='none';return;}
+
+  const col={};
+  headers.forEach((h,i)=>{if(h)col[String(h).trim()]=i;});
+
+  const COL_OP=col['Operación']??9;
+  const COL_FECHA=col['Fecha']??0;
+  const COL_NDOC=col['Número documento']??3;
+  const COL_RAZON=col['Razón social cli.']??5;
+  const COL_IMP=col['Importe']??10;
+
+  const datos=raw.slice(3).filter(r=>r&&r[COL_OP]&&String(r[COL_OP]).trim()!=='');
+  setBar(10,`${datos.length} registros encontrados`);
+
+  // 1. TRAER TODOS LOS DOCS DE UNA SOLA VEZ
+  setBar(15,'Consultando operaciones existentes...');
+  const snapAll=await getDocs(collection(db,'operaciones_vlp'));
+  const existentes={};
+  snapAll.forEach(d=>{existentes[d.id]=d.data();});
+
+  setBar(25,'Preparando datos...');
+  const ahora=new Date();
+  let conciliadas=0,sinDux=0;
+  const logItems=[];
+  const BATCH_SIZE=490;
+
+  const operaciones=[];
+  for(const r of datos) {
+    const opNorm=normOp(r[COL_OP]);
+    if(!opNorm)continue;
+    let fechaPago=r[COL_FECHA]?new Date(r[COL_FECHA]):ahora;
+    if(isNaN(fechaPago))fechaPago=ahora;
+    const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
+      numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
+      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora};
+    operaciones.push({opNorm,vlpData,imp:r[COL_IMP]});
+  }
+
+  // 2. ESCRIBIR EN BATCHES
+  setBar(35,'Escribiendo en Firestore...');
+  for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
+    const chunk=operaciones.slice(i,i+BATCH_SIZE);
+    const batch=writeBatch(db);
+    for(const {opNorm,vlpData,imp} of chunk) {
+      const ref=doc(db,'operaciones_vlp',opNorm);
+      const existente=existentes[opNorm];
+      if(existente) {
+        batch.update(ref,{...vlpData,origen:existente.origen==='SOLO_DUX'?'COMPLETO':existente.origen});
+        logItems.push({tipo:'VLP_PAGADO',op:opNorm,desc:`Marcada PAGADA. VLP: ${nombreVLP}. Importe: $${imp||0}`,vlp:nombreVLP});
+        conciliadas++;
+      } else {
+        batch.set(ref,{operacion:opNorm,operacion_raw:opNorm,cliente:'',destinacion:'',
+          aduana:'038',codigo_regimen:'',tipo_operacion:'',mercaderia:'',estado_sim:'',
+          situacion:'',estado:'',fecha_oficializacion:null,fecha_mer_a_bordo:null,
+          cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,...vlpData,
+          origen:'SOLO_VLP',cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
+          cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
+          cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
+          importado_por:currentUser.nombre,dux_archivo:''});
+        logItems.push({tipo:'VLP_SIN_DUX',op:opNorm,desc:`VLP antes que DUX. SOLO_VLP. VLP: ${nombreVLP}`,vlp:nombreVLP});
+        sinDux++;
+      }
+    }
+    await batch.commit();
+    setBar(35+Math.round(((i+chunk.length)/operaciones.length)*50),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
+  }
+
+  // 3. LOG EN BATCH
+  setBar(88,'Guardando log...');
+  for(let i=0;i<logItems.length;i+=BATCH_SIZE) {
+    const batch=writeBatch(db);
+    for(const l of logItems.slice(i,i+BATCH_SIZE)) {
+      batch.set(doc(collection(db,'log_conciliaciones')),{
+        tipo_evento:l.tipo,operacion:l.op,descripcion:l.desc,
+        vlp_archivo:l.vlp||'',dux_archivo:'',fecha_evento:ahora,
+        usuario:currentUser.nombre,datos_antes:{},datos_despues:{}
+      });
+    }
+    await batch.commit();
+  }
+
+  setBar(96,'Registrando importación...');
+  await addDoc(collection(db,'vlp_importados'),{
+    nombre_archivo:nombreVLP,fecha_importacion:ahora,
+    usuario:currentUser.nombre,total_registros:datos.length,
+    conciliadas,sin_dux:sinDux
+  });
+
+  setBar(100,'Completado');
+  document.getElementById('progresoVLP').style.display='none';
+  document.getElementById('resultadoVLP').innerHTML=`
+    <div class="resultado-box">
+      <div class="resultado-row"><span>VLP importado</span><span>${nombreVLP}</span></div>
+      <div class="resultado-row"><span>Total registros</span><span>${datos.length}</span></div>
+      <div class="resultado-row"><span>Operaciones conciliadas</span><span style="color:#16a34a">${conciliadas}</span></div>
+      <div class="resultado-row"><span>Sin DUX (creadas como SOLO_VLP)</span><span style="color:#d97706">${sinDux}</span></div>
+    </div>`;
+  toast(`VLP importado ✓ — ${conciliadas} conciliadas, ${sinDux} sin DUX`,'success');
+}
+
+
+// ====================================================
+// PAGO MASIVO PENDIENTES
+// ====================================================
+window.actualizarSeleccion=function() {
+  const checks=document.querySelectorAll('.chkPend:checked');
+  const barra=document.getElementById('barraMasiva');
+  document.getElementById('selCount').textContent=checks.length+' seleccionadas';
+  barra.style.display=checks.length>0?'flex':'none';
+  const todos=document.querySelectorAll('.chkPend');
+  document.getElementById('checkTodos').indeterminate=checks.length>0&&checks.length<todos.length;
+  document.getElementById('checkTodos').checked=checks.length===todos.length&&todos.length>0;
+};
+
+window.toggleTodos=function(checked) {
+  document.querySelectorAll('.chkPend').forEach(c=>c.checked=checked);
+  actualizarSeleccion();
+};
+
+window.deseleccionarTodo=function() {
+  document.querySelectorAll('.chkPend').forEach(c=>c.checked=false);
+  document.getElementById('checkTodos').checked=false;
+  actualizarSeleccion();
+};
+
+window.pagarMasivo=async function() {
+  const checks=[...document.querySelectorAll('.chkPend:checked')];
+  if(!checks.length){toast('No hay operaciones seleccionadas','error');return;}
+  const vlp=document.getElementById('vlpMasivo').value.trim();
+  const fechaVal=document.getElementById('fechaMasiva').value;
+  if(!vlp){toast('Ingresá el N° de VLP o Factura','error');return;}
+  if(!confirm(`¿Marcar ${checks.length} operaciones como pagadas con "${vlp}"?`))return;
+
+  const ahora=new Date();
+  const fechaPago=fechaVal?new Date(fechaVal+'T12:00:00'):ahora;
+  const ids=checks.map(c=>c.value);
+  const BATCH_SIZE=490;
+
+  for(let i=0;i<ids.length;i+=BATCH_SIZE) {
+    const batch=writeBatch(db);
+    for(const id of ids.slice(i,i+BATCH_SIZE)) {
+      const op=allOps.find(o=>o.id===id);
+      if(!op)continue;
+      batch.update(doc(db,'operaciones_vlp',id),{
+        pagada:true, fecha_pago:fechaPago, vlp_pago:vlp,
+        origen_pago:'VLP', origen:op.origen==='SOLO_DUX'?'COMPLETO':op.origen,
+        ts_actualizacion:ahora
+      });
+    }
+    await batch.commit();
+  }
+  toast(`${ids.length} operaciones marcadas como pagadas ✓`,'success');
+  deseleccionarTodo();
+};
+
+
+function renderDashboard() {
+  const ops=allOps.filter(o=>!o.archivada);
+  const anioActual=new Date().getFullYear();
+
+  // Total y Pagadas → año corriente
+  const opsAnio=ops.filter(o=>{
+    const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
+             o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+    return f&&f.getFullYear()===anioActual;
+  });
+  const total=opsAnio.length;
+  const pagadas=opsAnio.filter(o=>o.pagada).length;
+
+  // Pendientes, %, Revisar, Sin DUX → histórico
+  const pendientes=ops.filter(o=>!o.pagada).length;
+  const pct=ops.length>0?Math.round(ops.filter(o=>o.pagada).length/ops.length*100):0;
+  const revisar=ops.filter(o=>o.tipo_operacion==='REVISAR').length;
+  const soloVlp=ops.filter(o=>o.origen==='SOLO_VLP').length;
+
+  const anul=ops.filter(o=>o.estado_sim==='ANUL'&&o.pagada).length;
+
+  document.getElementById('dTotal').textContent=total;
+  document.getElementById('dPagadas').textContent=pagadas;
+  document.getElementById('dPendientes').textContent=pendientes;
+  document.getElementById('dPorcentaje').textContent=pct+'%';
+  document.getElementById('dRevisar').textContent=revisar;
+  document.getElementById('dSoloDUX').textContent=soloVlp;
+  document.getElementById('dAnul').textContent=anul;
+
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const pend=ops.filter(o=>!o.pagada&&o.fecha_operativa);
+  const grupos={a0_30:0,a31_60:0,a61_90:0,a90mas:0};
+  const sinFecha=ops.filter(o=>!o.pagada&&!o.fecha_operativa).length;
+  pend.forEach(o=>{
+    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
+    const dias=Math.round((hoy-fo)/(1000*60*60*24));
+    if(dias<=30)grupos.a0_30++;
+    else if(dias<=60)grupos.a31_60++;
+    else if(dias<=90)grupos.a61_90++;
+    else grupos.a90mas++;
+  });
+  const maxG=Math.max(...Object.values(grupos),1);
+  document.getElementById('antiguedad').innerHTML=`
+    ${renderBarAnt('0-30 días',grupos.a0_30,maxG,'#16a34a')}
+    ${renderBarAnt('31-60 días',grupos.a31_60,maxG,'#d97706')}
+    ${renderBarAnt('61-90 días',grupos.a61_90,maxG,'#dc2626')}
+    ${renderBarAnt('+90 días',grupos.a90mas,maxG,'#7c3aed')}
+    ${sinFecha>0?`<div style="font-size:11px;color:#888;margin-top:4px">Sin fecha operativa: ${sinFecha}</div>`:''}`;
+
+  const tipos={EXPORTACION:0,IMPORTACION:0,ZONA_FRANCA:0,REVISAR:0};
+  ops.filter(o=>!o.pagada).forEach(o=>{if(tipos[o.tipo_operacion]!==undefined)tipos[o.tipo_operacion]++;else tipos.REVISAR++;});
+  document.getElementById('porTipo').innerHTML=Object.entries(tipos).map(([t,n])=>`
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f4f8;font-size:12px;">
+      <span>${badgeTipo(t)} ${t}</span><span style="font-weight:700">${n}</span>
+    </div>`).join('');
+
+  let alertas=[];
+  if(revisar>0)alertas.push(`⚠️ ${revisar} operaciones con régimen REVISAR — requieren atención manual`);
+  if(soloVlp>0)alertas.push(`📋 ${soloVlp} operaciones en VLP sin archivo DUX importado aún`);
+  if(grupos.a90mas>0)alertas.push(`🔴 ${grupos.a90mas} operaciones pendientes hace más de 90 días`);
+  document.getElementById('alertas').innerHTML=alertas.length?alertas.map(a=>`<div style="padding:6px 0;border-bottom:1px solid #f0f4f8;color:#dc2626;">${a}</div>`).join(''):'<span style="color:#16a34a">✓ Sin alertas críticas</span>';
+}
+
+function renderBarAnt(label,n,max,color) {
+  const pct=max>0?Math.round(n/max*100):0;
+  return `<div class="antig-bar">
+    <span class="antig-label">${label}</span>
+    <span class="antig-count">${n}</span>
+    <div class="antig-visual"><div class="antig-fill" style="width:${pct}%;background:${color}"></div></div>
+  </div>`;
+}
+
+// ====================================================
+// PENDIENTES
+// ====================================================
+window.renderPendientes=function() {
+  const buscar=(document.getElementById('buscarPend')?.value||'').toLowerCase();
+  const filtMes=document.getElementById('filtroMesPend')?.value||'';
+  const filtTipo=document.getElementById('filtroTipoPend')?.value||'';
+  const filtSim=document.getElementById('filtroSimPend')?.value||'';
+  const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
+
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  let fil=allOps.filter(o=>!o.pagada&&!o.archivada);
+
+  if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
+  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
+  if(filtSim)fil=fil.filter(o=>o.estado_sim===filtSim);
+  if(filtOrigen)fil=fil.filter(o=>o.origen===filtOrigen);
+
+  fil.sort((a,b)=>{
+    const fa=a.fecha_operativa?new Date(a.fecha_operativa.toDate?a.fecha_operativa.toDate():a.fecha_operativa):new Date('2099-01-01');
+    const fb=b.fecha_operativa?new Date(b.fecha_operativa.toDate?b.fecha_operativa.toDate():b.fecha_operativa):new Date('2099-01-01');
+    return fa-fb;
+  });
+
+  document.getElementById('pTotal').textContent=allOps.filter(o=>!o.pagada&&!o.archivada).length;
+  document.getElementById('pExpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='EXPORTACION').length;
+  document.getElementById('pImpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='IMPORTACION').length;
+  document.getElementById('pZF').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='ZONA_FRANCA').length;
+
+  document.getElementById('tablaPendientes').innerHTML=fil.map(o=>{
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const dias=fo?Math.round((hoy-fo)/(1000*60*60*24)):null;
+    const diasStr=dias!==null?(dias>90?`<span style="color:#dc2626;font-weight:700">${dias}d</span>`:dias>60?`<span style="color:#d97706">${dias}d</span>`:`${dias}d`):'-';
+    return `<tr>
+      <td><input type="checkbox" class="chkPend" value="${o.id}" onchange="actualizarSeleccion()" /></td>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente}">${clienteCorto(o.cliente)||'-'}</td>
+      <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
+      <td>${badgeSIM(o.estado_sim)}</td>
+      <td>${badgeOrigen(o.origen)}</td>
+      <td>${diasStr}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#666" title="${o.mercaderia||''}">${o.mercaderia||'-'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-outline btn-sm" title="Ver ficha" onclick="abrirFicha('${o.id}')">📋</button>
+          <button class="btn btn-warning btn-sm" title="Registrar pago por factura propia" onclick="abrirModalFactura('${o.id}')">💵</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="12" style="text-align:center;color:#888;padding:20px">Sin operaciones pendientes</td></tr>';
+  document.getElementById('resumenPend').textContent=`📄 ${fil.length} operaciones mostradas`;
+};
+
+window.limpiarFiltrosPend=function(){
+  ['buscarPend','filtroMesPend'].forEach(id=>document.getElementById(id).value='');
+  ['filtroTipoPend','filtroSimPend','filtroOrigenPend'].forEach(id=>document.getElementById(id).value='');
+  renderPendientes();
+};
+
+// ====================================================
+// PAGO POR FACTURA PROPIA  ← NUEVO
+// ====================================================
+window.abrirModalFactura = function(id) {
+  facturaOpId = id;
+  const o = allOps.find(x => x.id === id);
+  if (!o) return;
+  document.getElementById('facturaOpNum').textContent = o.operacion;
+  document.getElementById('facturaNumero').value = '';
+  document.getElementById('facturaFecha').value = todayISO();
+  document.getElementById('facturaImporte').value = '';
+  document.getElementById('facturaObs').value = '';
+  document.getElementById('modalFactura').classList.add('open');
+};
+
+window.cerrarModalFactura = function() {
+  document.getElementById('modalFactura').classList.remove('open');
+  facturaOpId = null;
+};
+
+window.confirmarPagoFactura = async function() {
+  if (!facturaOpId) return;
+  const nroFactura = document.getElementById('facturaNumero').value.trim();
+  const fechaStr   = document.getElementById('facturaFecha').value;
+  const importe    = parseFloat(document.getElementById('facturaImporte').value) || null;
+  const obs        = document.getElementById('facturaObs').value.trim();
+
+  if (!nroFactura) { toast('Ingresá el número de factura', 'error'); return; }
+  if (!fechaStr)   { toast('Ingresá la fecha de pago', 'error'); return; }
+
+  const o = allOps.find(x => x.id === facturaOpId);
+  if (!o) return;
+
+  // Construir la fecha correctamente sin problemas de TZ
+  const [anio, mes, dia] = fechaStr.split('-').map(Number);
+  const fechaPago = new Date(anio, mes - 1, dia, 12, 0, 0);
+
+  const update = {
+    pagada: true,
+    fecha_pago: fechaPago,
+    vlp_pago: 'FACTURA: ' + nroFactura,
+    numero_doc_vlp: nroFactura,
+    razon_social_vlp: currentUser.nombre,
+    importe_vlp: importe,
+    origen_pago: 'FACTURA_PROPIA',
+    origen: o.origen === 'SOLO_DUX' ? 'COMPLETO' : o.origen,
+    observaciones: obs
+      ? (o.observaciones ? o.observaciones + ' | ' + obs : obs)
+      : (o.observaciones || ''),
+    ts_actualizacion: new Date()
+  };
+
+  try {
+    await updateDoc(doc(db, 'operaciones_vlp', facturaOpId), update);
+    await logEvento(
+      'FACTURA_PAGO_MANUAL',
+      o.operacion,
+      `Pago registrado por Factura Propia. N°: ${nroFactura}. Importe: $${importe || 0}. Usuario: ${currentUser.nombre}`,
+      nroFactura, '',
+      { pagada: false },
+      { pagada: true, origen_pago: 'FACTURA_PROPIA', vlp_pago: 'FACTURA: ' + nroFactura }
+    );
+    cerrarModalFactura();
+    toast('✅ Pago por factura registrado — Op. ' + o.operacion, 'success');
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar. Intentá de nuevo.', 'error');
+  }
+};
+
+// ====================================================
+// PAGADAS
+// ====================================================
+window.renderPagadas=function() {
+  const buscar=(document.getElementById('buscarPag')?.value||'').toLowerCase();
+  const filtMes=document.getElementById('filtroMesPag')?.value||'';
+  const filtTipo=document.getElementById('filtroTipoPag')?.value||'';
+  const filtVLP=document.getElementById('filtroVLPPag')?.value||'';
+  const filtOrigenPago=document.getElementById('filtroOrigenPago')?.value||'';
+
+  let fil=allOps.filter(o=>o.pagada&&!o.archivada);
+  if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
+  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
+  if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
+  if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
+  if(filtOrigenPago==='FACTURA_PROPIA')fil=fil.filter(o=>o.origen_pago==='FACTURA_PROPIA');
+
+  fil.sort((a,b)=>{
+    const fa=a.fecha_pago?(a.fecha_pago.toDate?a.fecha_pago.toDate():new Date(a.fecha_pago)):new Date(0);
+    const fb=b.fecha_pago?(b.fecha_pago.toDate?b.fecha_pago.toDate():new Date(b.fecha_pago)):new Date(0);
+    return fb-fa;
+  });
+
+  const totalPag=allOps.filter(o=>o.pagada&&!o.archivada);
+  document.getElementById('pgTotal').textContent=totalPag.length;
+  document.getElementById('pgFactura').textContent=totalPag.filter(o=>o.origen_pago==='FACTURA_PROPIA').length;
+
+  let sumDias=0,cnt=0,fueraTerm=0;
+  fil.forEach(o=>{
+    if(o.fecha_operativa&&o.fecha_pago){
+      const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
+      const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
+      const d=Math.round((fp-fo)/(1000*60*60*24));
+      sumDias+=d;cnt++;
+      if(d>30)fueraTerm++;
+    }
+  });
+  document.getElementById('pgPromDias').textContent=cnt>0?Math.round(sumDias/cnt)+' días':'-';
+  document.getElementById('pgFueraTerm').textContent=fueraTerm;
+
+  document.getElementById('tablaPagadas').innerHTML=fil.map(o=>{
+    const esSoloVlp = o.origen==='SOLO_VLP';
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+    const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
+    const diasStr=dias!==null?(dias>30?`<span style="color:#dc2626;font-weight:700">${dias}d</span>`:`<span style="color:#16a34a">${dias}d</span>`):'-';
+    const esFactura = o.origen_pago==='FACTURA_PROPIA';
+    const clienteMostrar = clienteCorto(o.cliente) || (esSoloVlp ? o.razon_social_vlp : null) || '-';
+    const fechaOpMostrar = fo ? fo.toLocaleDateString('es-AR') : (esSoloVlp && fp ? `<span style="color:#888;font-style:italic">${fp.toLocaleDateString('es-AR')}</span>` : '-');
+    return `<tr>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||o.razon_social_vlp||''}">${clienteMostrar}${esSoloVlp?'<span class="badge badge-solo-vlp" style="margin-left:4px;font-size:9px">SV</span>':''}</td>
+      <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
+      <td>${fp?fp.toLocaleDateString('es-AR'):'-'}</td>
+      <td>${diasStr}</td>
+      <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.vlp_pago||''}">${o.vlp_pago||'-'}</td>
+      <td>${esFactura?'<span class="badge badge-factura">💵 Factura</span>':'<span class="badge badge-pagado">VLP</span>'}</td>
+      <td style="font-size:11px">${o.importe_vlp?'$'+Number(o.importe_vlp).toLocaleString('es-AR',{minimumFractionDigits:2}):'-'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="abrirFicha('${o.id}')">📋</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="11" style="text-align:center;color:#888;padding:20px">Sin operaciones pagadas</td></tr>';
+  document.getElementById('resumenPag').textContent=`📄 ${fil.length} operaciones mostradas`;
+};
+
+function actualizarSelectVLP() {
+  const vlps=[...new Set(allOps.filter(o=>o.vlp_pago).map(o=>o.vlp_pago))].sort();
+  const s=document.getElementById('filtroVLPPag');
+  if(!s)return;
+  const cur=s.value;
+  s.innerHTML='<option value="">Todos</option>'+vlps.map(v=>`<option value="${v}">${v}</option>`).join('');
+  if(cur)s.value=cur;
+}
+
+window.limpiarFiltrosPag=function(){
+  ['buscarPag','filtroMesPag'].forEach(id=>document.getElementById(id).value='');
+  ['filtroTipoPag','filtroVLPPag','filtroOrigenPago'].forEach(id=>document.getElementById(id).value='');
+  renderPagadas();
+};
+
+// ====================================================
+// ====================================================
+// VIAJES CEPAS
+// ====================================================
+function actualizarCardViajesPend() {
+  document.getElementById('cepViajesPend').textContent=allViajes.filter(v=>!v.cobrado).length;
+}
+
+window.abrirModalViaje=function(id=null) {
+  viajeEditId=id;
+  document.getElementById('viajeModalTitulo').textContent=id?'Editar':'Nuevo';
+  document.getElementById('viajeFechaHoy').textContent=new Date().toLocaleDateString('es-AR');
+  if(id) {
+    const v=allViajes.find(x=>x.id===id);
+    if(!v)return;
+    document.getElementById('viajeOperacion').value=v.operacion||'';
+    document.getElementById('viajeAD').value=v.ad_camion||'';
+    document.getElementById('viajeDestinacion').value=v.destinacion||'';
+    document.getElementById('viajeObs').value=v.observaciones||'';
+  } else {
+    document.getElementById('viajeOperacion').value='';
+    document.getElementById('viajeAD').value='';
+    document.getElementById('viajeDestinacion').value='';
+    document.getElementById('viajeObs').value='';
+  }
+  document.getElementById('modalViaje').classList.add('open');
+};
+
+window.cerrarModalViaje=function(){document.getElementById('modalViaje').classList.remove('open');viajeEditId=null;};
+
+window.guardarViaje=async function() {
+  const operacion=document.getElementById('viajeOperacion').value.trim();
+  const ad_camion=document.getElementById('viajeAD').value.trim();
+  const destinacion=document.getElementById('viajeDestinacion').value.trim();
+  if(!operacion||!ad_camion||!destinacion){toast('Completá operación, AD y destinación','error');return;}
+  const observaciones=document.getElementById('viajeObs').value.trim();
+  const ahora=new Date();
+  const data={
+    operacion, ad_camion, destinacion, observaciones,
+    fecha_viaje:ahora,
+    mes:ahora.toISOString().substring(0,7),
+    cobrado:false,
+    usuario:currentUser.nombre,
+    ts_actualizacion:ahora
+  };
+  if(viajeEditId) {
+    await updateDoc(doc(db,'viajes_cepas',viajeEditId),data);
+    toast('Viaje actualizado ✓','success');
+  } else {
+    data.ts_creacion=ahora;
+    await addDoc(collection(db,'viajes_cepas'),data);
+    toast('Viaje guardado ✓','success');
+  }
+  cerrarModalViaje();
+};
+
+window.eliminarViaje=async function(id) {
+  if(!confirm('¿Eliminar este viaje?'))return;
+  await deleteDoc(doc(db,'viajes_cepas',id));
+  toast('Viaje eliminado','error');
+};
+
+window.toggleCobradoViaje=async function(id,val) {
+  await updateDoc(doc(db,'viajes_cepas',id),{cobrado:val,ts_actualizacion:new Date()});
+  toast(val?'Marcado como cobrado ✓':'Marcado como pendiente','success');
+};
+
+window.renderViajes=function() {
+  const filtMes=document.getElementById('filtroMesViajes')?.value||'';
+  const filtCob=document.getElementById('filtroCobradoViajes')?.value||'';
+  let fil=[...allViajes];
+  if(filtMes)fil=fil.filter(v=>v.mes===filtMes);
+  if(filtCob==='si')fil=fil.filter(v=>v.cobrado);
+  if(filtCob==='no')fil=fil.filter(v=>!v.cobrado);
+  actualizarCardViajesPend();
+  document.getElementById('tablaViajes').innerHTML=fil.map(v=>{
+    const fd=v.fecha_viaje?(v.fecha_viaje.toDate?v.fecha_viaje.toDate():new Date(v.fecha_viaje)):null;
+    return `<tr>
+      <td><strong>${fd?fd.toLocaleDateString('es-AR'):'-'}</strong></td>
+      <td style="font-family:monospace;font-size:12px">${v.operacion||'-'}</td>
+      <td style="font-size:11px">${v.destinacion||'-'}</td>
+      <td style="font-weight:600">${v.ad_camion||'-'}</td>
+      <td>${v.cobrado
+        ?'<span class="badge badge-pagado">✓ Cobrado</span>'
+        :'<span class="badge badge-pendiente">Pendiente</span>'}</td>
+      <td style="font-size:11px">${v.observaciones||'-'}</td>
+      <td style="font-size:11px">${v.usuario||'-'}</td>
+      <td>
+        <div class="btn-row">
+          ${!v.cobrado
+            ?`<button class="btn btn-success btn-sm" onclick="toggleCobradoViaje('${v.id}',true)">✓ Cobrar</button>`
+            :`<button class="btn btn-warning btn-sm" onclick="toggleCobradoViaje('${v.id}',false)">↩ Revertir</button>`}
+          <button class="btn btn-primary btn-sm" onclick="abrirModalViaje('${v.id}')">✏️</button>
+          <button class="btn btn-danger btn-sm" onclick="eliminarViaje('${v.id}')">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="8" style="text-align:center;color:#888;padding:20px">Sin viajes cargados</td></tr>';
+};
+
+window.limpiarFiltrosViajes=function(){['filtroMesViajes','filtroCobradoViajes'].forEach(id=>document.getElementById(id).value='');renderViajes();};
+
+window.exportarViajesExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const data=[['Fecha Viaje','Mes','Operaciones','Cobrado','Observaciones','Cargado por']];
+  allViajes.forEach(v=>{
+    const fd=v.fecha_viaje?(v.fecha_viaje.toDate?v.fecha_viaje.toDate():new Date(v.fecha_viaje)):null;
+    data.push([fd?fd.toLocaleDateString('es-AR'):'',v.mes||'',(v.operaciones||[]).join(', '),v.cobrado?'Sí':'No',v.observaciones||'',v.usuario||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:F1'};ws['!cols']=[{wch:14},{wch:10},{wch:50},{wch:10},{wch:24},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Viajes CEPAS');
+  XLSX.writeFile(wb,'VLP_Viajes_CEPAS_'+todayISO()+'.xlsx');
+  toast('Excel Viajes generado ✓','success');
+};
+
+// CEPAS
+// ====================================================
+window.renderCepas=function() {
+  const filtMes=document.getElementById('filtroMesCepas')?.value||'';
+  const filtAD=document.getElementById('filtroADCepas')?.value||'';
+  const filtLiquid=document.getElementById('filtroLiquidCepas')?.value||'';
+
+  let fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtAD==='con')fil=fil.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='');
+  if(filtAD==='sin')fil=fil.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='');
+  if(filtLiquid==='si')fil=fil.filter(o=>o.cepas_liquidado);
+  if(filtLiquid==='no')fil=fil.filter(o=>!o.cepas_liquidado);
+
+  const total=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  document.getElementById('cepTotal').textContent=total.length;
+  document.getElementById('cepConAD').textContent=total.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='').length;
+  document.getElementById('cepSinAD').textContent=total.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='').length;
+  document.getElementById('cepPendLiquid').textContent=total.filter(o=>!o.cepas_liquidado).length;
+
+  document.getElementById('tablaCepas').innerHTML=fil.map(o=>{
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
+    return `<tr>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="font-size:11px">${o.mes_operativo||'-'}</td>
+      <td>${fo?fo.toLocaleDateString('es-AR'):'-'}</td>
+      <td style="font-weight:600">${o.cepas_ad_camion||'<span style="color:#d97706">Sin AD</span>'}</td>
+      <td style="font-size:11px">${o.cepas_patente||'-'}</td>
+      <td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cepas_transportista||'-'}</td>
+      <td>${fr?fr.toLocaleDateString('es-AR'):'-'}</td>
+      <td>${o.cepas_liquidado?'<span class="badge badge-pagado">✓ Sí</span>':'<span class="badge badge-pendiente">Pendiente</span>'}</td>
+      <td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cepas_observaciones||'-'}</td>
+      <td><button class="btn btn-primary btn-sm" onclick="abrirFicha('${o.id}')">✏️</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="11" style="text-align:center;color:#888;padding:20px">Sin operaciones CEPAS</td></tr>';
+};
+
+window.limpiarFiltrosCepas=function(){['filtroMesCepas','filtroADCepas','filtroLiquidCepas'].forEach(id=>document.getElementById(id).value='');renderCepas();};
+
+// ====================================================
+// FICHA DE OPERACION
+// ====================================================
+window.abrirFicha=function(id) {
+  const o=allOps.find(x=>x.id===id);
+  if(!o)return;
+  fichaId=id;
+  document.getElementById('fichaOpNum').textContent=o.operacion;
+
+  const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+  const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+  const fofic=o.fecha_oficializacion?(o.fecha_oficializacion.toDate?o.fecha_oficializacion.toDate():new Date(o.fecha_oficializacion)):null;
+
+  const esFactura = o.origen_pago==='FACTURA_PROPIA';
+  document.getElementById('fichaGrid').innerHTML=`
+    <div class="ficha-item"><div class="ficha-label">Operación</div><div class="ficha-val">${o.operacion}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Origen</div><div class="ficha-val">${badgeOrigen(o.origen)}</div></div>
+    <div class="ficha-item full"><div class="ficha-label">Cliente</div><div class="ficha-val">${o.cliente||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Destinación</div><div class="ficha-val" style="font-size:11px;font-family:monospace">${o.destinacion||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Aduana</div><div class="ficha-val">${o.aduana||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Régimen</div><div class="ficha-val"><span style="font-family:monospace">${o.codigo_regimen||'-'}</span></div></div>
+    <div class="ficha-item"><div class="ficha-label">Tipo</div><div class="ficha-val">${badgeTipo(o.tipo_operacion)}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Estado SIM</div><div class="ficha-val">${badgeSIM(o.estado_sim)}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Situación</div><div class="ficha-val">${o.situacion||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${fofic?fofic.toLocaleDateString('es-AR'):'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${fo?fo.toLocaleDateString('es-AR'):'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Mes Operativo</div><div class="ficha-val">${o.mes_operativo||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Estado Pago</div><div class="ficha-val">${o.pagada?'<span class="badge badge-pagado">✓ PAGADA</span>':'<span class="badge badge-pendiente">PENDIENTE</span>'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Origen Pago</div><div class="ficha-val">${esFactura?'<span class="badge badge-factura">💵 Factura Propia</span>':(o.pagada?'<span class="badge badge-pagado">VLP</span>':'-')}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${fp?fp.toLocaleDateString('es-AR'):'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">VLP / Factura</div><div class="ficha-val" style="font-size:11px">${o.vlp_pago||'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Importe</div><div class="ficha-val">${o.importe_vlp?'$'+Number(o.importe_vlp).toLocaleString('es-AR',{minimumFractionDigits:2}):'-'}</div></div>
+    <div class="ficha-item full"><div class="ficha-label">Mercadería</div><div class="ficha-val" style="font-size:12px">${o.mercaderia||'-'}</div></div>`;
+
+  const esCepas=o.cliente&&o.cliente.toUpperCase().includes('CEPAS');
+  document.getElementById('fichaCepasSection').style.display=esCepas?'':'none';
+  if(esCepas){
+    document.getElementById('fichaAD').value=o.cepas_ad_camion||'';
+    document.getElementById('fichaPatente').value=o.cepas_patente||'';
+    document.getElementById('fichaTransp').value=o.cepas_transportista||'';
+    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
+    document.getElementById('fichaFechaRetiro').value=fr?fmtFechaISO(fr):'';
+    document.getElementById('fichaObsCepas').value=o.cepas_observaciones||'';
+    document.getElementById('fichaLiquidado').value=String(o.cepas_liquidado||false);
+    const fl=o.cepas_fecha_liquid?(o.cepas_fecha_liquid.toDate?o.cepas_fecha_liquid.toDate():new Date(o.cepas_fecha_liquid)):null;
+    document.getElementById('fichaFechaLiquid').value=fl?fmtFechaISO(fl):'';
+  }
+
+  document.getElementById('fichaObs').value=o.observaciones||'';
+  document.getElementById('modalFicha').classList.add('open');
+};
+
+window.cerrarFicha=function(){document.getElementById('modalFicha').classList.remove('open');fichaId=null;};
+
+window.guardarFicha=async function(){
+  if(!fichaId)return;
+  const o=allOps.find(x=>x.id===fichaId);
+  if(!o)return;
+  const esCepas=o.cliente&&o.cliente.toUpperCase().includes('CEPAS');
+  const update={observaciones:document.getElementById('fichaObs').value.trim(),ts_actualizacion:new Date()};
+  if(esCepas){
+    update.cepas_ad_camion=document.getElementById('fichaAD').value.trim();
+    update.cepas_patente=document.getElementById('fichaPatente').value.trim();
+    update.cepas_transportista=document.getElementById('fichaTransp').value.trim();
+    update.cepas_observaciones=document.getElementById('fichaObsCepas').value.trim();
+    update.cepas_liquidado=document.getElementById('fichaLiquidado').value==='true';
+    const fr=document.getElementById('fichaFechaRetiro').value;
+    update.cepas_fecha_retiro=fr?new Date(fr):null;
+    const fl=document.getElementById('fichaFechaLiquid').value;
+    update.cepas_fecha_liquid=fl?new Date(fl):null;
+  }
+  await updateDoc(doc(db,'operaciones_vlp',fichaId),update);
+  if(esCepas)await logEvento('CEPAS_ACTUALIZADO',o.operacion,`Datos CEPAS actualizados. AD: ${update.cepas_ad_camion||''}. Liquidado: ${update.cepas_liquidado}`,'','',{},{cepas_ad_camion:update.cepas_ad_camion});
+  cerrarFicha();
+  toast('Operación guardada ✓','success');
+};
+
+// ====================================================
+// HISTORIAL
+// ====================================================
+window.renderHistorial=function(){
+  document.getElementById('tablaHistDUX').innerHTML=allHistDUX.map(h=>{
+    const f=h.fecha_importacion?(h.fecha_importacion.toDate?h.fecha_importacion.toDate():new Date(h.fecha_importacion)):null;
+    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${f?f.toLocaleDateString('es-AR'):'-'}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.importadas_038||0}</td><td style="color:#16a34a">${h.nuevas||0}</td><td style="color:#0284c7">${h.actualizadas||0}</td><td style="color:#7c3aed">${h.reconciliadas||0}</td></tr>`;
+  }).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:12px">Sin importaciones</td></tr>';
+
+  document.getElementById('tablaHistVLP').innerHTML=allHistVLP.map(h=>{
+    const f=h.fecha_importacion?(h.fecha_importacion.toDate?h.fecha_importacion.toDate():new Date(h.fecha_importacion)):null;
+    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${f?f.toLocaleDateString('es-AR'):'-'}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.total_registros||0}</td><td style="color:#16a34a">${h.conciliadas||0}</td><td style="color:#d97706">${h.sin_dux||0}</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:12px">Sin importaciones</td></tr>';
+};
+
+// ====================================================
+// LOG
+// ====================================================
+window.renderLog=function(){
+  const filtOp=(document.getElementById('filtroLogOp')?.value||'').trim();
+  const filtTipo=document.getElementById('filtroLogTipo')?.value||'';
+  let fil=allLog;
+  if(filtOp)fil=fil.filter(l=>l.operacion&&l.operacion.includes(filtOp));
+  if(filtTipo)fil=fil.filter(l=>l.tipo_evento===filtTipo);
+  document.getElementById('logContainer').innerHTML=fil.map(l=>{
+    const f=l.fecha_evento?(l.fecha_evento.toDate?l.fecha_evento.toDate():new Date(l.fecha_evento)):null;
+    const esFactura=l.tipo_evento==='FACTURA_PAGO_MANUAL';
+    return `<div class="log-item">
+      <span class="log-tipo${esFactura?' factura':''}">${l.tipo_evento||''}</span>
+      <strong>Op: ${l.operacion||'-'}</strong> — ${l.descripcion||''}
+      <div style="font-size:10px;color:#aaa;margin-top:2px">${f?f.toLocaleString('es-AR'):'-'} · ${l.usuario||''}</div>
+    </div>`;
+  }).join('')||'<div style="text-align:center;color:#888;padding:20px;font-size:13px">Sin registros en el log</div>';
+};
+window.limpiarFiltrosLog=function(){['filtroLogOp','filtroLogTipo'].forEach(id=>document.getElementById(id).value='');renderLog();};
+
+// ====================================================
+// EXPORTAR EXCEL
+// ====================================================
+window.exportarPendientesExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const fil=allOps.filter(o=>!o.pagada&&!o.archivada).sort((a,b)=>{
+    const fa=a.fecha_operativa?new Date(a.fecha_operativa.toDate?a.fecha_operativa.toDate():a.fecha_operativa):new Date('2099-01-01');
+    const fb=b.fecha_operativa?new Date(b.fecha_operativa.toDate?b.fecha_operativa.toDate():b.fecha_operativa):new Date('2099-01-01');
+    return fa-fb;
+  });
+  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería']];
+  fil.forEach(o=>{
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const dias=fo?Math.round((hoy-fo)/(1000*60*60*24)):null;
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:J1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:10},{wch:10},{wch:12},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'Pendientes');
+  XLSX.writeFile(wb,'VLP_Pendientes_'+todayISO()+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+window.exportarPagadasExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const fil=allOps.filter(o=>o.pagada&&!o.archivada);
+  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Fecha Pago','Días tardó','VLP / Factura','Origen Pago','Importe','N° Doc']];
+  fil.forEach(o=>{
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+    const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:L1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
+  XLSX.writeFile(wb,'VLP_Pagadas_'+todayISO()+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+window.exportarFueraTerminoExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const fil=allOps.filter(o=>{
+    if(!o.pagada||!o.fecha_operativa||!o.fecha_pago)return false;
+    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
+    const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
+    return Math.round((fp-fo)/(1000*60*60*24))>30;
+  });
+  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Fecha Pago','Días tardó','VLP / Factura','Origen Pago']];
+  fil.forEach(o=>{
+    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
+    const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo.toLocaleDateString('es-AR'),fp.toLocaleDateString('es-AR'),Math.round((fp-fo)/(1000*60*60*24)),o.vlp_pago||'',o.origen_pago||'VLP']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:I1'};
+  XLSX.utils.book_append_sheet(wb,ws,'Fuera de término');
+  XLSX.writeFile(wb,'VLP_FueraTermino_'+todayISO()+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+window.exportarCepasExcel=function(){
+  const wb=XLSX.utils.book_new();
+  const fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  const data=[['Operación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería']];
+  fil.forEach(o=>{
+    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
+    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
+    const fl=o.cepas_fecha_liquid?(o.cepas_fecha_liquid.toDate?o.cepas_fecha_liquid.toDate():new Date(o.cepas_fecha_liquid)):null;
+    data.push([o.operacion,o.mes_operativo||'',o.pagada?'Pagada':'Pendiente',fo?fo.toLocaleDateString('es-AR'):'',o.vlp_pago||'',o.cepas_ad_camion||'',o.cepas_patente||'',o.cepas_transportista||'',fr?fr.toLocaleDateString('es-AR'):'',o.cepas_liquidado?'Sí':'No',fl?fl.toLocaleDateString('es-AR'):'',o.cepas_observaciones||'',o.mercaderia||'']);
+  });
+  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:M1'};ws['!cols']=[{wch:12},{wch:10},{wch:12},{wch:14},{wch:22},{wch:12},{wch:10},{wch:18},{wch:12},{wch:10},{wch:14},{wch:20},{wch:30}];
+  XLSX.utils.book_append_sheet(wb,ws,'CEPAS');
+  XLSX.writeFile(wb,'VLP_CEPAS_'+todayISO()+'.xlsx');
+  toast('Excel CEPAS generado ✓','success');
+};
+
+// ====================================================
+// MODAL DETALLE DASHBOARD
+// ====================================================
+let _dashOps = [];
+let _dashTipo = '';
+window.abrirModalDash = function(tipo) {
+  const ops = allOps.filter(o=>!o.archivada);
+  const titulos = {
+    total: 'Total Operaciones',
+    pagadas: '✅ Operaciones Pagadas',
+    pendientes: '⏳ Operaciones Pendientes',
+    revisar: '⚠️ Operaciones a REVISAR',
+    sinDux: '📋 Sin DUX (Solo VLP)',
+    anul: '🚫 ANUL Pagadas'
+  };
+  const anioActual=new Date().getFullYear();
+  const filtros = {
+    total: o=>{
+      const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
+               o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      return f&&f.getFullYear()===anioActual;
+    },
+    pagadas: o=>{
+      const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
+               o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      return o.pagada&&f&&f.getFullYear()===anioActual;
+    },
+    pendientes: o=>!o.pagada,
+    revisar: o=>o.tipo_operacion==='REVISAR',
+    sinDux: o=>o.origen==='SOLO_VLP',
+    anul: o=>o.estado_sim==='ANUL'&&o.pagada
+  };
+  _dashOps = ops.filter(filtros[tipo]);
+  _dashTipo = tipo;
+  document.getElementById('modalDashTitulo').textContent = titulos[tipo] + ' (' + _dashOps.length + ')';
+  document.getElementById('buscarModalDash').value = '';
+  // Cambiar header si es sinDux
+  const thead = document.querySelector('#tablaModalDash').closest('table').querySelector('thead tr');
+  if(tipo==='sinDux') {
+    thead.innerHTML='<th>Operación</th><th>Razón Social VLP</th><th>Tipo</th><th>Fecha VLP</th><th>N° Doc VLP</th><th>Origen</th>';
+  } else {
+    thead.innerHTML='<th>Operación</th><th>Cliente</th><th>Tipo</th><th>Mes</th><th>Estado SIM</th><th>Origen</th>';
+  }
+  renderTablaModalDash(_dashOps);
+  document.getElementById('modalDash').classList.add('open');
+};
+
+function renderTablaModalDash(lista) {
+  document.getElementById('tablaModalDash').innerHTML = lista.map(o=>{
+    if(_dashTipo==='sinDux') {
+      const fp = o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      return `<tr>
+        <td><strong>${o.operacion}</strong></td>
+        <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.razon_social_vlp||'-'}</td>
+        <td>${badgeTipo(o.tipo_operacion)}</td>
+        <td style="font-size:11px">${fp?fp.toLocaleDateString('es-AR'):'-'}</td>
+        <td style="font-size:11px">${o.numero_doc_vlp||'-'}</td>
+        <td>${badgeOrigen(o.origen)}</td>
+      </tr>`;
+    }
+    const cliente = clienteCorto(o.cliente) || '-';
+    return `<tr>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${cliente}</td>
+      <td>${badgeTipo(o.tipo_operacion)}</td>
+      <td style="font-size:11px">${o.mes_operativo||'-'}</td>
+      <td>${badgeSIM(o.estado_sim)}</td>
+      <td>${badgeOrigen(o.origen)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">Sin operaciones</td></tr>';
+  document.getElementById('resumenModalDash').textContent = lista.length + ' operaciones';
+}
+
+window.filtrarModalDash = function() {
+  const q = document.getElementById('buscarModalDash').value.toLowerCase();
+  const fil = q ? _dashOps.filter(o=>o.operacion.includes(q)||(o.cliente||'').toLowerCase().includes(q)) : _dashOps;
+  renderTablaModalDash(fil);
+};
+
+
+function badgeTipo(t) {
+  const m={EXPORTACION:'badge-expo',IMPORTACION:'badge-impo',ZONA_FRANCA:'badge-zf',REVISAR:'badge-revisar'};
+  const l={EXPORTACION:'EXPO',IMPORTACION:'IMPO',ZONA_FRANCA:'ZF',REVISAR:'⚠️ REVISAR'};
+  if(!t)return '-';
+  return `<span class="badge ${m[t]||'badge-revisar'}">${l[t]||t}</span>`;
+}
+function badgeSIM(s) {
+  if(!s||s===''||s==='null')return '-';
+  const m={CANC:'badge-canc',AUTO:'badge-auto',SALI:'badge-sali',PRES:'badge-pres',ANUL:'badge-anul'};
+  return `<span class="badge ${m[s]||'badge-pendiente'}">${s}</span>`;
+}
+function badgeOrigen(o) {
+  if(!o)return '-';
+  const m={COMPLETO:'badge-completo',SOLO_DUX:'badge-solo-dux',SOLO_VLP:'badge-solo-vlp'};
+  const l={COMPLETO:'✓ Completo',SOLO_DUX:'Solo DUX',SOLO_VLP:'⚠️ Solo VLP'};
+  return `<span class="badge ${m[o]||'badge-pendiente'}">${l[o]||o}</span>`;
+}
+
+autoLogin();
+</script>
+</body>
+</html>
