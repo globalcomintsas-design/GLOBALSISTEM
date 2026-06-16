@@ -334,11 +334,13 @@ window.addEventListener('DOMContentLoaded', ()=>{
 });
 
 // SESION CENTRALIZADA
-const _gcSesion = localStorage.getItem('gc_user');
-if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); }
-const _gcUser = JSON.parse(_gcSesion);
 window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
-mostrarSistema(_gcUser);
+document.addEventListener('DOMContentLoaded', function(){
+  const _gcSesion = localStorage.getItem('gc_user');
+  if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); return; }
+  const _gcUser = JSON.parse(_gcSesion);
+  mostrarSistema(_gcUser);
+});
 
 window.showTab=function(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
