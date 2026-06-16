@@ -336,9 +336,9 @@ window.addEventListener('DOMContentLoaded', ()=>{
 
 // SESION CENTRALIZADA
 const _gcSesion = sessionStorage.getItem('gc_user');
-if(!_gcSesion){ location.href='index.html'; }
+if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); }
 const _gcUser = JSON.parse(_gcSesion);
-window.cerrarSesion = function(){ sessionStorage.removeItem('gc_user'); location.href='index.html'; };
+window.cerrarSesion = function(){ sessionStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
 mostrarSistema(_gcUser);
 
 window.showTab=function(name,el){

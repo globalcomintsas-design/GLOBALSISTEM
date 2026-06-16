@@ -611,14 +611,14 @@ function todayISO() { return now().toISOString().split('T')[0]; }
 // SESION CENTRALIZADA
 function autoLogin() {
   const _gcSesion = sessionStorage.getItem('gc_user');
-  if(!_gcSesion){ location.href='index.html'; return; }
+  if(!_gcSesion){ location.href=location.origin+location.pathname.replace('VLP.html','index.html'); return; }
   currentUser = JSON.parse(_gcSesion);
   document.getElementById('login').style.display='none';
   document.getElementById('sistema').style.display='block';
   document.getElementById('userBadge').textContent=(currentUser.rol==='admin'?'👑 ':'👤 ')+currentUser.nombre;
   initListeners();
 }
-window.cerrarSesion=function(){ sessionStorage.removeItem('gc_user'); location.href='index.html'; };
+window.cerrarSesion=function(){ sessionStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('VLP.html','index.html'); };
 
 // ---- TABS ----
 window.showTab=function(name,el) {
