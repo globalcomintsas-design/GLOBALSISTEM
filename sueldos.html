@@ -221,7 +221,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc }
+import { getFirestore, collection, onSnapshot, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -382,7 +382,7 @@ window.cargarPeriodo = async function(){
   document.getElementById('badgeGuardado').style.display='none';
   movData={}; fsData={};
   try {
-    const movSnap = await new Promise(res=>{ const u=onSnapshot(collection(db,'movilidad'),snap=>{u();res(snap);}); });
+    const movSnap = await getDocs(collection(db,'movilidad'));
     movSnap.forEach(d=>{
       const data=d.data();
       const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
@@ -393,7 +393,7 @@ window.cargarPeriodo = async function(){
     });
   } catch(e){ console.warn('movilidad:',e); }
   try {
-    const fsSnap = await new Promise(res=>{ const u=onSnapshot(collection(db,'finesdesemana'),snap=>{u();res(snap);}); });
+    const fsSnap = await getDocs(collection(db,'finesdesemana'));
     fsSnap.forEach(d=>{
       const data=d.data();
       const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
