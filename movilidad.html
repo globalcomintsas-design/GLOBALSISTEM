@@ -315,7 +315,7 @@ function mostrarSistema(user){
   currentUser = user;
   document.getElementById('login').style.display='none';
   document.getElementById('sistema').style.display='block';
-  const rolLabel = user.rol==='admin'?'👑':'user.rol==='cargador'?'✏️':'👁';
+  const rolLabel = user.rol==='admin'?'👑':user.rol==='cargador'?'✏️':'👁';
   document.getElementById('userBadge').textContent=`${user.rol==='admin'?'👑':user.rol==='cargador'?'✏️':'👁'} ${user.nombre} · ${user.rol}`;
   // Mostrar secciones según rol
   const puedeCargar = user.rol==='admin'||user.rol==='cargador';
