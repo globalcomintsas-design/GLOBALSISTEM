@@ -51,17 +51,21 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .btn-danger{background:#dc2626;color:#fff;}
 .btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
 .btn-outline:hover{background:#1e3a8a;color:#fff;}
-.destinos-card{background:#fff;border-radius:12px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;}
-.destinos-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;background:#f8fafc;transition:background .15s;}
-.destinos-card-header:hover{background:#eff6ff;}
-.destinos-card-header-left{display:flex;align-items:center;gap:10px;}
-.destinos-card-icon{width:32px;height:32px;border-radius:8px;background:#1e3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
-.destinos-card-title{font-size:14px;font-weight:700;color:#1e3a8a;}
-.destinos-card-sub{font-size:11px;color:#64748b;margin-top:1px;}
-.destinos-card-toggle{font-size:14px;color:#1e3a8a;transition:transform .2s;}
-.destinos-card.open .destinos-card-toggle{transform:rotate(180deg);}
-.destinos-card-body{display:none;padding:14px 16px;border-top:1px solid #e2e8f0;}
-.destinos-card.open .destinos-card-body{display:block;}
+.destinos-card,.registros-card{background:#fff;border-radius:12px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;}
+.destinos-card-header,.registros-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;background:#f8fafc;transition:background .15s;}
+.destinos-card-header:hover,.registros-card-header:hover{background:#eff6ff;}
+.destinos-card-header-left,.registros-card-header-left{display:flex;align-items:center;gap:10px;}
+.destinos-card-icon,.registros-card-icon{width:32px;height:32px;border-radius:8px;background:#1e3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.destinos-card-title,.registros-card-title{font-size:14px;font-weight:700;color:#1e3a8a;}
+.destinos-card-sub,.registros-card-sub{font-size:11px;color:#64748b;margin-top:1px;}
+.destinos-card-toggle,.registros-card-toggle{font-size:14px;color:#1e3a8a;transition:transform .2s;}
+.destinos-card.open .destinos-card-toggle,.registros-card.open .registros-card-toggle{transform:rotate(180deg);}
+.destinos-card-body,.registros-card-body{display:none;padding:14px 16px;border-top:1px solid #e2e8f0;}
+.destinos-card.open .destinos-card-body,.registros-card.open .registros-card-body{display:block;}
+.seg-toggle{display:inline-flex;background:#e2e8f0;border-radius:8px;padding:2px;gap:2px;}
+.seg-toggle button{border:none;background:transparent;padding:6px 12px;font-size:12px;font-weight:600;color:#475569;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.seg-toggle button.active{background:#1e3a8a;color:#fff;}
+.seg-toggle button:hover:not(.active){background:#cbd5e1;}
 .btn-sm{padding:6px 12px;font-size:11px;}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
 .filtros{background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;}
@@ -90,12 +94,34 @@ tr:hover td{background:#fafbff;}
 </head>
 <body>
 
-<!-- Script preventivo: define toggleDestinosCard ANTES de que cargue el módulo,
-     para que el onclick del header funcione sí o sí, incluso si Firebase tarda o falla. -->
+<!-- Script preventivo: define funciones de UI ANTES de que cargue el módulo,
+     para que los onclick del header funcionen sí o sí, incluso si Firebase tarda o falla. -->
 <script>
-  window.toggleDestinosCard = function(){
-    var card = document.getElementById('seccionDestinos');
+  // Toggle genérico para cualquier card colapsable
+  window.toggleCard = function(id, ev){
+    if(ev){ ev.stopPropagation(); }
+    var card = document.getElementById(id);
     if(card) card.classList.toggle('open');
+  };
+  // Toggle específico de destinos (mantenido por compatibilidad)
+  window.toggleDestinosCard = function(ev){
+    if(ev){ ev.stopPropagation(); }
+    window.toggleCard('seccionDestinos');
+  };
+  // Estado de la vista de registros: 'mes' (solo mes actual) o 'historico' (todos)
+  window.vistaMov = 'mes';
+  window.setVistaMov = function(v, ev){
+    if(ev){ ev.stopPropagation(); }
+    window.vistaMov = v;
+    var buttons = document.querySelectorAll('#toggleVistaMov button');
+    buttons.forEach(function(b){ b.classList.remove('active'); });
+    if(ev && ev.target){ ev.target.classList.add('active'); }
+    else {
+      // fallback: marcar el botón correcto
+      var idx = (v==='historico') ? 1 : 0;
+      if(buttons[idx]) buttons[idx].classList.add('active');
+    }
+    if(typeof window.renderMovilidad === 'function') window.renderMovilidad();
   };
 </script>
 
@@ -135,7 +161,7 @@ tr:hover td{background:#fafbff;}
 
       <!-- Destinos - solo admin (card colapsable) -->
       <div class="destinos-card" id="seccionDestinos" style="display:none">
-        <div class="destinos-card-header" onclick="toggleDestinosCard()">
+        <div class="destinos-card-header" onclick="toggleCard('seccionDestinos')">
           <div class="destinos-card-header-left">
             <div class="destinos-card-icon">📍</div>
             <div>
@@ -184,32 +210,49 @@ tr:hover td{background:#fafbff;}
         <button class="btn btn-primary" onclick="guardarMovilidad()">💾 Guardar</button>
       </div>
 
-      <!-- Tabla registros -->
-      <div class="section">
-        <div class="section-title">
-          Registros de Movilidad
-          <button class="btn btn-success btn-sm" onclick="exportarMovExcel()">📊 Excel</button>
-        </div>
-        <div class="filtros">
-          <div><label>Empleado</label>
-            <select id="filtroMovEmpleado" onchange="renderMovilidad()">
-              <option value="">Todos</option>
-              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
-              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
-            </select>
+      <!-- Tabla registros (card colapsable) -->
+      <div class="registros-card" id="cardRegistrosMov">
+        <div class="registros-card-header" onclick="toggleCard('cardRegistrosMov')">
+          <div class="registros-card-header-left">
+            <div class="registros-card-icon">📋</div>
+            <div>
+              <div class="registros-card-title">Registros de Movilidad</div>
+              <div class="registros-card-sub" id="registrosMovSub">Tocá para ver</div>
+            </div>
           </div>
-          <div><label>Destino</label><select id="filtroMovDestino" onchange="renderMovilidad()"><option value="">Todos</option></select></div>
-          <div><label>Desde</label><input type="date" id="filtroMovDesde" onchange="renderMovilidad()" /></div>
-          <div><label>Hasta</label><input type="date" id="filtroMovHasta" onchange="renderMovilidad()" /></div>
-          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosMov()" style="width:100%">✕ Limpiar</button></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="btn btn-success btn-sm" onclick="exportarMovExcel(event)">📊 Excel</button>
+            <div class="registros-card-toggle">▾</div>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Empleado</th><th>Fecha</th><th>Destino</th><th>Km</th><th>Precio/Km</th><th>Total</th><th>Obs.</th><th>Acciones</th></tr></thead>
-            <tbody id="tablaMov"></tbody>
-          </table>
+        <div class="registros-card-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div class="seg-toggle" id="toggleVistaMov">
+              <button class="active" onclick="setVistaMov('mes',event)">📅 Mes actual</button>
+              <button onclick="setVistaMov('historico',event)">📚 Histórico</button>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="limpiarFiltrosMov()">✕ Limpiar filtros</button>
+          </div>
+          <div class="filtros">
+            <div><label>Empleado</label>
+              <select id="filtroMovEmpleado" onchange="renderMovilidad()">
+                <option value="">Todos</option>
+                <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+                <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+              </select>
+            </div>
+            <div><label>Destino</label><select id="filtroMovDestino" onchange="renderMovilidad()"><option value="">Todos</option></select></div>
+            <div><label>Desde</label><input type="date" id="filtroMovDesde" onchange="renderMovilidad()" /></div>
+            <div><label>Hasta</label><input type="date" id="filtroMovHasta" onchange="renderMovilidad()" /></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Empleado</th><th>Fecha</th><th>Destino</th><th>Km</th><th>Precio/Km</th><th>Total</th><th>Obs.</th><th>Acciones</th></tr></thead>
+              <tbody id="tablaMov"></tbody>
+            </table>
+          </div>
+          <div id="resumenMov" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
         </div>
-        <div id="resumenMov" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
       </div>
 
       <div class="section">
@@ -501,13 +544,23 @@ window.renderMovilidad=function(){
   const fD=document.getElementById('filtroMovDesde')?.value||'';
   const fH=document.getElementById('filtroMovHasta')?.value||'';
   const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
-  let fil=allMovilidad.filter(r=>{
+  // Vista actual: 'mes' (solo mes actual) o 'historico' (todos)
+  const vista = window.vistaMov || 'mes';
+  // Base: si vista es 'mes', solo registros del mes actual; si es 'historico', todos
+  let base = (vista==='historico') ? allMovilidad : allMovilidad.filter(r=>{
+    if(!r.fecha) return false;
+    const d=new Date(r.fecha+'T00:00:00');
+    return d.getMonth()===mes && d.getFullYear()===anio;
+  });
+  // Aplica filtros del usuario encima de la base
+  let fil=base.filter(r=>{
     if(fEmp&&r.empleado!==fEmp) return false;
     if(fDest&&r.destino!==fDest) return false;
     if(fD&&r.fecha<fD) return false;
     if(fH&&r.fecha>fH) return false;
     return true;
   });
+  // Stats del mes actual (siempre del mes, sin importar la vista)
   const delMes=allMovilidad.filter(r=>{
     if(!r.fecha) return false;
     const d=new Date(r.fecha+'T00:00:00');
@@ -531,6 +584,16 @@ window.renderMovilidad=function(){
   const totKm=fil.reduce((s,r)=>s+Number(r.km||0),0);
   const totMonto=fil.reduce((s,r)=>s+Number(r.total||0),0);
   document.getElementById('resumenMov').innerHTML=`<span>📄 ${fil.length} viajes</span><span style="color:#d97706">Km: ${totKm}</span><span style="color:#16a34a">Total: ${fmtMoney(totMonto)}</span>`;
+  // Subtítulo dinámico de la card (visible sin abrir)
+  const sub=document.getElementById('registrosMovSub');
+  if(sub){
+    const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes];
+    if(vista==='historico'){
+      sub.textContent = `${allMovilidad.length} registros históricos · tocá para ver`;
+    } else {
+      sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
+    }
+  }
   const mapa={};
   allMovilidad.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={viajes:0,km:0,total:0};mapa[r.empleado].viajes++;mapa[r.empleado].km+=Number(r.km||0);mapa[r.empleado].total+=Number(r.total||0);});
   document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos</td></tr>';
@@ -538,7 +601,8 @@ window.renderMovilidad=function(){
 
 window.eliminarMov=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
 window.limpiarFiltrosMov=function(){['filtroMovEmpleado','filtroMovDestino','filtroMovDesde','filtroMovHasta'].forEach(id=>document.getElementById(id).value='');renderMovilidad();};
-window.exportarMovExcel=function(){
+window.exportarMovExcel=function(ev){
+  if(ev){ ev.stopPropagation(); }
   const wb=XLSX.utils.book_new();
   const data=[['Empleado','Fecha','Destino','Km','Precio/Km','Total','Observaciones','Cargado por']];
   allMovilidad.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',r.destino||'',Number(r.km||0),Number(r.precioKm||0),Number(r.total||0),r.obs||'',r.creadoPor||'']));
