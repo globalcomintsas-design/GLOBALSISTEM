@@ -9,22 +9,11 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px;}
-
-.login-wrap{height:100vh;display:flex;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);}
-.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
-.login-logo{font-size:26px;font-weight:700;color:#1e3a8a;margin-bottom:6px;}
-.login-sub{color:#888;font-size:13px;margin-bottom:24px;}
-.login-box input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none;}
-.login-box input:focus{border-color:#1e3a8a;}
-.login-btn{width:100%;padding:13px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
-.login-error{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
-
 #sistema{display:none;}
 .spinner-overlay{position:fixed;inset:0;background:rgba(240,244,248,0.85);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
 .spinner{width:44px;height:44px;border:4px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:spin .7s linear infinite;}
 .spinner-text{font-size:13px;color:#1e3a8a;font-weight:600;}
 @keyframes spin{to{transform:rotate(360deg);}}
-
 header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
 .header-left h1{font-size:20px;font-weight:700;}
 .header-left p{font-size:11px;color:#93c5fd;margin-top:2px;}
@@ -32,9 +21,7 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .user-badge{background:rgba(255,255,255,0.15);padding:7px 12px;border-radius:20px;font-size:12px;}
 .logout-btn{background:#dc2626;border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;}
 .home-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;text-decoration:none;}
-
 .container{padding:16px;max-width:1300px;margin:0 auto;}
-
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin-bottom:16px;}
 .card{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .card-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
@@ -43,51 +30,38 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .card-value.red{color:#dc2626;}
 .card-value.orange{color:#d97706;}
 .card-value.purple{color:#7c3aed;}
-
 .section{background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
 .section-title{font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
-
 .periodo-row{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
 .periodo-row label{font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:.05em;}
 .periodo-row input[type=month]{padding:9px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:#fff;}
-.periodo-row input[type=month]:focus{border-color:#1e3a8a;}
 .badge-periodo{background:#eff6ff;color:#1e3a8a;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;}
 .badge-guardado{background:#dcfce7;color:#166534;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
-
-/* dividendo info box */
 .div-info{background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#5b21b6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .div-info strong{color:#4c1d95;}
-
 .btn{padding:9px 16px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
 .btn:active{transform:scale(.97);}
 .btn-primary{background:#1e3a8a;color:#fff;}
-.btn-primary:hover{background:#1e40af;}
 .btn-success{background:#16a34a;color:#fff;}
-.btn-success:hover{background:#15803d;}
 .btn-danger{background:#dc2626;color:#fff;}
-.btn-danger:hover{background:#b91c1c;}
 .btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
 .btn-outline:hover{background:#1e3a8a;color:#fff;}
 .btn-sm{padding:6px 12px;font-size:11px;}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
-
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;}
 th{background:#eff6ff;color:#1e3a8a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:10px;text-align:left;white-space:nowrap;}
 td{padding:9px 10px;border-bottom:1px solid #f0f4f8;font-size:13px;vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr:hover td{background:#fafbff;}
-
 td input[type=number]{width:115px;padding:7px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right;outline:none;background:#fafafa;}
 td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
-
 .emp-cell{display:flex;align-items:center;gap:9px;}
 .avatar{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;}
 .av-blue{background:#dbeafe;color:#1e3a8a;}
 .av-purple{background:#ede9fe;color:#6d28d9;}
 .emp-name{font-weight:600;font-size:13px;}
 .emp-tipo{font-size:10px;color:#888;}
-
 .auto-val{color:#6b7280;font-size:13px;text-align:right;}
 .adel-val{color:#dc2626;font-size:13px;text-align:right;font-weight:600;}
 .adel-val.cero{color:#d1d5db;font-weight:400;}
@@ -96,18 +70,14 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .neto-val{font-size:14px;font-weight:700;color:#16a34a;text-align:right;}
 .neto-neg{color:#dc2626!important;}
 .dash-cell{color:#d1d5db;text-align:center;font-size:18px;}
-
-/* CARD ADELANTOS */
 .adelantos-card{background:#fff;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);margin-bottom:16px;overflow:hidden;}
 .adelantos-header{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #f0f4f8;cursor:pointer;user-select:none;}
-.adelantos-header-left{display:flex;align-items:center;gap:10px;}
 .adelantos-header h3{font-size:15px;font-weight:700;color:#1e3a8a;}
 .adelantos-header p{font-size:11px;color:#888;margin-top:1px;}
 .adelantos-toggle{font-size:18px;color:#94a3b8;transition:transform .2s;}
 .adelantos-toggle.open{transform:rotate(180deg);}
 .adelantos-body{display:none;padding:16px;}
 .adelantos-body.open{display:block;}
-
 .adel-lista{display:grid;gap:8px;margin-bottom:14px;}
 .adel-item{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
 .adel-item.saldado{opacity:.55;}
@@ -128,7 +98,6 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .badge-adelanto{background:#fef9c3;color:#854d0e;}
 .badge-prestamo{background:#ede9fe;color:#6d28d9;}
 .adel-empty{text-align:center;color:#94a3b8;padding:20px;font-size:13px;}
-
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center;padding:20px;}
 .modal-bg.open{display:flex;}
 .modal{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:480px;max-height:90vh;overflow-y:auto;}
@@ -140,23 +109,14 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .field input:focus,.field select:focus{border-color:#1e3a8a;background:#fff;}
 .field.full{grid-column:1/-1;}
 #cuotasRow{display:none;}
-
 .notif{position:fixed;bottom:20px;right:20px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s;}
 .notif.show{transform:translateY(0);opacity:1;}
 .notif.error{background:#dc2626;}
 .notif.success{background:#16a34a;}
-
-@media(max-width:700px){
-  .cards{grid-template-columns:1fr 1fr;}
-  td input[type=number]{width:85px;}
-  .form-grid{grid-template-columns:1fr;}
-}
+@media(max-width:700px){.cards{grid-template-columns:1fr 1fr;}td input[type=number]{width:85px;}.form-grid{grid-template-columns:1fr;}}
 </style>
 </head>
 <body>
-
-<!-- Login centralizado en index.html -->
-</div>
 
 <div id="spinnerOverlay" class="spinner-overlay">
   <div class="spinner"></div>
@@ -165,27 +125,20 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 
 <div id="sistema">
   <header>
-    <div class="header-left">
-      <h1>GLOBALCOMINT</h1>
-      <p>Liquidador de Sueldos</p>
-    </div>
+    <div class="header-left"><h1>GLOBALCOMINT</h1><p>Liquidador de Sueldos</p></div>
     <div class="header-right">
       <a href="index.html" class="home-btn">🏠 Inicio</a>
       <div class="user-badge" id="userBadge"></div>
       <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
     </div>
   </header>
-
   <div class="container">
-
     <div class="periodo-row">
       <label>Período</label>
       <input type="month" id="periodo" onchange="cargarPeriodo()">
       <span class="badge-periodo" id="badgePeriodo"></span>
       <span class="badge-guardado" id="badgeGuardado">✓ Guardado</span>
     </div>
-
-    <!-- RESUMEN -->
     <div class="cards">
       <div class="card"><div class="card-label">Total Bruto</div><div class="card-value" id="totBruto">$ 0</div></div>
       <div class="card"><div class="card-label">Autónomos</div><div class="card-value orange" id="totAuto">$ 0</div></div>
@@ -195,16 +148,9 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
       <div class="card"><div class="card-label">Dividendos (6 socios)</div><div class="card-value purple" id="totDiv">$ 0</div></div>
       <div class="card"><div class="card-label">Total Neto a Pagar</div><div class="card-value green" id="totNeto">$ 0</div></div>
     </div>
-
-    <!-- CARD ADELANTOS -->
     <div class="adelantos-card">
       <div class="adelantos-header" onclick="toggleAdelantos()">
-        <div class="adelantos-header-left">
-          <div>
-            <h3>💳 Adelantos y Préstamos</h3>
-            <p id="adelantosResumen">Cargando...</p>
-          </div>
-        </div>
+        <div><h3>💳 Adelantos y Préstamos</h3><p id="adelantosResumen">Cargando...</p></div>
         <div style="display:flex;align-items:center;gap:10px;">
           <button class="btn btn-primary btn-sm" onclick="event.stopPropagation();abrirModalAdel()" id="btnNuevoAdel">+ Nuevo</button>
           <span class="adelantos-toggle" id="adelToggle">▾</span>
@@ -214,8 +160,6 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
         <div class="adel-lista" id="adelLista"></div>
       </div>
     </div>
-
-    <!-- TABLA LIQUIDACIÓN -->
     <div class="section">
       <div class="section-title">
         Liquidación mensual
@@ -224,19 +168,13 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
           <button class="btn btn-outline" onclick="exportarExcel()">📊 Excel</button>
         </div>
       </div>
-
-      <!-- INFO DIVIDENDO -->
-      <div class="div-info" id="divInfo" style="display:none;">
-        💰 <span id="divInfoTxt"></span>
-      </div>
-
+      <div class="div-info" id="divInfo" style="display:none;">💰 <span id="divInfoTxt"></span></div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th style="min-width:170px;">Empleado</th>
-              <th>Bruto</th>
-              <th>Autónomo</th>
+              <th>Bruto</th><th>Autónomo</th>
               <th>Movilidad <span style="font-weight:400;text-transform:none;font-size:10px;">(auto)</span></th>
               <th>Fin de sem. <span style="font-weight:400;text-transform:none;font-size:10px;">(auto)</span></th>
               <th>Descuentos <span style="font-weight:400;text-transform:none;font-size:10px;">(auto)</span></th>
@@ -248,50 +186,29 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
         </table>
       </div>
     </div>
-
   </div>
 </div>
 
-<!-- MODAL ADELANTO -->
 <div class="modal-bg" id="modalAdel">
   <div class="modal">
-    <div class="modal-title">
-      Registrar adelanto / préstamo
-      <button class="modal-close" onclick="cerrarModalAdel()">✕</button>
-    </div>
+    <div class="modal-title">Registrar adelanto / préstamo <button class="modal-close" onclick="cerrarModalAdel()">✕</button></div>
     <div class="form-grid">
-      <div class="field full">
-        <label>Empleado</label>
-        <select id="adelEmpleado"></select>
-      </div>
-      <div class="field full">
-        <label>Tipo</label>
+      <div class="field full"><label>Empleado</label><select id="adelEmpleado"></select></div>
+      <div class="field full"><label>Tipo</label>
         <select id="adelTipo" onchange="toggleCuotas()">
           <option value="adelanto">Adelanto (descuento total en este mes)</option>
           <option value="prestamo">Préstamo (en cuotas)</option>
         </select>
       </div>
-      <div class="field">
-        <label>Monto total ($)</label>
-        <input type="number" id="adelMonto" placeholder="0" min="0" oninput="calcCuota()">
-      </div>
-      <div class="field" id="cuotasRow">
-        <label>Cantidad de cuotas</label>
-        <input type="number" id="adelCuotas" placeholder="1" min="1" max="24" oninput="calcCuota()">
-      </div>
+      <div class="field"><label>Monto total ($)</label><input type="number" id="adelMonto" placeholder="0" min="0" oninput="calcCuota()"></div>
+      <div class="field" id="cuotasRow"><label>Cantidad de cuotas</label><input type="number" id="adelCuotas" placeholder="1" min="1" max="24" oninput="calcCuota()"></div>
       <div class="field full" id="cuotaPreview" style="display:none;">
         <div style="background:#eff6ff;border-radius:8px;padding:10px 12px;font-size:12px;color:#1e3a8a;">
           💡 Cuota mensual: <strong id="cuotaValor">$ 0</strong> por <span id="cuotaMeses"></span>
         </div>
       </div>
-      <div class="field">
-        <label>Mes de inicio</label>
-        <input type="month" id="adelInicio">
-      </div>
-      <div class="field">
-        <label>Observación (opcional)</label>
-        <input type="text" id="adelObs" placeholder="Ej: anticipo diciembre">
-      </div>
+      <div class="field"><label>Mes de inicio</label><input type="month" id="adelInicio"></div>
+      <div class="field"><label>Observación (opcional)</label><input type="text" id="adelObs" placeholder="Ej: anticipo diciembre"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="guardarAdel()">💾 Guardar</button>
@@ -318,13 +235,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
-const USERS_DEFAULT = {
-  'Bcola':   { password:'River83$', nombre:'Bruno', rol:'admin' },
-  'Mcatala': { password:'Global01', nombre:'María',  rol:'viewer' }
-};
-let allUsuarios = {};
-function getUsers(){ return { ...USERS_DEFAULT, ...allUsuarios }; }
-
 const EMPLEADOS = [
   { nombre:'Bruno Cola',        iniciales:'BC', esSocio:true  },
   { nombre:'Pablo Mazzolin',    iniciales:'PM', esSocio:true  },
@@ -339,253 +249,184 @@ const EMPLEADOS = [
   { nombre:'Fran',              iniciales:'FR', esSocio:false },
 ];
 
-// Mapeo entre nombres de movilidad (mayúsculas) y nombres completos
+// Mapeo nombres movilidad → nombres completos
 const MOV_NOMBRES = {
-  'BRUNO':    'Bruno Cola',
-  'PABLO':    'Pablo Mazzolin',
-  'DANIEL':   'Daniel Nievas',
-  'ADRIAN':   'Adrián Juri',
-  'DIEGO':    'Diego Gómez',
-  'SEBASTIAN':'Sebastián Olivero',
-  'MARIA':    'María Catalá',
+  'BRUNO':'Bruno Cola','PABLO':'Pablo Mazzolin','DANIEL':'Daniel Nievas',
+  'ADRIAN':'Adrián Juri','DIEGO':'Diego Gómez','SEBASTIAN':'Sebastián Olivero',
+  'MARIA':'María Catalá','MATIAS':'Matías','RAMIRO':'Ramiro','HECTOR':'Héctor','FRAN':'Fran'
 };
 function normalizarNombre(n){
   if(!n) return '';
-  const up = n.toUpperCase().trim();
-  return MOV_NOMBRES[up] || n;
+  return MOV_NOMBRES[n.toUpperCase().trim()] || n;
 }
 
-let currentUser  = null;
-let movData      = {};   // movilidad por empleado
-let fsData       = {};   // fines de semana por empleado
-let allAdelanto  = [];   // docs colección 'adelantos'
-let allMovGlobal = [];   // docs colección 'movimientos' (para dividendos)
-let dividendoPorSocio = 0;
-let periodoDividendo  = '';
+let currentUser = null;
+let movData = {}, fsData = {};
+let allAdelanto = [], allMovGlobal = [];
+let dividendoPorSocio = 0, periodoDividendo = '';
 let saving = false;
 
-// ── UTILS ───────────────────────────────────────────────────
-function fmt(v){ return '$ ' + Math.round(v||0).toLocaleString('es-AR'); }
+function fmt(v){ return '$ '+Math.round(v||0).toLocaleString('es-AR'); }
 function periodoLabel(val){
   if(!val) return '';
-  const [y,m] = val.split('-');
-  const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  return meses[parseInt(m)-1] + ' ' + y;
+  const [y,m]=val.split('-');
+  return ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][parseInt(m)-1]+' '+y;
 }
-function toast(msg, tipo=''){
-  const el = document.getElementById('notif');
-  el.textContent = msg; el.className = 'notif ' + tipo;
+function toast(msg,tipo=''){
+  const el=document.getElementById('notif');
+  el.textContent=msg; el.className='notif '+tipo;
   setTimeout(()=>el.classList.add('show'),10);
   setTimeout(()=>el.classList.remove('show'),3200);
 }
 function ocultarSpinner(){ document.getElementById('spinnerOverlay').style.display='none'; }
 function periodoActual(){ return document.getElementById('periodo').value; }
-
-// Resta 2 meses a un periodo YYYY-MM
-function restarMeses(periodo, n){
-  let [y,m] = periodo.split('-').map(Number);
-  m -= n;
-  while(m <= 0){ m += 12; y--; }
-  return y + '-' + String(m).padStart(2,'0');
+function restarMeses(periodo,n){
+  let [y,m]=periodo.split('-').map(Number); m-=n;
+  while(m<=0){m+=12;y--;} return y+'-'+String(m).padStart(2,'0');
 }
-
-// Dada una fecha "dd/mm/yyyy" devuelve "yyyy-mm"
 function fechaAPeriodo(fecha){
   if(!fecha) return '';
-  const p = fecha.split('/');
-  if(p.length < 3) return '';
-  return p[2] + '-' + p[1].padStart(2,'0');
+  // Soporta dd/mm/yyyy y yyyy-mm-dd
+  if(fecha.includes('/')){const p=fecha.split('/');return p[2]+'-'+p[1].padStart(2,'0');}
+  return fecha.substring(0,7);
 }
-
-// Calcula neto pesos del mes a partir de allMovGlobal
 function calcularNetoPesos(periodo){
-  let ing = 0, egr = 0;
+  let ing=0,egr=0;
   for(const m of allMovGlobal){
-    if(m.cuenta === 'Dólares') continue;
-    if(m.cuenta === 'Cheque' && m.estadoCheque === 'Rechazado') continue;
-    if(fechaAPeriodo(m.fecha) !== periodo) continue;
-    const v = Number(m.importe)||0;
-    m.tipo === 'Ingreso' ? ing += v : egr += v;
+    if(m.cuenta==='Dólares') continue;
+    if(m.cuenta==='Cheque'&&m.estadoCheque==='Rechazado') continue;
+    if(fechaAPeriodo(m.fecha)!==periodo) continue;
+    const v=Number(m.importe)||0;
+    m.tipo==='Ingreso'?ing+=v:egr+=v;
   }
-  return ing - egr;
+  return ing-egr;
 }
-
-// Adelantos
-function cuotaParaPeriodo(adel, periodo){
-  if(adel.estado === 'saldado') return 0;
-  if(adel.tipo === 'adelanto') return adel.inicio === periodo ? adel.monto : 0;
-  const [yi,mi] = adel.inicio.split('-').map(Number);
-  const [yp,mp] = periodo.split('-').map(Number);
-  const diff = (yp-yi)*12 + (mp-mi);
-  return (diff >= 0 && diff < adel.cuotas) ? Math.round(adel.monto/adel.cuotas) : 0;
+function cuotaParaPeriodo(adel,periodo){
+  if(adel.estado==='saldado') return 0;
+  if(adel.tipo==='adelanto') return adel.inicio===periodo?adel.monto:0;
+  const [yi,mi]=adel.inicio.split('-').map(Number);
+  const [yp,mp]=periodo.split('-').map(Number);
+  const diff=(yp-yi)*12+(mp-mi);
+  return (diff>=0&&diff<adel.cuotas)?Math.round(adel.monto/adel.cuotas):0;
 }
-function cuotasPagadas(adel, periodo){
-  if(adel.tipo === 'adelanto') return adel.inicio < periodo ? 1 : 0;
-  const [yi,mi] = adel.inicio.split('-').map(Number);
-  const [yp,mp] = periodo.split('-').map(Number);
-  return Math.max(0, Math.min((yp-yi)*12+(mp-mi), adel.cuotas));
+function cuotasPagadas(adel,periodo){
+  if(adel.tipo==='adelanto') return adel.inicio<periodo?1:0;
+  const [yi,mi]=adel.inicio.split('-').map(Number);
+  const [yp,mp]=periodo.split('-').map(Number);
+  return Math.max(0,Math.min((yp-yi)*12+(mp-mi),adel.cuotas));
 }
-function descuentoEmpleadoPeriodo(nombre, periodo){
+function descuentoEmpleadoPeriodo(nombre,periodo){
   return allAdelanto.filter(a=>a.empleado===nombre).reduce((s,a)=>s+cuotaParaPeriodo(a,periodo),0);
 }
 
-// ── LOGIN ───────────────────────────────────────────────────
-// SESION CENTRALIZADA
+// ── SESION ──────────────────────────────────────────────────
 const _gcSesion = localStorage.getItem('gc_user');
 if(!_gcSesion){ location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); }
-currentUser = JSON.parse(_gcSesion);
-window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); };
-document.getElementById('sistema').style.display = 'block';
-document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
-if(currentUser.rol !== 'admin') document.getElementById('btnNuevoAdel').style.display = 'none';
-initApp();
-
-// ── INIT ────────────────────────────────────────────────────
-function initApp(){
-  onSnapshot(collection(db,'usuarios'), snap => {
-    allUsuarios = {};
-    snap.docs.forEach(d=>{ allUsuarios[d.id] = d.data(); });
-  });
-
-  onSnapshot(collection(db,'adelantos'), snap => {
-    allAdelanto = snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderAdelantos();
-    recalc();
-    autoMarcarSaldados();
-  });
-
-  // Escuchar movimientos globales para dividendos
-  onSnapshot(collection(db,'movimientos'), snap => {
-    allMovGlobal = snap.docs.map(d=>({id:d.id,...d.data()}));
-    calcDividendo();
-    recalc();
-  });
-
-  const hoy = new Date();
-  const mes = String(hoy.getMonth()+1).padStart(2,'0');
-  document.getElementById('periodo').value = `${hoy.getFullYear()}-${mes}`;
-  document.getElementById('badgePeriodo').textContent = periodoLabel(document.getElementById('periodo').value);
-
-  const sel = document.getElementById('adelEmpleado');
-  EMPLEADOS.forEach(e=>{
-    const o = document.createElement('option');
-    o.value = e.nombre; o.textContent = e.nombre;
-    sel.appendChild(o);
-  });
-  document.getElementById('adelInicio').value = document.getElementById('periodo').value;
-
-  cargarPeriodo();
+else {
+  currentUser = JSON.parse(_gcSesion);
+  window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); };
+  document.getElementById('sistema').style.display='block';
+  document.getElementById('userBadge').textContent=(currentUser.rol==='admin'?'👑 ':'👤 ')+currentUser.nombre+' · '+currentUser.rol;
+  if(currentUser.rol!=='admin') document.getElementById('btnNuevoAdel').style.display='none';
+  initApp();
 }
 
-// ── DIVIDENDO ───────────────────────────────────────────────
-window.calcDividendo = function(){
-  const periodo = periodoActual();
-  periodoDividendo = restarMeses(periodo, 2);
-  const neto = calcularNetoPesos(periodoDividendo);
-  // neto / 8 partes → 6 socios cobran 1 parte cada uno
-  dividendoPorSocio = neto > 0 ? Math.round(neto / 8) : 0;
+function initApp(){
+  onSnapshot(collection(db,'adelantos'), snap=>{
+    allAdelanto=snap.docs.map(d=>({id:d.id,...d.data()}));
+    window.renderAdelantos(); window.recalc(); autoMarcarSaldados();
+  });
+  onSnapshot(collection(db,'movimientos'), snap=>{
+    allMovGlobal=snap.docs.map(d=>({id:d.id,...d.data()}));
+    calcDiv(); window.recalc();
+  });
+  const hoy=new Date();
+  const mes=String(hoy.getMonth()+1).padStart(2,'0');
+  document.getElementById('periodo').value=`${hoy.getFullYear()}-${mes}`;
+  document.getElementById('badgePeriodo').textContent=periodoLabel(document.getElementById('periodo').value);
+  const sel=document.getElementById('adelEmpleado');
+  EMPLEADOS.forEach(e=>{ const o=document.createElement('option'); o.value=e.nombre; o.textContent=e.nombre; sel.appendChild(o); });
+  document.getElementById('adelInicio').value=document.getElementById('periodo').value;
+  window.cargarPeriodo();
+}
 
-  const infoEl  = document.getElementById('divInfo');
-  const infoTxt = document.getElementById('divInfoTxt');
-  if(dividendoPorSocio > 0){
-    infoEl.style.display = 'flex';
-    infoTxt.innerHTML = `Neto de <strong>${periodoLabel(periodoDividendo)}</strong>: <strong>${fmt(neto)}</strong> &nbsp;·&nbsp; Dividendo por socio (÷8): <strong>${fmt(dividendoPorSocio)}</strong> &nbsp;·&nbsp; Reserva GLOBALCOMINT: <strong>${fmt(dividendoPorSocio*2)}</strong>`;
+function calcDiv(){
+  const periodo=periodoActual();
+  periodoDividendo=restarMeses(periodo,2);
+  const neto=calcularNetoPesos(periodoDividendo);
+  dividendoPorSocio=neto>0?Math.round(neto/8):0;
+  const infoEl=document.getElementById('divInfo');
+  const infoTxt=document.getElementById('divInfoTxt');
+  infoEl.style.display='flex';
+  if(dividendoPorSocio>0){
+    infoTxt.innerHTML=`Neto de <strong>${periodoLabel(periodoDividendo)}</strong>: <strong>${fmt(neto)}</strong> &nbsp;·&nbsp; Dividendo por socio (÷8): <strong>${fmt(dividendoPorSocio)}</strong> &nbsp;·&nbsp; Reserva GLOBALCOMINT: <strong>${fmt(dividendoPorSocio*2)}</strong>`;
   } else {
-    infoEl.style.display = dividendoPorSocio === 0 && neto <= 0 ? 'flex' : 'none';
-    if(infoEl.style.display === 'flex'){
-      infoTxt.innerHTML = `Neto de <strong>${periodoLabel(periodoDividendo)}</strong>: <strong>${fmt(neto)}</strong> &nbsp;·&nbsp; Sin dividendo a distribuir`;
-    }
+    infoTxt.innerHTML=`Neto de <strong>${periodoLabel(periodoDividendo)}</strong>: <strong>${fmt(neto)}</strong> &nbsp;·&nbsp; Sin dividendo a distribuir`;
   }
-  document.getElementById('totDiv').textContent = fmt(dividendoPorSocio * 6);
+  document.getElementById('totDiv').textContent=fmt(dividendoPorSocio*6);
 }
 
 async function autoMarcarSaldados(){
-  const hoy = new Date();
-  const ph  = hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+  const hoy=new Date();
+  const ph=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
   for(const adel of allAdelanto){
     if(adel.estado==='saldado') continue;
-    if(adel.tipo==='adelanto' && adel.inicio < ph){
-      await updateDoc(doc(db,'adelantos',adel.id),{estado:'saldado'});
-    } else if(adel.tipo==='prestamo' && cuotasPagadas(adel,ph) >= adel.cuotas){
-      await updateDoc(doc(db,'adelantos',adel.id),{estado:'saldado'});
-    }
+    if(adel.tipo==='adelanto'&&adel.inicio<ph) await updateDoc(doc(db,'adelantos',adel.id),{estado:'saldado'});
+    else if(adel.tipo==='prestamo'&&cuotasPagadas(adel,ph)>=adel.cuotas) await updateDoc(doc(db,'adelantos',adel.id),{estado:'saldado'});
   }
 }
 
-// ── CARGAR PERIODO ──────────────────────────────────────────
 window.cargarPeriodo = async function(){
-  const periodo = periodoActual();
-  document.getElementById('badgePeriodo').textContent = periodoLabel(periodo);
-  document.getElementById('badgeGuardado').style.display = 'none';
-  movData = {}; fsData = {};
-
+  const periodo=periodoActual();
+  document.getElementById('badgePeriodo').textContent=periodoLabel(periodo);
+  document.getElementById('badgeGuardado').style.display='none';
+  movData={}; fsData={};
   try {
-    await new Promise(res=>{
-      const u = onSnapshot(collection(db,'movilidad'), snap=>{
-        u();
-        snap.forEach(d=>{
-          const data=d.data(), dp=data.periodo||data.mes||(data.fecha?data.fecha.substring(0,7):'');
-          if(dp===periodo){ const emp=data.empleado||data.nombre||''; if(emp) movData[emp]=(movData[emp]||0)+(Number(data.monto)||0); }
-        });
-        res();
-      });
+    const movSnap = await new Promise(res=>{ const u=onSnapshot(collection(db,'movilidad'),snap=>{u();res(snap);}); });
+    movSnap.forEach(d=>{
+      const data=d.data();
+      const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
+      if(dp===periodo){
+        const emp=normalizarNombre(data.empleado||data.nombre||'');
+        if(emp) movData[emp]=(movData[emp]||0)+(Number(data.monto||data.total)||0);
+      }
     });
   } catch(e){ console.warn('movilidad:',e); }
-
   try {
-    await new Promise(res=>{
-      const u = onSnapshot(collection(db,'finesdesemana'), snap=>{
-        u();
-        snap.forEach(d=>{
-          const data=d.data(), dp=data.periodo||data.mes||(data.fecha?data.fecha.substring(0,7):'');
-          if(dp===periodo){ const emp=data.empleado||data.nombre||''; if(emp) fsData[emp]=(fsData[emp]||0)+(Number(data.monto)||0); }
-        });
-        res();
-      });
+    const fsSnap = await new Promise(res=>{ const u=onSnapshot(collection(db,'finesdesemana'),snap=>{u();res(snap);}); });
+    fsSnap.forEach(d=>{
+      const data=d.data();
+      const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
+      if(dp===periodo){
+        const emp=normalizarNombre(data.empleado||data.nombre||'');
+        if(emp) fsData[emp]=(fsData[emp]||0)+(Number(data.monto)||0);
+      }
     });
   } catch(e){ console.warn('finesdesemana:',e); }
-
-  let guardada = {};
+  let guardada={};
   try {
-    const liqDoc = await getDoc(doc(db,'sueldos', periodo));
-    if(liqDoc.exists()){
-      guardada = liqDoc.data().empleados || {};
-      document.getElementById('badgeGuardado').style.display = 'inline-block';
-    }
+    const liqDoc=await getDoc(doc(db,'sueldos',periodo));
+    if(liqDoc.exists()){ guardada=liqDoc.data().empleados||{}; document.getElementById('badgeGuardado').style.display='inline-block'; }
   } catch(e){ console.warn('sueldos:',e); }
-
-  calcDividendo();
+  calcDiv();
   buildTable(guardada);
   ocultarSpinner();
 };
 
-// ── TABLA ───────────────────────────────────────────────────
-window.buildTable = function(guardada){
-  const tbody  = document.getElementById('tbody');
-  tbody.innerHTML = '';
-  const periodo = periodoActual();
+function buildTable(guardada){
+  const tbody=document.getElementById('tbody'); tbody.innerHTML='';
+  const periodo=periodoActual();
   EMPLEADOS.forEach((emp,i)=>{
-    const g    = guardada[emp.nombre] || {};
-    const mov  = movData[emp.nombre] || 0;
-    const fs   = fsData[emp.nombre]  || 0;
-    const desc = descuentoEmpleadoPeriodo(emp.nombre, periodo);
-    const div  = emp.esSocio ? dividendoPorSocio : 0;
-    const tr   = document.createElement('tr');
-    tr.innerHTML = `
-      <td>
-        <div class="emp-cell">
-          <div class="avatar ${emp.esSocio?'av-blue':'av-purple'}">${emp.iniciales}</div>
-          <div>
-            <div class="emp-name">${emp.nombre}</div>
-            <div class="emp-tipo">${emp.esSocio?'Socio':'Empleado'}</div>
-          </div>
-        </div>
-      </td>
+    const g=guardada[emp.nombre]||{};
+    const mov=movData[emp.nombre]||0;
+    const fs=fsData[emp.nombre]||0;
+    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
+    const div=emp.esSocio?dividendoPorSocio:0;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><div class="emp-cell"><div class="avatar ${emp.esSocio?'av-blue':'av-purple'}">${emp.iniciales}</div><div><div class="emp-name">${emp.nombre}</div><div class="emp-tipo">${emp.esSocio?'Socio':'Empleado'}</div></div></div></td>
       <td><input type="number" id="bruto-${i}" placeholder="0" min="0" value="${g.bruto||''}" oninput="recalc()"></td>
-      <td>${emp.esSocio
-        ? `<input type="number" id="auto-${i}" placeholder="0" min="0" value="${g.autonomo||''}" oninput="recalc()">`
-        : `<div class="dash-cell">—</div>`
-      }</td>
+      <td>${emp.esSocio?`<input type="number" id="auto-${i}" placeholder="0" min="0" value="${g.autonomo||''}" oninput="recalc()">`:'<div class="dash-cell">—</div>'}</td>
       <td><div class="auto-val">${fmt(mov)}</div></td>
       <td><div class="auto-val">${fmt(fs)}</div></td>
       <td><div class="adel-val${desc===0?' cero':''}" id="adel-${i}">${fmt(desc)}</div></td>
@@ -594,88 +435,67 @@ window.buildTable = function(guardada){
     `;
     tbody.appendChild(tr);
   });
-  recalc();
+  window.recalc();
 }
 
-// ── RECALC ──────────────────────────────────────────────────
 window.recalc = function(){
-  const periodo = periodoActual();
+  const periodo=periodoActual();
   let tBruto=0,tAuto=0,tMov=0,tFS=0,tAdel=0,tDiv=0,tNeto=0;
   EMPLEADOS.forEach((emp,i)=>{
-    const bruto = parseFloat(document.getElementById('bruto-'+i)?.value)||0;
-    const auto  = emp.esSocio ? (parseFloat(document.getElementById('auto-'+i)?.value)||0) : 0;
-    const mov   = movData[emp.nombre]||0;
-    const fs    = fsData[emp.nombre]||0;
-    const div   = emp.esSocio ? dividendoPorSocio : 0;
-    const desc  = descuentoEmpleadoPeriodo(emp.nombre, periodo);
-    const neto  = bruto + auto + mov + fs - desc;
-
-    const divEl  = document.getElementById('div-'+i);
-    if(divEl && emp.esSocio){ divEl.textContent = fmt(div); divEl.className = 'div-val'+(div===0?' cero':''); }
-
-    const adelEl = document.getElementById('adel-'+i);
-    if(adelEl){ adelEl.textContent = fmt(desc); adelEl.className = 'adel-val'+(desc===0?' cero':''); }
-
-    const netoEl = document.getElementById('neto-'+i);
-    if(netoEl){ netoEl.textContent = fmt(neto); netoEl.classList.toggle('neto-neg', neto<0); }
-
-    tBruto+=bruto; tAuto+=auto; tMov+=mov; tFS+=fs; tAdel+=desc; tDiv+=div; tNeto+=neto;
+    const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
+    const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
+    const mov=movData[emp.nombre]||0;
+    const fs=fsData[emp.nombre]||0;
+    const div=emp.esSocio?dividendoPorSocio:0;
+    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
+    const neto=bruto+auto+mov+fs-desc;
+    const divEl=document.getElementById('div-'+i);
+    if(divEl&&emp.esSocio){divEl.textContent=fmt(div);divEl.className='div-val'+(div===0?' cero':'');}
+    const adelEl=document.getElementById('adel-'+i);
+    if(adelEl){adelEl.textContent=fmt(desc);adelEl.className='adel-val'+(desc===0?' cero':'');}
+    const netoEl=document.getElementById('neto-'+i);
+    if(netoEl){netoEl.textContent=fmt(neto);netoEl.classList.toggle('neto-neg',neto<0);}
+    tBruto+=bruto;tAuto+=auto;tMov+=mov;tFS+=fs;tAdel+=desc;tDiv+=div;tNeto+=neto;
   });
-  document.getElementById('totBruto').textContent = fmt(tBruto);
-  document.getElementById('totAuto').textContent  = fmt(tAuto);
-  document.getElementById('totMov').textContent   = fmt(tMov);
-  document.getElementById('totFS').textContent    = fmt(tFS);
-  document.getElementById('totAdel').textContent  = fmt(tAdel);
-  document.getElementById('totDiv').textContent   = fmt(tDiv);
-  const netoEl = document.getElementById('totNeto');
-  netoEl.textContent = fmt(tNeto);
-  netoEl.className = 'card-value '+(tNeto>=0?'green':'red');
+  document.getElementById('totBruto').textContent=fmt(tBruto);
+  document.getElementById('totAuto').textContent=fmt(tAuto);
+  document.getElementById('totMov').textContent=fmt(tMov);
+  document.getElementById('totFS').textContent=fmt(tFS);
+  document.getElementById('totAdel').textContent=fmt(tAdel);
+  document.getElementById('totDiv').textContent=fmt(tDiv);
+  const netoEl=document.getElementById('totNeto');
+  netoEl.textContent=fmt(tNeto);
+  netoEl.className='card-value '+(tNeto>=0?'green':'red');
 };
 
-// ── CARD ADELANTOS ──────────────────────────────────────────
-window.toggleAdelantos = function(){
-  const body = document.getElementById('adelBody');
-  const tog  = document.getElementById('adelToggle');
-  body.classList.toggle('open');
-  tog.classList.toggle('open', body.classList.contains('open'));
+window.toggleAdelantos=function(){
+  const body=document.getElementById('adelBody'),tog=document.getElementById('adelToggle');
+  body.classList.toggle('open'); tog.classList.toggle('open',body.classList.contains('open'));
 };
 
-window.renderAdelantos = function(){
-  const periodo = periodoActual();
-  const activos  = allAdelanto.filter(a=>a.estado!=='saldado');
-  const saldados = allAdelanto.filter(a=>a.estado==='saldado');
-  const totalDesc = allAdelanto.reduce((s,a)=>s+cuotaParaPeriodo(a,periodo),0);
-  document.getElementById('adelantosResumen').textContent =
-    activos.length===0 ? 'Sin adelantos ni préstamos activos'
-    : `${activos.length} activo${activos.length>1?'s':''} · descuento este mes: ${fmt(totalDesc)}`;
-
-  const lista = document.getElementById('adelLista');
-  const todos = [...activos,...saldados];
-  if(!todos.length){ lista.innerHTML='<div class="adel-empty">Sin adelantos ni préstamos registrados</div>'; return; }
-
-  lista.innerHTML = todos.map(adel=>{
-    const emp = EMPLEADOS.find(e=>e.nombre===adel.empleado)||{iniciales:'?',esSocio:false};
-    const cc  = emp.esSocio?'av-blue':'av-purple';
-    const cuota   = cuotaParaPeriodo(adel,periodo);
-    const pagadas = cuotasPagadas(adel,periodo);
-    const total   = adel.tipo==='adelanto'?1:adel.cuotas;
-    const pct     = Math.round((pagadas/total)*100);
-    const esSaldado = adel.estado==='saldado';
-    const tipoBadge = adel.tipo==='adelanto'
-      ? '<span class="badge badge-adelanto">Adelanto</span>'
-      : '<span class="badge badge-prestamo">Préstamo</span>';
-    const estBadge = esSaldado
-      ? '<span class="badge badge-saldado">✓ Saldado</span>'
-      : '<span class="badge badge-activo">Activo</span>';
-    const det = adel.tipo==='adelanto'
-      ? `${periodoLabel(adel.inicio)}${adel.obs?' · '+adel.obs:''}`
-      : `Desde ${periodoLabel(adel.inicio)} · ${pagadas}/${total} cuotas${adel.obs?' · '+adel.obs:''}`;
-    const esAdmin = currentUser?.rol==='admin';
+window.renderAdelantos=function(){
+  const periodo=periodoActual();
+  const activos=allAdelanto.filter(a=>a.estado!=='saldado');
+  const saldados=allAdelanto.filter(a=>a.estado==='saldado');
+  const totalDesc=allAdelanto.reduce((s,a)=>s+cuotaParaPeriodo(a,periodo),0);
+  document.getElementById('adelantosResumen').textContent=activos.length===0?'Sin adelantos ni préstamos activos':`${activos.length} activo${activos.length>1?'s':''} · descuento este mes: ${fmt(totalDesc)}`;
+  const lista=document.getElementById('adelLista');
+  const todos=[...activos,...saldados];
+  if(!todos.length){lista.innerHTML='<div class="adel-empty">Sin adelantos ni préstamos registrados</div>';return;}
+  lista.innerHTML=todos.map(adel=>{
+    const emp=EMPLEADOS.find(e=>e.nombre===adel.empleado)||{iniciales:'?',esSocio:false};
+    const cc=emp.esSocio?'av-blue':'av-purple';
+    const cuota=cuotaParaPeriodo(adel,periodo);
+    const pagadas=cuotasPagadas(adel,periodo);
+    const total=adel.tipo==='adelanto'?1:adel.cuotas;
+    const pct=Math.round((pagadas/total)*100);
+    const esSaldado=adel.estado==='saldado';
+    const esAdmin=currentUser?.rol==='admin';
     return `<div class="adel-item${esSaldado?' saldado':''}">
       <div class="adel-avatar ${cc}">${emp.iniciales}</div>
       <div class="adel-info">
-        <div class="adel-nombre">${adel.empleado} ${tipoBadge} ${estBadge}</div>
-        <div class="adel-detalle">${det}</div>
+        <div class="adel-nombre">${adel.empleado} <span class="badge badge-${adel.tipo==='adelanto'?'adelanto':'prestamo'}">${adel.tipo==='adelanto'?'Adelanto':'Préstamo'}</span> <span class="badge badge-${esSaldado?'saldado':'activo'}">${esSaldado?'✓ Saldado':'Activo'}</span></div>
+        <div class="adel-detalle">${adel.tipo==='adelanto'?periodoLabel(adel.inicio):`Desde ${periodoLabel(adel.inicio)} · ${pagadas}/${total} cuotas`}${adel.obs?' · '+adel.obs:''}</div>
       </div>
       <div class="adel-montos">
         <div class="adel-cuota">${cuota>0?'− '+fmt(cuota)+' este mes':esSaldado?'Saldado':'Sin desc. este mes'}</div>
@@ -685,135 +505,93 @@ window.renderAdelantos = function(){
         <div class="adel-progress-label"><span>${pagadas} de ${total} ${total>1?'cuotas':'pago'}</span><span>${pct}%</span></div>
         <div class="adel-progress"><div class="adel-progress-bar${pct>=100?' done':''}" style="width:${pct}%"></div></div>
       </div>
-      ${esAdmin?`<div style="display:flex;flex-direction:column;gap:4px;">
-        ${!esSaldado?`<button class="btn btn-success btn-sm" onclick="marcarSaldado('${adel.id}')">✓ Saldar</button>`:''}
-        <button class="btn btn-danger btn-sm" onclick="eliminarAdel('${adel.id}')">🗑</button>
-      </div>`:''}
+      ${esAdmin?`<div style="display:flex;flex-direction:column;gap:4px;">${!esSaldado?`<button class="btn btn-success btn-sm" onclick="marcarSaldado('${adel.id}')">✓ Saldar</button>`:''}<button class="btn btn-danger btn-sm" onclick="eliminarAdel('${adel.id}')">🗑</button></div>`:''}
     </div>`;
   }).join('');
-}
+};
 
-// ── MODAL ADELANTO ──────────────────────────────────────────
-window.abrirModalAdel = function(){
+window.abrirModalAdel=function(){
   ['adelMonto','adelCuotas','adelObs'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('adelTipo').value = 'adelanto';
-  document.getElementById('adelInicio').value = periodoActual();
-  toggleCuotas();
+  document.getElementById('adelTipo').value='adelanto';
+  document.getElementById('adelInicio').value=periodoActual();
+  window.toggleCuotas();
   document.getElementById('modalAdel').classList.add('open');
 };
-window.cerrarModalAdel = function(){ document.getElementById('modalAdel').classList.remove('open'); };
-window.toggleCuotas = function(){
-  const tipo = document.getElementById('adelTipo').value;
-  document.getElementById('cuotasRow').style.display  = tipo==='prestamo'?'':'none';
-  document.getElementById('cuotaPreview').style.display = tipo==='prestamo'?'':'none';
-  calcCuota();
+window.cerrarModalAdel=function(){document.getElementById('modalAdel').classList.remove('open');};
+window.toggleCuotas=function(){
+  const tipo=document.getElementById('adelTipo').value;
+  document.getElementById('cuotasRow').style.display=tipo==='prestamo'?'':'none';
+  document.getElementById('cuotaPreview').style.display=tipo==='prestamo'?'':'none';
+  window.calcCuota();
 };
-window.calcCuota = function(){
-  const monto  = parseFloat(document.getElementById('adelMonto').value)||0;
-  const cuotas = parseInt(document.getElementById('adelCuotas').value)||1;
-  if(document.getElementById('adelTipo').value==='prestamo' && monto>0){
-    document.getElementById('cuotaValor').textContent = fmt(Math.round(monto/cuotas));
-    document.getElementById('cuotaMeses').textContent = cuotas+(cuotas>1?' meses':' mes');
+window.calcCuota=function(){
+  const monto=parseFloat(document.getElementById('adelMonto').value)||0;
+  const cuotas=parseInt(document.getElementById('adelCuotas').value)||1;
+  if(document.getElementById('adelTipo').value==='prestamo'&&monto>0){
+    document.getElementById('cuotaValor').textContent=fmt(Math.round(monto/cuotas));
+    document.getElementById('cuotaMeses').textContent=cuotas+(cuotas>1?' meses':' mes');
   }
 };
-window.guardarAdel = async function(){
-  if(currentUser?.rol!=='admin'){ toast('Sin permiso','error'); return; }
-  const empleado = document.getElementById('adelEmpleado').value;
-  const tipo     = document.getElementById('adelTipo').value;
-  const monto    = parseFloat(document.getElementById('adelMonto').value)||0;
-  const cuotas   = parseInt(document.getElementById('adelCuotas').value)||1;
-  const inicio   = document.getElementById('adelInicio').value;
-  const obs      = document.getElementById('adelObs').value.trim();
-  if(!empleado||monto<=0||!inicio){ toast('Completá empleado, monto y mes de inicio','error'); return; }
-  await addDoc(collection(db,'adelantos'),{
-    empleado, tipo, monto, cuotas:tipo==='prestamo'?cuotas:1,
-    inicio, obs, estado:'activo',
-    creadoPor:currentUser.nombre, creadoEn:new Date().toISOString()
-  });
-  cerrarModalAdel();
+window.guardarAdel=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const empleado=document.getElementById('adelEmpleado').value;
+  const tipo=document.getElementById('adelTipo').value;
+  const monto=parseFloat(document.getElementById('adelMonto').value)||0;
+  const cuotas=parseInt(document.getElementById('adelCuotas').value)||1;
+  const inicio=document.getElementById('adelInicio').value;
+  const obs=document.getElementById('adelObs').value.trim();
+  if(!empleado||monto<=0||!inicio){toast('Completá empleado, monto y mes de inicio','error');return;}
+  await addDoc(collection(db,'adelantos'),{empleado,tipo,monto,cuotas:tipo==='prestamo'?cuotas:1,inicio,obs,estado:'activo',creadoPor:currentUser.nombre,creadoEn:new Date().toISOString()});
+  window.cerrarModalAdel();
   toast('Registrado ✓','success');
-  const body = document.getElementById('adelBody');
-  if(!body.classList.contains('open')){ body.classList.add('open'); document.getElementById('adelToggle').classList.add('open'); }
+  const body=document.getElementById('adelBody');
+  if(!body.classList.contains('open')){body.classList.add('open');document.getElementById('adelToggle').classList.add('open');}
 };
-window.marcarSaldado = async function(id){
-  await updateDoc(doc(db,'adelantos',id),{estado:'saldado'});
-  toast('Marcado como saldado ✓','success');
-};
-window.eliminarAdel = async function(id){
-  if(!confirm('¿Eliminar este adelanto/préstamo?')) return;
-  await deleteDoc(doc(db,'adelantos',id));
-  toast('Eliminado','error');
-};
+window.marcarSaldado=async function(id){await updateDoc(doc(db,'adelantos',id),{estado:'saldado'});toast('Marcado como saldado ✓','success');};
+window.eliminarAdel=async function(id){if(!confirm('¿Eliminar este adelanto/préstamo?'))return;await deleteDoc(doc(db,'adelantos',id));toast('Eliminado','error');};
 
-// ── GUARDAR LIQUIDACIÓN ─────────────────────────────────────
-window.guardarLiquidacion = async function(){
-  if(currentUser?.rol==='viewer'){ toast('Sin permiso','error'); return; }
-  if(saving) return;
-  saving = true;
-  const periodo = periodoActual();
-  const empleados = {};
+window.guardarLiquidacion=async function(){
+  if(currentUser?.rol==='viewer'){toast('Sin permiso','error');return;}
+  if(saving)return; saving=true;
+  const periodo=periodoActual();
+  const empleados={};
   EMPLEADOS.forEach((emp,i)=>{
-    const bruto = parseFloat(document.getElementById('bruto-'+i)?.value)||0;
-    const auto  = emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
-    const mov   = movData[emp.nombre]||0;
-    const fs    = fsData[emp.nombre]||0;
-    const div   = emp.esSocio?dividendoPorSocio:0;
-    const desc  = descuentoEmpleadoPeriodo(emp.nombre,periodo);
-    empleados[emp.nombre] = { bruto,autonomo:auto,movilidad:mov,finesdesemana:fs,dividendo:div,descuentos:desc,neto:bruto+auto+mov+fs-desc };
+    const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
+    const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
+    const mov=movData[emp.nombre]||0,fs=fsData[emp.nombre]||0;
+    const div=emp.esSocio?dividendoPorSocio:0;
+    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
+    empleados[emp.nombre]={bruto,autonomo:auto,movilidad:mov,finesdesemana:fs,dividendo:div,descuentos:desc,neto:bruto+auto+mov+fs-desc};
   });
   try {
-    await setDoc(doc(db,'sueldos',periodo),{
-      periodo, empleados,
-      periodoDividendo, dividendoPorSocio,
-      updatedAt:new Date().toISOString(), updatedBy:currentUser.nombre
-    });
-    document.getElementById('badgeGuardado').style.display = 'inline-block';
+    await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre});
+    document.getElementById('badgeGuardado').style.display='inline-block';
     toast('Liquidación guardada ✓','success');
-  } catch(e){ toast('Error: '+e.message,'error'); }
-  saving = false;
+  } catch(e){toast('Error: '+e.message,'error');}
+  saving=false;
 };
 
-// ── EXCEL ───────────────────────────────────────────────────
-window.exportarExcel = function(){
-  const periodo = periodoActual();
-  const label   = periodoLabel(periodo);
-  const filas   = [['Empleado','Tipo','Bruto','Autónomo','Movilidad','Fin de Semana','Descuentos','Neto a Pagar','Dividendo (info)']];
+window.exportarExcel=function(){
+  const periodo=periodoActual(),label=periodoLabel(periodo);
+  const filas=[['Empleado','Tipo','Bruto','Autónomo','Movilidad','Fin de Semana','Descuentos','Neto a Pagar','Dividendo (info)']];
   EMPLEADOS.forEach((emp,i)=>{
-    const bruto = parseFloat(document.getElementById('bruto-'+i)?.value)||0;
-    const auto  = emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
-    const mov   = movData[emp.nombre]||0;
-    const fs    = fsData[emp.nombre]||0;
-    const div   = emp.esSocio?dividendoPorSocio:0;
-    const desc  = descuentoEmpleadoPeriodo(emp.nombre,periodo);
+    const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
+    const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
+    const mov=movData[emp.nombre]||0,fs=fsData[emp.nombre]||0;
+    const div=emp.esSocio?dividendoPorSocio:0;
+    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
     filas.push([emp.nombre,emp.esSocio?'Socio':'Empleado',bruto,auto,mov,fs,desc,bruto+auto+mov+fs-desc,div]);
   });
-  // Hoja resumen dividendo
-  const neto = calcularNetoPesos(periodoDividendo);
-  const resDiv = [
-    ['Concepto','Valor'],
-    ['Período base (2 meses atrás)', periodoLabel(periodoDividendo)],
-    ['Ingresos pesos', ''],
-    ['Egresos pesos', ''],
-    ['Neto pesos', neto],
-    ['Partes totales', 8],
-    ['Partes socios (6)', 6],
-    ['Partes GLOBALCOMINT', 2],
-    ['Dividendo por socio', dividendoPorSocio],
-    ['Reserva GLOBALCOMINT', dividendoPorSocio*2],
-  ];
-  const ws1 = XLSX.utils.aoa_to_sheet(filas);
-  ws1['!cols'] = [22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
-  const ws2 = XLSX.utils.aoa_to_sheet(resDiv);
-  ws2['!cols'] = [30,16].map(w=>({wch:w}));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws1, label);
-  XLSX.utils.book_append_sheet(wb, ws2, 'Dividendo '+periodoLabel(periodoDividendo));
-  XLSX.writeFile(wb, `Sueldos_${periodo}.xlsx`);
+  const neto=calcularNetoPesos(periodoDividendo);
+  const resDiv=[['Concepto','Valor'],['Período base',periodoLabel(periodoDividendo)],['Neto pesos',neto],['Partes totales',8],['Dividendo por socio',dividendoPorSocio],['Reserva GLOBALCOMINT',dividendoPorSocio*2]];
+  const ws1=XLSX.utils.aoa_to_sheet(filas); ws1['!cols']=[22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
+  const ws2=XLSX.utils.aoa_to_sheet(resDiv); ws2['!cols']=[30,16].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,label);
+  XLSX.utils.book_append_sheet(wb,ws2,'Dividendo '+periodoLabel(periodoDividendo));
+  XLSX.writeFile(wb,`Sueldos_${periodo}.xlsx`);
   toast('Excel exportado ✓','success');
 };
-
-// ── BOOT ────────────────────────────────────────────────────
-document.getElementById('spinnerOverlay').style.display = 'none';
 </script>
 </body>
 </html>
