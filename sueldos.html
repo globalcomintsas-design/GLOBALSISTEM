@@ -348,34 +348,42 @@ function descuentoEmpleadoPeriodo(nombre,periodo){
 }
 
 // ── SESION ──────────────────────────────────────────────────
-const _gcSesion = localStorage.getItem('gc_user');
-if(!_gcSesion){ location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); }
-else {
+// NOTA: el arranque (initApp) se invoca al FINAL del script, después de que todas
+// las window.* estén asignadas. Esto evita errores "is not a function" causados
+// por el orden de ejecución top-level en módulos ESM.
+function arrancarSesion(){
+  const _gcSesion = localStorage.getItem('gc_user');
+  if(!_gcSesion){ location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); return; }
   currentUser = JSON.parse(_gcSesion);
   window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); };
   document.getElementById('sistema').style.display='block';
   document.getElementById('userBadge').textContent=(currentUser.rol==='admin'?'👑 ':'👤 ')+currentUser.nombre+' · '+currentUser.rol;
-  if(currentUser.rol!=='admin') document.getElementById('btnNuevoAdel').style.display='none';
+  if(currentUser.rol!=='admin'){
+    const b=document.getElementById('btnNuevoAdel'); if(b) b.style.display='none';
+  }
   initApp();
 }
 
 function initApp(){
   onSnapshot(collection(db,'adelantos'), snap=>{
     allAdelanto=snap.docs.map(d=>({id:d.id,...d.data()}));
-    window.renderAdelantos(); window.recalc(); autoMarcarSaldados();
+    if(typeof window.renderAdelantos==='function') window.renderAdelantos();
+    if(typeof window.recalc==='function') window.recalc();
+    autoMarcarSaldados();
   });
   onSnapshot(collection(db,'movimientos'), snap=>{
     allMovGlobal=snap.docs.map(d=>({id:d.id,...d.data()}));
-    calcDiv(); window.recalc();
+    calcDiv();
+    if(typeof window.recalc==='function') window.recalc();
   });
   // ── NUEVO: sincronización en tiempo real de movilidad y fines de semana ──
   onSnapshot(collection(db,'movilidad'), snap=>{
     allMov=snap.docs.map(d=>({id:d.id,...d.data()}));
-    window.actualizarMovFS();
+    if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
   });
   onSnapshot(collection(db,'finesdesemana'), snap=>{
     allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
-    window.actualizarMovFS();
+    if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
   });
   // ── NUEVO: sincronización en tiempo real de la lista de empleados ──
   onSnapshot(doc(db,'config','empleados'), snap=>{
@@ -392,7 +400,7 @@ function initApp(){
     }
     refrescarSelectEmpleados();
     // Si la tabla ya estaba construida, recargarla para reflejar la nueva lista
-    if(tablaLista){ window.cargarPeriodo(); }
+    if(tablaLista && typeof window.cargarPeriodo==='function'){ window.cargarPeriodo(); }
   });
   const hoy=new Date();
   const mes=String(hoy.getMonth()+1).padStart(2,'0');
@@ -400,7 +408,12 @@ function initApp(){
   document.getElementById('badgePeriodo').textContent=periodoLabel(document.getElementById('periodo').value);
   refrescarSelectEmpleados();
   document.getElementById('adelInicio').value=document.getElementById('periodo').value;
-  window.cargarPeriodo();
+  // Llamada diferida: asegurar que cargarPeriodo ya esté asignada
+  if(typeof window.cargarPeriodo==='function'){
+    window.cargarPeriodo();
+  } else {
+    setTimeout(()=>{ if(typeof window.cargarPeriodo==='function') window.cargarPeriodo(); },0);
+  }
 }
 
 // Llena el <select> de adelantos con la lista actual de empleados
@@ -662,6 +675,28 @@ window.guardarLiquidacion=async function(){
   saving=false;
 };
 
+window.exportarExcel=function(){
+  const periodo=periodoActual(),label=periodoLabel(periodo);
+  const filas=[['Empleado','Tipo','Bruto','Autónomo','Movilidad','Fin de Semana','Descuentos','Neto a Pagar','Dividendo (info)']];
+  EMPLEADOS.forEach((emp,i)=>{
+    const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
+    const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
+    const mov=movData[emp.nombre]||0,fs=fsData[emp.nombre]||0;
+    const div=emp.esSocio?dividendoPorSocio:0;
+    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
+    filas.push([emp.nombre,emp.esSocio?'Socio':'Empleado',bruto,auto,mov,fs,desc,bruto+auto+mov+fs-desc,div]);
+  });
+  const neto=calcularNetoPesos(periodoDividendo);
+  const resDiv=[['Concepto','Valor'],['Período base',periodoLabel(periodoDividendo)],['Neto pesos',neto],['Partes totales',8],['Dividendo por socio',dividendoPorSocio],['Reserva GLOBALCOMINT',dividendoPorSocio*2]];
+  const ws1=XLSX.utils.aoa_to_sheet(filas); ws1['!cols']=[22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
+  const ws2=XLSX.utils.aoa_to_sheet(resDiv); ws2['!cols']=[30,16].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws1,label);
+  XLSX.utils.book_append_sheet(wb,ws2,'Dividendo '+periodoLabel(periodoDividendo));
+  XLSX.writeFile(wb,`Sueldos_${periodo}.xlsx`);
+  toast('Excel exportado ✓','success');
+};
+
 // ── GESTIÓN DE EMPLEADOS ─────────────────────────────────────────────
 window.abrirModalEmp=function(){
   document.getElementById('empNombre').value='';
@@ -733,27 +768,9 @@ async function guardarEmpleadosFS(){
   renderListaEmpleados();
 }
 
-window.exportarExcel=function(){
-  const periodo=periodoActual(),label=periodoLabel(periodo);
-  const filas=[['Empleado','Tipo','Bruto','Autónomo','Movilidad','Fin de Semana','Descuentos','Neto a Pagar','Dividendo (info)']];
-  EMPLEADOS.forEach((emp,i)=>{
-    const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
-    const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
-    const mov=movData[emp.nombre]||0,fs=fsData[emp.nombre]||0;
-    const div=emp.esSocio?dividendoPorSocio:0;
-    const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
-    filas.push([emp.nombre,emp.esSocio?'Socio':'Empleado',bruto,auto,mov,fs,desc,bruto+auto+mov+fs-desc,div]);
-  });
-  const neto=calcularNetoPesos(periodoDividendo);
-  const resDiv=[['Concepto','Valor'],['Período base',periodoLabel(periodoDividendo)],['Neto pesos',neto],['Partes totales',8],['Dividendo por socio',dividendoPorSocio],['Reserva GLOBALCOMINT',dividendoPorSocio*2]];
-  const ws1=XLSX.utils.aoa_to_sheet(filas); ws1['!cols']=[22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
-  const ws2=XLSX.utils.aoa_to_sheet(resDiv); ws2['!cols']=[30,16].map(w=>({wch:w}));
-  const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws1,label);
-  XLSX.utils.book_append_sheet(wb,ws2,'Dividendo '+periodoLabel(periodoDividendo));
-  XLSX.writeFile(wb,`Sueldos_${periodo}.xlsx`);
-  toast('Excel exportado ✓','success');
-};
+// ── ARRANQUE ─────────────────────────────────────────────────
+// Se llama al FINAL, cuando todas las window.* ya están asignadas.
+arrancarSesion();
 </script>
 </body>
 </html>
