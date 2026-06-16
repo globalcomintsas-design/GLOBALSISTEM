@@ -80,7 +80,15 @@ tr:hover td{background:#fafbff;}
 <body>
 
 <!-- LOGIN (solo para admin) -->
-<!-- Login centralizado en index.html -->
+<div class="login-wrap" id="login">
+  <div class="login-box">
+    <div class="login-logo">GLOBALCOMINT</div>
+    <div class="login-sub">Movilidad & Fines de Semana</div>
+    <input type="text" id="inpUsuario" placeholder="Usuario" />
+    <input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" />
+    <button class="login-btn" onclick="ingresar()">Ingresar</button>
+    <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+  </div>
 </div>
 
 <div id="spinnerOverlay" class="spinner-overlay">
@@ -334,12 +342,11 @@ window.addEventListener('DOMContentLoaded', ()=>{
 });
 
 // SESION CENTRALIZADA
-window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
+window.cerrarSesion=function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
 document.addEventListener('DOMContentLoaded', function(){
   const _gcSesion = localStorage.getItem('gc_user');
   if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); return; }
-  const _gcUser = JSON.parse(_gcSesion);
-  mostrarSistema(_gcUser);
+  mostrarSistema(JSON.parse(_gcSesion));
 });
 
 window.showTab=function(name,el){
@@ -448,7 +455,7 @@ window.guardarMovilidad=async function(){
   const total=km*precioKm;
   const obs=document.getElementById('movObsReg').value.trim();
   if(!fecha||km<=0){ toast('Seleccioná fecha y un destino con km cargados','error'); return; }
-  await addDoc(collection(db,'movilidad'),{empleado,fecha,destino,km,precioKm,total,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  const periodoMov=fecha.substring(0,7); await addDoc(collection(db,'movilidad'),{empleado,fecha,periodo:periodoMov,destino,km,precioKm,monto:total,total,obs,creadoPor:currentUser.nombre,ts:Date.now()});
   document.getElementById('movFecha').value='';
   document.getElementById('movKm').value='';
   document.getElementById('movTotal').value='';
@@ -519,7 +526,7 @@ window.guardarFS=async function(){
   const monto=parseFloat(document.getElementById('fsMonto').value)||0;
   const obs=document.getElementById('fsObs').value.trim();
   if(!fecha||monto<=0){ toast('Completá fecha y monto','error'); return; }
-  await addDoc(collection(db,'finesdesemana'),{empleado,fecha,monto,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  const periodoFS=fecha.substring(0,7); await addDoc(collection(db,'finesdesemana'),{empleado,fecha,periodo:periodoFS,monto,obs,creadoPor:currentUser.nombre,ts:Date.now()});
   document.getElementById('fsFecha').value='';
   document.getElementById('fsMonto').value='';
   document.getElementById('fsObs').value='';
