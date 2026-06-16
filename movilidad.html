@@ -51,6 +51,17 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .btn-danger{background:#dc2626;color:#fff;}
 .btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
 .btn-outline:hover{background:#1e3a8a;color:#fff;}
+.destinos-card{background:#fff;border-radius:12px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;}
+.destinos-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;background:#f8fafc;transition:background .15s;}
+.destinos-card-header:hover{background:#eff6ff;}
+.destinos-card-header-left{display:flex;align-items:center;gap:10px;}
+.destinos-card-icon{width:32px;height:32px;border-radius:8px;background:#1e3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.destinos-card-title{font-size:14px;font-weight:700;color:#1e3a8a;}
+.destinos-card-sub{font-size:11px;color:#64748b;margin-top:1px;}
+.destinos-card-toggle{font-size:14px;color:#1e3a8a;transition:transform .2s;}
+.destinos-card.open .destinos-card-toggle{transform:rotate(180deg);}
+.destinos-card-body{display:none;padding:14px 16px;border-top:1px solid #e2e8f0;}
+.destinos-card.open .destinos-card-body{display:block;}
 .btn-sm{padding:6px 12px;font-size:11px;}
 .btn-row{display:flex;gap:8px;flex-wrap:wrap;}
 .filtros{background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;}
@@ -78,6 +89,15 @@ tr:hover td{background:#fafbff;}
 </style>
 </head>
 <body>
+
+<!-- Script preventivo: define toggleDestinosCard ANTES de que cargue el módulo,
+     para que el onclick del header funcione sí o sí, incluso si Firebase tarda o falla. -->
+<script>
+  window.toggleDestinosCard = function(){
+    var card = document.getElementById('seccionDestinos');
+    if(card) card.classList.toggle('open');
+  };
+</script>
 
 <div id="spinnerOverlay" class="spinner-overlay">
   <div class="spinner"></div>
@@ -113,25 +133,36 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Total general</div><div class="card-value" id="movTotalGral">$ 0</div></div>
       </div>
 
-      <!-- Destinos - solo admin -->
-      <div class="section" id="seccionDestinos" style="display:none">
-        <div class="section-title">
-          Destinos y Km
-          <button class="btn btn-outline btn-sm" onclick="agregarDestino()">+ Agregar destino</button>
+      <!-- Destinos - solo admin (card colapsable) -->
+      <div class="destinos-card" id="seccionDestinos" style="display:none">
+        <div class="destinos-card-header" onclick="toggleDestinosCard()">
+          <div class="destinos-card-header-left">
+            <div class="destinos-card-icon">📍</div>
+            <div>
+              <div class="destinos-card-title">Destinos y Km</div>
+              <div class="destinos-card-sub" id="destinosCardSub">Tocá para ver / editar</div>
+            </div>
+          </div>
+          <div class="destinos-card-toggle">▾</div>
         </div>
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;">
-          <span style="font-weight:600;color:#1e3a8a;font-size:13px">Precio por Km (igual para todos):</span>
-          <span style="font-size:13px;color:#666;">$</span>
-          <input type="number" id="precioKmGlobal" value="300" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" oninput="renderDestinos();calcularMovilidad()" />
-          <span style="font-size:11px;color:#888;">Podés cambiarlo cuando quieras y guardar</span>
+        <div class="destinos-card-body">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;">
+            <span style="font-weight:600;color:#1e3a8a;font-size:13px">Precio por Km (igual para todos):</span>
+            <span style="font-size:13px;color:#666;">$</span>
+            <input type="number" id="precioKmGlobal" value="300" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" oninput="renderDestinos();calcularMovilidad()" />
+            <span style="font-size:11px;color:#888;">Podés cambiarlo cuando quieras y guardar</span>
+          </div>
+          <div class="table-wrap" style="margin-bottom:12px;">
+            <table>
+              <thead><tr><th>#</th><th>Destino</th><th>Km</th><th>Total estimado</th><th>Acciones</th></tr></thead>
+              <tbody id="destinosGrid"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="agregarDestino()">+ Agregar destino</button>
+            <button class="btn btn-success btn-sm" onclick="guardarDestinos()">💾 Guardar destinos y precio</button>
+          </div>
         </div>
-        <div class="table-wrap" style="margin-bottom:12px;">
-          <table>
-            <thead><tr><th>#</th><th>Destino</th><th>Km</th><th>Total estimado</th><th>Acciones</th></tr></thead>
-            <tbody id="destinosGrid"></tbody>
-          </table>
-        </div>
-        <button class="btn btn-success btn-sm" onclick="guardarDestinos()">💾 Guardar destinos y precio</button>
       </div>
 
       <!-- Formulario registro -->
@@ -390,7 +421,20 @@ window.renderDestinos=function(){
       <td><button onclick="eliminarDestino(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:2px 6px;line-height:1;">✕</button></td>
     </tr>`;
   }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin destinos</td></tr>';
+  // Resumen en el subtítulo de la card (visible sin abrir)
+  const sub=document.getElementById('destinosCardSub');
+  if(sub){
+    sub.textContent = destinos.length>0
+      ? `${destinos.length} destino${destinos.length>1?'s':''} · $${precioGlobal}/km · tocá para editar`
+      : `Sin destinos · tocá para agregar`;
+  }
   actualizarSelectDestinos();
+};
+
+// Toggle para abrir/cerrar la card de destinos
+window.toggleDestinosCard=function(){
+  const card=document.getElementById('seccionDestinos');
+  if(card) card.classList.toggle('open');
 };
 
 window.agregarDestino=function(){
