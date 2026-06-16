@@ -9,51 +9,91 @@
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);padding:24px;}
 
-.logo-wrap{text-align:center;margin-bottom:48px;}
+.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-bottom:0;}
+.login-logo{font-size:26px;font-weight:700;color:#1e3a8a;margin-bottom:4px;}
+.login-sub{color:#888;font-size:13px;margin-bottom:24px;}
+.login-box input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none;}
+.login-box input:focus{border-color:#1e3a8a;}
+.pass-wrap{position:relative;margin-bottom:12px;}
+.pass-wrap input{width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box;margin-bottom:0;}
+.pass-wrap input:focus{border-color:#1e3a8a;}
+.pass-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;}
+.login-btn{width:100%;padding:13px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px;}
+.login-btn:hover{background:#1e40af;}
+.login-error{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
+
+.logo-wrap{text-align:center;margin-bottom:32px;}
 .logo-title{font-size:32px;font-weight:700;color:#fff;letter-spacing:1px;}
-.logo-sub{font-size:13px;color:#93c5fd;margin-top:6px;}
+.logo-sub-main{font-size:13px;color:#93c5fd;margin-top:6px;}
 
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;width:100%;max-width:780px;}
-
-.card{background:#fff;border-radius:20px;padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;text-decoration:none;box-shadow:0 8px 32px rgba(0,0,0,0.18);transition:transform .18s, box-shadow .18s;border:2px solid transparent;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;width:100%;max-width:900px;display:none;}
+.card{background:#fff;border-radius:20px;padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;text-decoration:none;box-shadow:0 8px 32px rgba(0,0,0,0.18);transition:transform .18s,box-shadow .18s;border:2px solid transparent;}
 .card:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,0.28);border-color:#bfdbfe;}
 .card:active{transform:scale(.97);}
-
 .card-icon{font-size:42px;line-height:1;}
 .card-title{font-size:17px;font-weight:700;color:#1e3a8a;text-align:center;}
 .card-desc{font-size:12px;color:#888;text-align:center;line-height:1.5;}
 .card-arrow{margin-top:6px;background:#eff6ff;color:#1e3a8a;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;}
 
+.user-bar{background:rgba(255,255,255,0.15);border-radius:20px;padding:8px 16px;font-size:12px;color:#fff;display:none;margin-bottom:20px;display:none;align-items:center;gap:12px;}
+.user-bar span{font-weight:600;}
+.logout-btn{background:#dc2626;border:none;color:#fff;padding:5px 12px;border-radius:20px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:600;}
+
 .footer{margin-top:44px;font-size:11px;color:#93c5fd;opacity:.7;}
+
+.spinner-overlay{position:fixed;inset:0;background:rgba(30,58,138,0.7);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
+.spinner{width:44px;height:44px;border:4px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner-text{font-size:13px;color:#fff;font-weight:600;}
 </style>
 </head>
 <body>
 
 <div class="logo-wrap">
   <div class="logo-title">GLOBALCOMINT</div>
-  <div class="logo-sub">Seleccioná el módulo al que querés acceder</div>
+  <div class="logo-sub-main" id="subtitulo">Sistema de gestión · Ingreso seguro</div>
 </div>
 
-<div class="cards">
-  <a class="card" href="caja.html">
+<!-- LOGIN -->
+<div class="login-box" id="loginBox">
+  <div class="login-logo">Bienvenido</div>
+  <div class="login-sub">Ingresá tus credenciales para continuar</div>
+  <input type="text" id="inpUsuario" placeholder="Usuario" autocomplete="username"/>
+  <div class="pass-wrap">
+    <input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" autocomplete="current-password"/>
+    <span class="pass-eye" onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'">👁</span>
+  </div>
+  <button class="login-btn" onclick="ingresar()">Ingresar al sistema</button>
+  <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+</div>
+
+<!-- USER BAR -->
+<div class="user-bar" id="userBar">
+  <span id="userNombre"></span>
+  <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
+</div>
+
+<!-- CARDS -->
+<div class="cards" id="cards">
+  <a class="card" id="cardCaja" href="caja.html">
     <div class="card-icon">💰</div>
     <div class="card-title">Caja & Finanzas</div>
     <div class="card-desc">Movimientos, cheques, cuenta corriente y reportes</div>
     <div class="card-arrow">Ingresar →</div>
   </a>
-  <a class="card" href="movilidad.html">
+  <a class="card" id="cardMovilidad" href="movilidad.html">
     <div class="card-icon">🚗</div>
     <div class="card-title">Movilidad & FS</div>
     <div class="card-desc">Viáticos por km, fines de semana y resumen por empleado</div>
     <div class="card-arrow">Ingresar →</div>
   </a>
-  <a class="card" href="sueldos.html">
+  <a class="card" id="cardSueldos" href="sueldos.html">
     <div class="card-icon">👥</div>
     <div class="card-title">Sueldos</div>
     <div class="card-desc">Liquidación mensual, adelantos, préstamos y dividendos</div>
     <div class="card-arrow">Ingresar →</div>
   </a>
-  <a class="card" href="VLP.html">
+  <a class="card" id="cardVLP" href="VLP.html">
     <div class="card-icon">📑</div>
     <div class="card-title">Control VLP</div>
     <div class="card-desc">Volantes de liquidación, operaciones DUX y reconciliación de pagos</div>
@@ -63,5 +103,89 @@ body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-directi
 
 <div class="footer">GLOBALCOMINT SAS · Despachantes de Aduana · Mendoza</div>
 
+<div class="spinner-overlay" id="spinner">
+  <div class="spinner"></div>
+  <div class="spinner-text">Verificando credenciales...</div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// Usuarios fijos (no se pueden borrar)
+const USERS_DEFAULT = {
+  'Bcola':   { password:'River83$', nombre:'Bruno Cola', rol:'admin',
+               permisos:{ caja:'admin', movilidad:'admin', sueldos:'admin', vlp:'admin' } },
+  'Mcatala': { password:'Global01', nombre:'María Catalá', rol:'cargador',
+               permisos:{ caja:'cargador', movilidad:'viewer', sueldos:'viewer', vlp:'viewer' } },
+  'Dnievas': { password:'Global01', nombre:'Daniel Nievas', rol:'cargador',
+               permisos:{ caja:'viewer', movilidad:'cargador', sueldos:'viewer', vlp:'viewer' } },
+};
+
+let allUsuarios = {};
+let currentUser = null;
+
+// Cargar usuarios de Firebase
+onSnapshot(collection(db,'usuarios'), snap => {
+  allUsuarios = {};
+  snap.docs.forEach(d => { allUsuarios[d.id] = d.data(); });
+});
+
+function getUsers(){ return { ...USERS_DEFAULT, ...allUsuarios }; }
+
+// Verificar sesión existente
+const sesion = sessionStorage.getItem('gc_user');
+if(sesion){
+  try {
+    currentUser = JSON.parse(sesion);
+    mostrarModulos();
+  } catch(e){ sessionStorage.removeItem('gc_user'); }
+}
+
+window.ingresar = function(){
+  const u = document.getElementById('inpUsuario').value.trim();
+  const p = document.getElementById('inpPassword').value;
+  const users = getUsers();
+  const user  = users[u];
+  if(user && user.password === p){
+    currentUser = { username:u, ...user };
+    sessionStorage.setItem('gc_user', JSON.stringify(currentUser));
+    document.getElementById('loginError').style.display = 'none';
+    mostrarModulos();
+  } else {
+    document.getElementById('loginError').style.display = 'block';
+  }
+};
+
+window.cerrarSesion = function(){
+  sessionStorage.removeItem('gc_user');
+  location.reload();
+};
+
+function mostrarModulos(){
+  document.getElementById('loginBox').style.display  = 'none';
+  document.getElementById('subtitulo').textContent   = 'Seleccioná el módulo al que querés acceder';
+  document.getElementById('userBar').style.display   = 'flex';
+  document.getElementById('userNombre').textContent  = '👤 ' + currentUser.nombre;
+  document.getElementById('cards').style.display     = 'grid';
+
+  // Admin ve gestión de usuarios
+  if(currentUser.permisos?.caja === 'admin'){
+    document.getElementById('userNombre').textContent = '👑 ' + currentUser.nombre;
+  }
+}
+</script>
 </body>
 </html>

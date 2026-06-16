@@ -113,16 +113,7 @@ tr:hover td{background:#fafbff;}
 </head>
 <body>
 
-<div class="login-wrap" id="login">
-  <div class="login-box">
-    <div class="login-logo">GLOBALCOMINT</div>
-    <div class="login-sub">Sistema de gestión · Ingreso seguro</div>
-    <input type="text" id="inpUsuario" placeholder="Usuario" />
-    <div style="position:relative;margin-bottom:12px;"><input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" style="width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:DM Sans,sans-serif;outline:none;box-sizing:border-box;" /><span onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;">👁</span></div>
-    <button class="login-btn" onclick="ingresar()">Ingresar al sistema</button>
-    <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
-  </div>
-</div>
+<!-- Login centralizado en index.html -->
 
 <div id="spinnerOverlay" class="spinner-overlay">
   <div class="spinner"></div>
@@ -482,24 +473,18 @@ function toast(msg, type='') {
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
-// LOGIN
-window.ingresar = function() {
-  const u = document.getElementById('inpUsuario').value.trim();
-  const p = document.getElementById('inpPassword').value;
-  const users = getUsers();
-  const user = users[u];
-  if (user && user.password === p) {
-    currentUser = { username: u, ...user };
-    document.getElementById('login').style.display = 'none';
-    document.getElementById('sistema').style.display = 'block';
-    document.getElementById('userBadge').textContent = (user.rol==='admin'?'👑 ':'👤 ') + user.nombre + ' · ' + user.rol;
-    if (user.rol === 'admin') document.getElementById('tabUsuarios').style.display = '';
-    document.getElementById('spinnerOverlay').style.display='flex'; initFirestore();
-  } else {
-    document.getElementById('loginError').style.display = 'block';
-  }
-};
-window.cerrarSesion = function() { location.reload(); };
+// SESION CENTRALIZADA
+const _gcSesion = sessionStorage.getItem('gc_user');
+if(!_gcSesion){ location.href='index.html'; }
+currentUser = JSON.parse(_gcSesion);
+window.cerrarSesion = function() { sessionStorage.removeItem('gc_user'); location.href='index.html'; };
+
+// Iniciar sistema directo
+document.getElementById('sistema').style.display = 'block';
+document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
+if (currentUser.rol === 'admin') document.getElementById('tabUsuarios').style.display = '';
+document.getElementById('spinnerOverlay').style.display = 'flex';
+initFirestore();
 
 // TABS
 window.showTab = function(name, el) {

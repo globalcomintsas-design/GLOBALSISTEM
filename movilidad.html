@@ -80,15 +80,7 @@ tr:hover td{background:#fafbff;}
 <body>
 
 <!-- LOGIN (solo para admin) -->
-<div class="login-wrap" id="login">
-  <div class="login-box">
-    <div class="login-logo">GLOBALCOMINT</div>
-    <div class="login-sub">Movilidad & Fines de Semana</div>
-    <input type="text" id="inpUsuario" placeholder="Usuario" />
-    <div style="position:relative;margin-bottom:12px;"><input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" style="width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:DM Sans,sans-serif;outline:none;box-sizing:border-box;" /><span onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;">👁</span></div>
-    <button class="login-btn" onclick="ingresar()">Ingresar</button>
-    <div class="login-error" id="loginError" style="display:none;">Usuario o contraseña incorrectos</div>
-  </div>
+<!-- Login centralizado en index.html -->
 </div>
 
 <div id="spinnerOverlay" class="spinner-overlay">
@@ -330,7 +322,7 @@ function mostrarSistema(user){
   document.getElementById('seccionRegistrarMov').style.display = puedeCargar?'':'none';
   document.getElementById('seccionRegistrarFS').style.display = puedeCargar?'':'none';
   document.getElementById('seccionDestinos').style.display = user.rol==='admin'?'':'none';
-  document.getElementById('spinnerOverlay').style.display='flex'; initFirestore();
+  initFirestore();
 }
 
 // Auto-login por URL ?user=dnievas
@@ -342,17 +334,12 @@ window.addEventListener('DOMContentLoaded', ()=>{
   }
 });
 
-window.ingresar=function(){
-  const u=document.getElementById('inpUsuario').value.trim();
-  const p=document.getElementById('inpPassword').value;
-  const user=USERS[u];
-  if(user && user.password!==null && user.password===p){
-    mostrarSistema({username:u,...user});
-  } else {
-    document.getElementById('loginError').style.display='block';
-  }
-};
-window.cerrarSesion=function(){ location.href='movilidad.html'; };
+// SESION CENTRALIZADA
+const _gcSesion = sessionStorage.getItem('gc_user');
+if(!_gcSesion){ location.href='index.html'; }
+const _gcUser = JSON.parse(_gcSesion);
+window.cerrarSesion = function(){ sessionStorage.removeItem('gc_user'); location.href='index.html'; };
+mostrarSistema(_gcUser);
 
 window.showTab=function(name,el){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));

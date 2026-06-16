@@ -608,17 +608,17 @@ function toast(msg,type='') {
 function now() { return new Date(); }
 function todayISO() { return now().toISOString().split('T')[0]; }
 
-// ---- LOGIN ----
+// SESION CENTRALIZADA
 function autoLogin() {
-  const user=USERS['Bcola'];
-  currentUser={username:'Bcola',...user};
+  const _gcSesion = sessionStorage.getItem('gc_user');
+  if(!_gcSesion){ location.href='index.html'; return; }
+  currentUser = JSON.parse(_gcSesion);
   document.getElementById('login').style.display='none';
   document.getElementById('sistema').style.display='block';
-  document.getElementById('userBadge').textContent='👑 '+user.nombre;
+  document.getElementById('userBadge').textContent=(currentUser.rol==='admin'?'👑 ':'👤 ')+currentUser.nombre;
   initListeners();
 }
-
-window.cerrarSesion=function(){location.reload();};
+window.cerrarSesion=function(){ sessionStorage.removeItem('gc_user'); location.href='index.html'; };
 
 // ---- TABS ----
 window.showTab=function(name,el) {
