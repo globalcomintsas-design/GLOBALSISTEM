@@ -508,7 +508,7 @@ window.cargarPeriodo = async function(){
       const u = onSnapshot(collection(db,'movilidad'), snap=>{
         u();
         snap.forEach(d=>{
-          const data=d.data(), dp=data.periodo||data.mes||'';
+          const data=d.data(), dp=data.periodo||data.mes||(data.fecha?data.fecha.substring(0,7):'');
           if(dp===periodo){ const emp=data.empleado||data.nombre||''; if(emp) movData[emp]=(movData[emp]||0)+(Number(data.monto)||0); }
         });
         res();
@@ -521,7 +521,7 @@ window.cargarPeriodo = async function(){
       const u = onSnapshot(collection(db,'finesdesemana'), snap=>{
         u();
         snap.forEach(d=>{
-          const data=d.data(), dp=data.periodo||data.mes||'';
+          const data=d.data(), dp=data.periodo||data.mes||(data.fecha?data.fecha.substring(0,7):'');
           if(dp===periodo){ const emp=data.empleado||data.nombre||''; if(emp) fsData[emp]=(fsData[emp]||0)+(Number(data.monto)||0); }
         });
         res();
