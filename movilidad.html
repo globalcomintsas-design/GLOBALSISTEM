@@ -313,7 +313,6 @@ function toast(msg,type=''){
 
 function mostrarSistema(user){
   currentUser = user;
-  document.getElementById('login').style.display='none';
   document.getElementById('sistema').style.display='block';
   const rolLabel = user.rol==='admin'?'👑 Admin':user.rol==='cargador'?'✏️ Cargador':'👁 Viewer';
   document.getElementById('userBadge').textContent=rolLabel+' '+user.nombre;
