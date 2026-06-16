@@ -164,6 +164,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
       <div class="section-title">
         Liquidación mensual
         <div class="btn-row">
+          <button class="btn btn-outline" onclick="abrirModalEmp()">👤 Empleados</button>
           <button class="btn btn-success" onclick="guardarLiquidacion()">💾 Guardar</button>
           <button class="btn btn-outline" onclick="exportarExcel()">📊 Excel</button>
         </div>
@@ -217,6 +218,28 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
   </div>
 </div>
 
+<div class="modal-bg" id="modalEmp">
+  <div class="modal">
+    <div class="modal-title">👤 Gestionar empleados <button class="modal-close" onclick="cerrarModalEmp()">✕</button></div>
+    <div class="form-grid">
+      <div class="field"><label>Nombre completo</label><input type="text" id="empNombre" placeholder="Ej: Juan Pérez"></div>
+      <div class="field"><label>Iniciales (2-3)</label><input type="text" id="empIniciales" placeholder="JP" maxlength="3" style="text-transform:uppercase"></div>
+      <div class="field full" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="empEsSocio" style="width:auto;">
+        <label for="empEsSocio" style="margin:0;cursor:pointer;">Es socio (cobra autónomo + dividendo)</label>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="agregarEmpleado()">➕ Agregar</button>
+      <button class="btn btn-outline" onclick="cerrarModalEmp()">Cerrar</button>
+    </div>
+    <div style="margin-top:18px;">
+      <div class="section-title" style="margin-bottom:8px;font-size:13px;">Empleados actuales (<span id="empCount">0</span>)</div>
+      <div id="listaEmpleados" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow:auto;"></div>
+    </div>
+  </div>
+</div>
+
 <div class="notif" id="notif"></div>
 
 <script type="module">
@@ -235,25 +258,28 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db  = getFirestore(app);
 
-const EMPLEADOS = [
+// Lista por defecto (se sobreescribe con Firestore si existe config/empleados)
+let EMPLEADOS = [
   { nombre:'Bruno Cola',        iniciales:'BC', esSocio:true  },
   { nombre:'Pablo Mazzolin',    iniciales:'PM', esSocio:true  },
   { nombre:'Daniel Nievas',     iniciales:'DN', esSocio:true  },
   { nombre:'Adrián Juri',       iniciales:'AJ', esSocio:true  },
   { nombre:'Diego Gómez',       iniciales:'DG', esSocio:true  },
   { nombre:'Sebastián Olivero', iniciales:'SO', esSocio:true  },
-  { nombre:'María Catalá',      iniciales:'MC', esSocio:false },
-  { nombre:'Matías',            iniciales:'MT', esSocio:false },
+  { nombre:'María Angeles',     iniciales:'MA', esSocio:false },
+  { nombre:'Francisco',         iniciales:'FR', esSocio:false },
   { nombre:'Ramiro',            iniciales:'RM', esSocio:false },
   { nombre:'Héctor',            iniciales:'HE', esSocio:false },
-  { nombre:'Fran',              iniciales:'FR', esSocio:false },
+  { nombre:'Matías',            iniciales:'MT', esSocio:false },
 ];
 
 // Mapeo nombres movilidad → nombres completos
 const MOV_NOMBRES = {
   'BRUNO':'Bruno Cola','PABLO':'Pablo Mazzolin','DANIEL':'Daniel Nievas',
   'ADRIAN':'Adrián Juri','DIEGO':'Diego Gómez','SEBASTIAN':'Sebastián Olivero',
-  'MARIA':'María Catalá','MATIAS':'Matías','RAMIRO':'Ramiro','HECTOR':'Héctor','FRAN':'Fran'
+  'MARIA':'María Angeles','MARIA ANGELES':'María Angeles','ANGELES':'María Angeles',
+  'MATIAS':'Matías','RAMIRO':'Ramiro','HECTOR':'Héctor',
+  'FRANCISCO':'Francisco','FRAN':'Francisco'
 };
 function normalizarNombre(n){
   if(!n) return '';
@@ -263,6 +289,8 @@ function normalizarNombre(n){
 let currentUser = null;
 let movData = {}, fsData = {};
 let allAdelanto = [], allMovGlobal = [];
+let allMov = [], allFS = [];   // caches en memoria para movilidad y fines de semana
+let tablaLista = false;        // flag: la tabla ya fue construida
 let dividendoPorSocio = 0, periodoDividendo = '';
 let saving = false;
 
@@ -340,14 +368,49 @@ function initApp(){
     allMovGlobal=snap.docs.map(d=>({id:d.id,...d.data()}));
     calcDiv(); window.recalc();
   });
+  // ── NUEVO: sincronización en tiempo real de movilidad y fines de semana ──
+  onSnapshot(collection(db,'movilidad'), snap=>{
+    allMov=snap.docs.map(d=>({id:d.id,...d.data()}));
+    window.actualizarMovFS();
+  });
+  onSnapshot(collection(db,'finesdesemana'), snap=>{
+    allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
+    window.actualizarMovFS();
+  });
+  // ── NUEVO: sincronización en tiempo real de la lista de empleados ──
+  onSnapshot(doc(db,'config','empleados'), snap=>{
+    if(snap.exists()){
+      const lista=snap.data().lista||[];
+      if(Array.isArray(lista)&&lista.length>0){
+        // Normaliza campos (por si algún doc viejo no tiene iniciales/esSocio)
+        EMPLEADOS=lista.map(e=>({
+          nombre:String(e.nombre||'').trim(),
+          iniciales:(e.iniciales||'').toUpperCase(),
+          esSocio:!!e.esSocio
+        })).filter(e=>e.nombre);
+      }
+    }
+    refrescarSelectEmpleados();
+    // Si la tabla ya estaba construida, recargarla para reflejar la nueva lista
+    if(tablaLista){ window.cargarPeriodo(); }
+  });
   const hoy=new Date();
   const mes=String(hoy.getMonth()+1).padStart(2,'0');
   document.getElementById('periodo').value=`${hoy.getFullYear()}-${mes}`;
   document.getElementById('badgePeriodo').textContent=periodoLabel(document.getElementById('periodo').value);
-  const sel=document.getElementById('adelEmpleado');
-  EMPLEADOS.forEach(e=>{ const o=document.createElement('option'); o.value=e.nombre; o.textContent=e.nombre; sel.appendChild(o); });
+  refrescarSelectEmpleados();
   document.getElementById('adelInicio').value=document.getElementById('periodo').value;
   window.cargarPeriodo();
+}
+
+// Llena el <select> de adelantos con la lista actual de empleados
+function refrescarSelectEmpleados(){
+  const sel=document.getElementById('adelEmpleado');
+  if(!sel) return;
+  const actual=sel.value;
+  sel.innerHTML='';
+  EMPLEADOS.forEach(e=>{ const o=document.createElement('option'); o.value=e.nombre; o.textContent=e.nombre; sel.appendChild(o); });
+  if(actual) sel.value=actual;
 }
 
 function calcDiv(){
@@ -380,29 +443,21 @@ window.cargarPeriodo = async function(){
   const periodo=periodoActual();
   document.getElementById('badgePeriodo').textContent=periodoLabel(periodo);
   document.getElementById('badgeGuardado').style.display='none';
-  movData={}; fsData={};
-  try {
-    const movSnap = await getDocs(collection(db,'movilidad'));
-    movSnap.forEach(d=>{
-      const data=d.data();
-      const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
-      if(dp===periodo){
-        const emp=normalizarNombre(data.empleado||data.nombre||'');
-        if(emp) movData[emp]=(movData[emp]||0)+(Number(data.monto||data.total)||0);
-      }
-    });
-  } catch(e){ console.warn('movilidad:',e); }
-  try {
-    const fsSnap = await getDocs(collection(db,'finesdesemana'));
-    fsSnap.forEach(d=>{
-      const data=d.data();
-      const dp=data.periodo||data.mes||(data.fecha?fechaAPeriodo(data.fecha):'');
-      if(dp===periodo){
-        const emp=normalizarNombre(data.empleado||data.nombre||'');
-        if(emp) fsData[emp]=(fsData[emp]||0)+(Number(data.monto)||0);
-      }
-    });
-  } catch(e){ console.warn('finesdesemana:',e); }
+  // Fallback: si los snapshots aún no dispararon, hago getDocs para tener datos
+  if(allMov.length===0){
+    try {
+      const movSnap=await getDocs(collection(db,'movilidad'));
+      allMov=movSnap.docs.map(d=>({id:d.id,...d.data()}));
+    } catch(e){ console.warn('movilidad:',e); }
+  }
+  if(allFS.length===0){
+    try {
+      const fsSnap=await getDocs(collection(db,'finesdesemana'));
+      allFS=fsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    } catch(e){ console.warn('finesdesemana:',e); }
+  }
+  // Recalcula movData/fsData desde el cache en memoria
+  window.actualizarMovFS();
   let guardada={};
   try {
     const liqDoc=await getDoc(doc(db,'sueldos',periodo));
@@ -413,8 +468,43 @@ window.cargarPeriodo = async function(){
   ocultarSpinner();
 };
 
+// ── NUEVO: recalcula movData/fsData para el período actual y actualiza las celdas in-place ──
+// Se invoca desde los onSnapshot de movilidad/finesdesemana y desde cargarPeriodo.
+// No reconstruye toda la tabla => NO pisa los inputs bruto/autónomo que el usuario esté editando.
+window.actualizarMovFS = function(){
+  const periodo=periodoActual();
+  if(!periodo) return;
+  movData={}; fsData={};
+  allMov.forEach(d=>{
+    const dp=d.periodo||d.mes||(d.fecha?fechaAPeriodo(d.fecha):'');
+    if(dp===periodo){
+      const emp=normalizarNombre(d.empleado||d.nombre||'');
+      if(emp) movData[emp]=(movData[emp]||0)+(Number(d.monto||d.total)||0);
+    }
+  });
+  allFS.forEach(d=>{
+    const dp=d.periodo||d.mes||(d.fecha?fechaAPeriodo(d.fecha):'');
+    if(dp===periodo){
+      const emp=normalizarNombre(d.empleado||d.nombre||'');
+      if(emp) fsData[emp]=(fsData[emp]||0)+(Number(d.monto)||0);
+    }
+  });
+  // Si la tabla todavía no se construyó, no toco el DOM (lo hará buildTable)
+  if(!tablaLista) return;
+  EMPLEADOS.forEach((emp,i)=>{
+    const movEl=document.getElementById('mov-'+i);
+    const fsEl=document.getElementById('fs-'+i);
+    const mov=movData[emp.nombre]||0;
+    const fs=fsData[emp.nombre]||0;
+    if(movEl) movEl.textContent=fmt(mov);
+    if(fsEl) fsEl.textContent=fmt(fs);
+  });
+  window.recalc();
+};
+
 function buildTable(guardada){
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
+  tablaLista=false;
   const periodo=periodoActual();
   EMPLEADOS.forEach((emp,i)=>{
     const g=guardada[emp.nombre]||{};
@@ -427,14 +517,15 @@ function buildTable(guardada){
       <td><div class="emp-cell"><div class="avatar ${emp.esSocio?'av-blue':'av-purple'}">${emp.iniciales}</div><div><div class="emp-name">${emp.nombre}</div><div class="emp-tipo">${emp.esSocio?'Socio':'Empleado'}</div></div></div></td>
       <td><input type="number" id="bruto-${i}" placeholder="0" min="0" value="${g.bruto||''}" oninput="recalc()"></td>
       <td>${emp.esSocio?`<input type="number" id="auto-${i}" placeholder="0" min="0" value="${g.autonomo||''}" oninput="recalc()">`:'<div class="dash-cell">—</div>'}</td>
-      <td><div class="auto-val">${fmt(mov)}</div></td>
-      <td><div class="auto-val">${fmt(fs)}</div></td>
+      <td><div class="auto-val" id="mov-${i}">${fmt(mov)}</div></td>
+      <td><div class="auto-val" id="fs-${i}">${fmt(fs)}</div></td>
       <td><div class="adel-val${desc===0?' cero':''}" id="adel-${i}">${fmt(desc)}</div></td>
       <td><div class="neto-val" id="neto-${i}">$ 0</div></td>
       <td><div class="${emp.esSocio?'div-val'+(div===0?' cero':''):'dash-cell'}" id="div-${i}">${emp.esSocio?fmt(div):'—'}</div></td>
     `;
     tbody.appendChild(tr);
   });
+  tablaLista=true;   // la tabla está construida: a partir de acá actualizarMovFS puede tocar celdas in-place
   window.recalc();
 }
 
@@ -570,6 +661,77 @@ window.guardarLiquidacion=async function(){
   } catch(e){toast('Error: '+e.message,'error');}
   saving=false;
 };
+
+// ── GESTIÓN DE EMPLEADOS ─────────────────────────────────────────────
+window.abrirModalEmp=function(){
+  document.getElementById('empNombre').value='';
+  document.getElementById('empIniciales').value='';
+  document.getElementById('empEsSocio').checked=false;
+  renderListaEmpleados();
+  document.getElementById('modalEmp').classList.add('open');
+};
+window.cerrarModalEmp=function(){document.getElementById('modalEmp').classList.remove('open');};
+
+function renderListaEmpleados(){
+  const cont=document.getElementById('listaEmpleados');
+  if(!cont) return;
+  const cnt=document.getElementById('empCount');
+  if(cnt) cnt.textContent=EMPLEADOS.length;
+  const esAdmin=currentUser?.rol==='admin';
+  cont.innerHTML=EMPLEADOS.map((e,i)=>`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:32px;height:32px;font-size:11px;">${e.iniciales}</div>
+        <div>
+          <div style="font-weight:600;color:#1a1a2e;">${e.nombre}</div>
+          <div style="font-size:11px;color:#888;">${e.esSocio?'Socio':'Empleado'}</div>
+        </div>
+      </div>
+      ${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarEmpleado(${i})">🗑 Eliminar</button>`:''}
+    </div>
+  `).join('')||'<div style="color:#888;text-align:center;padding:12px;">Sin empleados</div>';
+}
+
+window.agregarEmpleado=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso. Solo admin puede agregar empleados.','error');return;}
+  const nombre=document.getElementById('empNombre').value.trim();
+  let iniciales=document.getElementById('empIniciales').value.trim().toUpperCase();
+  const esSocio=document.getElementById('empEsSocio').checked;
+  if(!nombre){toast('Completá el nombre','error');return;}
+  if(!iniciales){
+    iniciales=nombre.split(/\s+/).map(p=>p[0]||'').join('').substring(0,3).toUpperCase();
+  }
+  if(EMPLEADOS.some(e=>e.nombre.toLowerCase()===nombre.toLowerCase())){toast('Ya existe ese empleado','error');return;}
+  if(EMPLEADOS.some(e=>e.iniciales===iniciales)){toast('Ya existen esas iniciales: '+iniciales,'error');return;}
+  EMPLEADOS.push({nombre,iniciales,esSocio});
+  try {
+    await guardarEmpleadosFS();
+    toast('Empleado agregado ✓','success');
+    document.getElementById('empNombre').value='';
+    document.getElementById('empIniciales').value='';
+    document.getElementById('empEsSocio').checked=false;
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+window.eliminarEmpleado=async function(i){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  if(i<0||i>=EMPLEADOS.length) return;
+  if(!confirm('¿Eliminar a '+EMPLEADOS[i].nombre+'?\n\nLos adelantos y registros de movilidad existentes se conservan, pero el empleado dejará de aparecer en nuevas liquidaciones.')) return;
+  EMPLEADOS.splice(i,1);
+  try {
+    await guardarEmpleadosFS();
+    toast('Empleado eliminado','error');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+async function guardarEmpleadosFS(){
+  await setDoc(doc(db,'config','empleados'),{
+    lista:EMPLEADOS.map(e=>({nombre:e.nombre,iniciales:e.iniciales,esSocio:!!e.esSocio})),
+    updatedAt:new Date().toISOString(),
+    updatedBy:currentUser?.nombre||'unknown'
+  });
+  renderListaEmpleados();
+}
 
 window.exportarExcel=function(){
   const periodo=periodoActual(),label=periodoLabel(periodo);
