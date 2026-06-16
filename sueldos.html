@@ -478,7 +478,7 @@ function initApp(){
 }
 
 // ── DIVIDENDO ───────────────────────────────────────────────
-function calcDividendo(){
+window.calcDividendo = function(){
   const periodo = periodoActual();
   periodoDividendo = restarMeses(periodo, 2);
   const neto = calcularNetoPesos(periodoDividendo);
@@ -560,7 +560,7 @@ window.cargarPeriodo = async function(){
 };
 
 // ── TABLA ───────────────────────────────────────────────────
-function buildTable(guardada){
+window.buildTable = function(guardada){
   const tbody  = document.getElementById('tbody');
   tbody.innerHTML = '';
   const periodo = periodoActual();
@@ -640,7 +640,7 @@ window.toggleAdelantos = function(){
   tog.classList.toggle('open', body.classList.contains('open'));
 };
 
-function renderAdelantos(){
+window.renderAdelantos = function(){
   const periodo = periodoActual();
   const activos  = allAdelanto.filter(a=>a.estado!=='saldado');
   const saldados = allAdelanto.filter(a=>a.estado==='saldado');
