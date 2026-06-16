@@ -146,12 +146,12 @@ onSnapshot(collection(db,'usuarios'), snap => {
 function getUsers(){ return { ...USERS_DEFAULT, ...allUsuarios }; }
 
 // Verificar sesión existente
-const sesion = sessionStorage.getItem('gc_user');
+const sesion = localStorage.getItem('gc_user');
 if(sesion){
   try {
     currentUser = JSON.parse(sesion);
     mostrarModulos();
-  } catch(e){ sessionStorage.removeItem('gc_user'); }
+  } catch(e){ localStorage.removeItem('gc_user'); }
 }
 
 window.ingresar = function(){
@@ -161,7 +161,7 @@ window.ingresar = function(){
   const user  = users[u];
   if(user && user.password === p){
     currentUser = { username:u, ...user };
-    sessionStorage.setItem('gc_user', JSON.stringify(currentUser));
+    localStorage.setItem('gc_user', JSON.stringify(currentUser));
     document.getElementById('loginError').style.display = 'none';
     mostrarModulos();
   } else {
@@ -170,7 +170,7 @@ window.ingresar = function(){
 };
 
 window.cerrarSesion = function(){
-  sessionStorage.removeItem('gc_user');
+  localStorage.removeItem('gc_user');
   location.reload();
 };
 

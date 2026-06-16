@@ -474,10 +474,10 @@ function toast(msg, type='') {
 }
 
 // SESION CENTRALIZADA
-const _gcSesion = sessionStorage.getItem('gc_user');
+const _gcSesion = localStorage.getItem('gc_user');
 if(!_gcSesion){ location.href=location.origin+location.pathname.replace('caja.html','index.html'); }
 currentUser = JSON.parse(_gcSesion);
-window.cerrarSesion = function() { sessionStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('caja.html','index.html'); };
+window.cerrarSesion = function() { localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('caja.html','index.html'); };
 
 // Iniciar sistema directo
 document.getElementById('sistema').style.display = 'block';

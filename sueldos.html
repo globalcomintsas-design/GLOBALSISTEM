@@ -415,10 +415,10 @@ function descuentoEmpleadoPeriodo(nombre, periodo){
 
 // ── LOGIN ───────────────────────────────────────────────────
 // SESION CENTRALIZADA
-const _gcSesion = sessionStorage.getItem('gc_user');
+const _gcSesion = localStorage.getItem('gc_user');
 if(!_gcSesion){ location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); }
 currentUser = JSON.parse(_gcSesion);
-window.cerrarSesion = function(){ sessionStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); };
+window.cerrarSesion = function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('sueldos.html','index.html'); };
 document.getElementById('sistema').style.display = 'block';
 document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
 if(currentUser.rol !== 'admin') document.getElementById('btnNuevoAdel').style.display = 'none';
