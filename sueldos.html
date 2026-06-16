@@ -339,6 +339,22 @@ const EMPLEADOS = [
   { nombre:'Fran',              iniciales:'FR', esSocio:false },
 ];
 
+// Mapeo entre nombres de movilidad (mayúsculas) y nombres completos
+const MOV_NOMBRES = {
+  'BRUNO':    'Bruno Cola',
+  'PABLO':    'Pablo Mazzolin',
+  'DANIEL':   'Daniel Nievas',
+  'ADRIAN':   'Adrián Juri',
+  'DIEGO':    'Diego Gómez',
+  'SEBASTIAN':'Sebastián Olivero',
+  'MARIA':    'María Catalá',
+};
+function normalizarNombre(n){
+  if(!n) return '';
+  const up = n.toUpperCase().trim();
+  return MOV_NOMBRES[up] || n;
+}
+
 let currentUser  = null;
 let movData      = {};   // movilidad por empleado
 let fsData       = {};   // fines de semana por empleado
