@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vacaciones · GLOBALCOMINT</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f4f8;color:#1a1a2e;font-size:13px;}
+#sistema{display:none;}
+.spinner-overlay{position:fixed;inset:0;background:rgba(240,244,8,0.85);background:rgba(240,244,248,0.85);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
+.spinner{width:44px;height:44px;border:4px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:spin .7s linear infinite;}
+.spinner-text{font-size:13px;color:#1e3a8a;font-weight:600;}
+@keyframes spin{to{transform:rotate(360deg);}}
+header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.header-left h1{font-size:20px;font-weight:700;}
+.header-left p{font-size:11px;color:#93c5fd;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:8px;}
+.user-badge{background:rgba(255,255,255,0.15);padding:7px 12px;border-radius:20px;font-size:12px;}
+.logout-btn{background:#dc2626;border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;}
+.home-btn{background:rgba(255,255,255,0.15);border:none;color:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;text-decoration:none;}
+.container{padding:16px;max-width:1100px;margin:0 auto;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
+.card{background:#fff;border-radius:12px;padding:14px 16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.card-label{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.card-value{font-size:20px;font-weight:700;color:#1e3a8a;}
+.card-value.green{color:#16a34a;}
+.card-value.orange{color:#d97706;}
+.card-value.red{color:#dc2626;}
+.section{background:#fff;border-radius:14px;padding:16px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);}
+.section-title{font-size:15px;font-weight:700;color:#1e3a8a;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:12px;}
+.field label{font-size:11px;color:#666;display:block;margin-bottom:4px;}
+.field input,.field select,.field textarea{width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:#fafafa;}
+.field input:focus,.field select:focus{border-color:#1e3a8a;background:#fff;}
+.field.full{grid-column:1/-1;}
+.btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:#1e3a8a;color:#fff;}
+.btn-primary:hover{background:#1e40af;}
+.btn-success{background:#16a34a;color:#fff;}
+.btn-danger{background:#dc2626;color:#fff;}
+.btn-outline{background:transparent;border:1.5px solid #1e3a8a;color:#1e3a8a;}
+.btn-outline:hover{background:#1e3a8a;color:#fff;}
+.btn-sm{padding:6px 12px;font-size:11px;}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;}
+.registros-card,.destinos-card{background:#fff;border-radius:12px;margin-bottom:16px;border:1px solid #e2e8f0;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;}
+.registros-card-header,.destinos-card-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;user-select:none;background:#f8fafc;transition:background .15s;}
+.registros-card-header:hover,.destinos-card-header:hover{background:#eff6ff;}
+.registros-card-header-left,.destinos-card-header-left{display:flex;align-items:center;gap:10px;}
+.registros-card-icon,.destinos-card-icon{width:32px;height:32px;border-radius:8px;background:#1e3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;}
+.registros-card-title,.destinos-card-title{font-size:14px;font-weight:700;color:#1e3a8a;}
+.registros-card-sub,.destinos-card-sub{font-size:11px;color:#64748b;margin-top:1px;}
+.registros-card-toggle,.destinos-card-toggle{font-size:14px;color:#1e3a8a;transition:transform .2s;}
+.registros-card.open .registros-card-toggle,.destinos-card.open .destinos-card-toggle{transform:rotate(180deg);}
+.registros-card-body,.destinos-card-body{display:none;padding:14px 16px;border-top:1px solid #e2e8f0;}
+.registros-card.open .registros-card-body,.destinos-card.open .destinos-card-body{display:block;}
+.seg-toggle{display:inline-flex;background:#e2e8f0;border-radius:8px;padding:2px;gap:2px;}
+.seg-toggle button{border:none;background:transparent;padding:6px 12px;font-size:12px;font-weight:600;color:#475569;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
+.seg-toggle button.active{background:#1e3a8a;color:#fff;}
+.seg-toggle button:hover:not(.active){background:#cbd5e1;}
+.filtros{background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;align-items:end;}
+.filtros input,.filtros select{padding:8px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;width:100%;outline:none;}
+.filtros input:focus,.filtros select:focus{border-color:#1e3a8a;}
+.filtros label{font-size:11px;color:#666;display:block;margin-bottom:3px;}
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;}
+th{background:#eff6ff;color:#1e3a8a;font-size:11px;text-transform:uppercase;letter-spacing:.04em;padding:10px;text-align:left;white-space:nowrap;}
+td{padding:9px 10px;border-bottom:1px solid #f0f4f8;font-size:12px;vertical-align:middle;}
+tr:hover td{background:#fafbff;}
+.badge{padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600;}
+.badge-ok{background:#dcfce7;color:#16a34a;}
+.badge-warn{background:#fef3c7;color:#d97706;}
+.badge-danger{background:#fee2e2;color:#dc2626;}
+.notif{position:fixed;bottom:20px;right:20px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:500;z-index:300;transform:translateY(100px);opacity:0;transition:all .3s;}
+.notif.show{transform:translateY(0);opacity:1;}
+.notif.error{background:#dc2626;}
+.notif.success{background:#16a34a;}
+@media(max-width:500px){
+  .form-grid{grid-template-columns:1fr;}
+  .cards{grid-template-columns:1fr 1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- Script preventivo: define funciones de UI ANTES de que cargue el módulo -->
+<script>
+  window.toggleCard = function(id, ev){
+    if(ev){ ev.stopPropagation(); }
+    var card = document.getElementById(id);
+    if(card) card.classList.toggle('open');
+  };
+  window.vistaVac = 'mes';
+  window.setVistaVac = function(v, ev){
+    if(ev){ ev.stopPropagation(); }
+    window.vistaVac = v;
+    var buttons = document.querySelectorAll('#toggleVistaVac button');
+    buttons.forEach(function(b){ b.classList.remove('active'); });
+    if(ev && ev.target){ ev.target.classList.add('active'); }
+    else {
+      var idx = (v==='historico') ? 1 : 0;
+      if(buttons[idx]) buttons[idx].classList.add('active');
+    }
+    if(typeof window.renderVacaciones === 'function') window.renderVacaciones();
+  };
+</script>
+
+<div id="spinnerOverlay" class="spinner-overlay">
+  <div class="spinner"></div>
+  <div class="spinner-text">Cargando vacaciones...</div>
+</div>
+
+<div id="sistema">
+  <header>
+    <div class="header-left">
+      <h1>🌴 Vacaciones</h1>
+      <p>GLOBALCOMINT · Registro y control de vacaciones del personal</p>
+    </div>
+    <div class="header-right">
+      <a href="index.html" class="home-btn">🏠 Inicio</a>
+      <div class="user-badge" id="userBadge"></div>
+      <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Cards arriba -->
+    <div class="cards">
+      <div class="card"><div class="card-label">Días tomados en el año</div><div class="card-value orange" id="totDiasAnio">0</div></div>
+      <div class="card"><div class="card-label">Días disponibles (tope)</div><div class="card-value green" id="totDiasDisp">0</div></div>
+      <div class="card"><div class="card-label">En vacaciones ahora</div><div class="card-value" id="totAhora">0</div></div>
+      <div class="card"><div class="card-label">Registros del mes</div><div class="card-value" id="totRegMes">0</div></div>
+      <div class="card"><div class="card-label">Total registros</div><div class="card-value" id="totRegGral">0</div></div>
+    </div>
+
+    <!-- Configuración tope anual (solo admin) -->
+    <div class="destinos-card" id="cardConfig" style="display:none">
+      <div class="destinos-card-header" onclick="toggleCard('cardConfig')">
+        <div class="destinos-card-header-left">
+          <div class="destinos-card-icon">⚙️</div>
+          <div>
+            <div class="destinos-card-title">Configuración del tope anual</div>
+            <div class="destinos-card-sub" id="configSub">Tocá para cambiar el tope de días por año</div>
+          </div>
+        </div>
+        <div class="destinos-card-toggle">▾</div>
+      </div>
+      <div class="destinos-card-body">
+        <div style="display:flex;align-items:center;gap:12px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;">
+          <span style="font-weight:600;color:#1e3a8a;font-size:13px">Tope de días de vacaciones por empleado por año:</span>
+          <input type="number" id="topeAnioInput" value="14" min="0" max="60" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" />
+          <button class="btn btn-success btn-sm" onclick="guardarTope()">💾 Guardar tope</button>
+          <span style="font-size:11px;color:#888;">El tope aplica a todos los empleados por igual</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Registrar vacaciones (solo admin) -->
+    <div class="registros-card" id="cardRegistrar" style="display:none">
+      <div class="registros-card-header" onclick="toggleCard('cardRegistrar')">
+        <div class="registros-card-header-left">
+          <div class="registros-card-icon">➕</div>
+          <div>
+            <div class="registros-card-title">Registrar vacaciones</div>
+            <div class="registros-card-sub">Cargar un nuevo período de vacaciones</div>
+          </div>
+        </div>
+        <div class="registros-card-toggle">▾</div>
+      </div>
+      <div class="registros-card-body">
+        <div class="form-grid">
+          <div class="field"><label>Empleado</label><select id="vacEmpleado"></select></div>
+          <div class="field"><label>Fecha desde</label><input type="date" id="vacDesde" onchange="calcularDiasVac()" /></div>
+          <div class="field"><label>Fecha hasta</label><input type="date" id="vacHasta" onchange="calcularDiasVac()" /></div>
+          <div class="field"><label>Días (calculado)</label><input type="text" id="vacDias" readonly style="background:#f0fdf4;font-weight:700;color:#16a34a" placeholder="—" /></div>
+          <div class="field full"><label>Observaciones (opcional)</label><input type="text" id="vacObs" placeholder="Ej: vacaciones anuales, día por estudio, etc." /></div>
+        </div>
+        <button class="btn btn-primary" onclick="guardarVacacion()">💾 Guardar vacaciones</button>
+      </div>
+    </div>
+
+    <!-- Registros de vacaciones (card colapsable con toggle Mes/Histórico) -->
+    <div class="registros-card" id="cardRegistros">
+      <div class="registros-card-header" onclick="toggleCard('cardRegistros')">
+        <div class="registros-card-header-left">
+          <div class="registros-card-icon">📋</div>
+          <div>
+            <div class="registros-card-title">Registros de Vacaciones</div>
+            <div class="registros-card-sub" id="registrosVacSub">Tocá para ver</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <button class="btn btn-success btn-sm" onclick="exportarVacExcel(event)">📊 Excel</button>
+          <div class="registros-card-toggle">▾</div>
+        </div>
+      </div>
+      <div class="registros-card-body">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+          <div class="seg-toggle" id="toggleVistaVac">
+            <button class="active" onclick="setVistaVac('mes',event)">📅 Mes actual</button>
+            <button onclick="setVistaVac('historico',event)">📚 Histórico</button>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="limpiarFiltrosVac()">✕ Limpiar filtros</button>
+        </div>
+        <div class="filtros">
+          <div><label>Empleado</label><select id="filtroVacEmpleado" onchange="renderVacaciones()"><option value="">Todos</option></select></div>
+          <div><label>Desde</label><input type="date" id="filtroVacDesde" onchange="renderVacaciones()" /></div>
+          <div><label>Hasta</label><input type="date" id="filtroVacHasta" onchange="renderVacaciones()" /></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Desde</th><th>Hasta</th><th>Días</th><th>Observaciones</th><th>Cargado por</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaVac"></tbody>
+          </table>
+        </div>
+        <div id="resumenVac" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <!-- Resumen por empleado -->
+    <div class="section">
+      <div class="section-title">Resumen por Empleado (año <span id="anioResumen">—</span>)</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Empleado</th><th>Días tomados</th><th>Tope</th><th>Disponibles</th><th>Estado</th></tr></thead>
+          <tbody id="tablaVacResumen"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="notif" id="notif"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, getDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// Lista de empleados (se sincroniza con config/empleados de sueldos)
+let EMPLEADOS = [
+  { nombre:'Bruno Cola',        iniciales:'BC', esSocio:true  },
+  { nombre:'Pablo Mazzolin',    iniciales:'PM', esSocio:true  },
+  { nombre:'Daniel Nievas',     iniciales:'DN', esSocio:true  },
+  { nombre:'Adrián Juri',       iniciales:'AJ', esSocio:true  },
+  { nombre:'Diego Gómez',       iniciales:'DG', esSocio:true  },
+  { nombre:'Sebastián Olivero', iniciales:'SO', esSocio:true  },
+  { nombre:'María Angeles',     iniciales:'MA', esSocio:false },
+  { nombre:'Francisco',         iniciales:'FR', esSocio:false },
+  { nombre:'Ramiro',            iniciales:'RM', esSocio:false },
+  { nombre:'Héctor',            iniciales:'HE', esSocio:false },
+  { nombre:'Matías',            iniciales:'MT', esSocio:false },
+];
+
+// Estado en memoria
+let currentUser = null;
+let allVac = [];           // todos los registros de vacaciones
+let topeAnio = 14;         // tope de días por año (configurable)
+
+// ── HELPERS ──────────────────────────────────────────────
+function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR'); }
+function today(){ return new Date().toLocaleDateString('es-AR'); }
+
+function toast(msg,type=''){
+  const el=document.getElementById('notif');
+  el.textContent=msg; el.className='notif '+type;
+  setTimeout(()=>el.classList.add('show'),10);
+  setTimeout(()=>el.classList.remove('show'),3000);
+}
+
+function mostrarSistema(user){
+  currentUser = user;
+  document.getElementById('sistema').style.display='block';
+  const rolLabel = user.rol==='admin'?'👑 Admin':user.rol==='cargador'?'✏️ Cargador':'👁 Viewer';
+  document.getElementById('userBadge').textContent=rolLabel+' '+user.nombre;
+  // Mostrar secciones según rol: solo admin puede registrar y configurar tope
+  const esAdmin = user.rol==='admin';
+  document.getElementById('cardConfig').style.display = esAdmin?'':'none';
+  document.getElementById('cardRegistrar').style.display = esAdmin?'':'none';
+  initFirestore();
+}
+
+// SESION CENTRALIZADA
+window.cerrarSesion=function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('vacaciones.html','index.html'); };
+document.addEventListener('DOMContentLoaded', function(){
+  const _gcSesion = localStorage.getItem('gc_user');
+  if(!_gcSesion){ location.href=location.origin+location.pathname.replace('vacaciones.html','index.html'); return; }
+  mostrarSistema(JSON.parse(_gcSesion));
+});
+
+function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
+
+// ── FIRESTORE ────────────────────────────────────────────
+function initFirestore(){
+  // Snapshot de vacaciones
+  onSnapshot(collection(db,'vacaciones'), snap=>{
+    allVac=snap.docs.map(d=>({id:d.id,...d.data()}));
+    allVac.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    renderVacaciones();
+  });
+  // Snapshot del tope anual (config/vacaciones)
+  onSnapshot(doc(db,'config','vacaciones'), snap=>{
+    if(snap.exists()){
+      topeAnio = Number(snap.data().topeAnio)||14;
+      const el=document.getElementById('topeAnioInput');
+      if(el) el.value=topeAnio;
+    }
+    const sub=document.getElementById('configSub');
+    if(sub) sub.textContent='Tope actual: '+topeAnio+' días por empleado por año · tocá para cambiar';
+    renderVacaciones();
+  });
+  // Snapshot de la lista de empleados (compartida con sueldos)
+  onSnapshot(doc(db,'config','empleados'), snap=>{
+    if(snap.exists()){
+      const lista=snap.data().lista||[];
+      if(Array.isArray(lista)&&lista.length>0){
+        EMPLEADOS=lista.map(e=>({
+          nombre:String(e.nombre||'').trim(),
+          iniciales:(e.iniciales||'').toUpperCase(),
+          esSocio:!!e.esSocio
+        })).filter(e=>e.nombre);
+      }
+    }
+    refrescarSelectsEmpleados();
+    renderVacaciones();
+  });
+  refrescarSelectsEmpleados();
+}
+
+// Llena los selects de empleado (formulario + filtro)
+function refrescarSelectsEmpleados(){
+  const sel1=document.getElementById('vacEmpleado');
+  const sel2=document.getElementById('filtroVacEmpleado');
+  const v1=sel1?.value, v2=sel2?.value;
+  if(sel1){
+    sel1.innerHTML='';
+    EMPLEADOS.forEach(e=>{ const o=document.createElement('option'); o.value=e.nombre; o.textContent=e.nombre; sel1.appendChild(o); });
+    if(v1) sel1.value=v1;
+  }
+  if(sel2){
+    sel2.innerHTML='<option value="">Todos</option>';
+    EMPLEADOS.forEach(e=>{ const o=document.createElement('option'); o.value=e.nombre; o.textContent=e.nombre; sel2.appendChild(o); });
+    if(v2) sel2.value=v2;
+  }
+}
+
+// ── CÁLCULO DE DÍAS ──────────────────────────────────────
+// Días naturales entre dos fechas (inclusivo). Ej: 2024-06-10 a 2024-06-14 = 5 días.
+function diasEntre(desde, hasta){
+  if(!desde || !hasta) return 0;
+  const d1=new Date(desde+'T00:00:00');
+  const d2=new Date(hasta+'T00:00:00');
+  if(isNaN(d1.getTime())||isNaN(d2.getTime())) return 0;
+  const diff=Math.round((d2-d1)/86400000)+1;
+  return diff>0?diff:0;
+}
+
+window.calcularDiasVac=function(){
+  const desde=document.getElementById('vacDesde')?.value||'';
+  const hasta=document.getElementById('vacHasta')?.value||'';
+  const dias=diasEntre(desde,hasta);
+  const el=document.getElementById('vacDias');
+  if(el) el.value=dias>0?dias+' día'+(dias===1?'':'s'):'';
+};
+
+// ── GUARDAR / ELIMINAR ───────────────────────────────────
+window.guardarVacacion=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso. Solo admin puede cargar vacaciones.','error');return;}
+  const empleado=document.getElementById('vacEmpleado').value;
+  const desde=document.getElementById('vacDesde').value;
+  const hasta=document.getElementById('vacHasta').value;
+  const obs=document.getElementById('vacObs').value.trim();
+  if(!empleado||!desde||!hasta){toast('Completá empleado, fecha desde y fecha hasta','error');return;}
+  const dias=diasEntre(desde,hasta);
+  if(dias<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
+  // Aviso (no bloqueante) si se pasa del tope anual
+  const anioActual=new Date().getFullYear();
+  const yaTomados=allVac
+    .filter(v=>v.empleado===empleado)
+    .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
+  if(yaTomados+dias>topeAnio){
+    if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando el tope de '+topeAnio+'.\n\n¿Querés registrar igual?')) return;
+  }
+  try {
+    await addDoc(collection(db,'vacaciones'),{
+      empleado, desde, hasta, dias, obs,
+      creadoPor:currentUser.nombre, ts:Date.now()
+    });
+    document.getElementById('vacDesde').value='';
+    document.getElementById('vacHasta').value='';
+    document.getElementById('vacObs').value='';
+    document.getElementById('vacDias').value='';
+    toast('Vacaciones guardadas ✓','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+window.eliminarVac=async function(id){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  if(!confirm('¿Eliminar estas vacaciones?')) return;
+  await deleteDoc(doc(db,'vacaciones',id));
+  toast('Eliminado','error');
+};
+
+window.guardarTope=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const nuevo=parseInt(document.getElementById('topeAnioInput').value)||0;
+  if(nuevo<0||nuevo>60){toast('El tope debe estar entre 0 y 60 días','error');return;}
+  try {
+    await setDoc(doc(db,'config','vacaciones'),{
+      topeAnio:nuevo,
+      updatedAt:new Date().toISOString(),
+      updatedBy:currentUser?.nombre||'unknown'
+    });
+    toast('Tope guardado ✓','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+// ── RENDER PRINCIPAL ─────────────────────────────────────
+window.renderVacaciones=function(){
+  const hoy=new Date();
+  const mes=hoy.getMonth();
+  const anio=hoy.getFullYear();
+  const anioActual=anio;
+  document.getElementById('anioResumen').textContent=anioActual;
+
+  // Vista: 'mes' (solo registros que tocan el mes actual) o 'historico' (todos)
+  const vista = window.vistaVac || 'mes';
+
+  // Filtra registros por vista
+  const base = (vista==='historico') ? allVac : allVac.filter(r=>{
+    if(!r.desde || !r.hasta) return false;
+    const d1=new Date(r.desde+'T00:00:00');
+    const d2=new Date(r.hasta+'T00:00:00');
+    // El registro toca el mes actual si algún día del rango cae en este mes
+    const inicioMes=new Date(anio,mes,1);
+    const finMes=new Date(anio,mes+1,0,23,59,59);
+    return d1<=finMes && d2>=inicioMes;
+  });
+
+  // Filtros del usuario
+  const fEmp=document.getElementById('filtroVacEmpleado')?.value||'';
+  const fD=document.getElementById('filtroVacDesde')?.value||'';
+  const fH=document.getElementById('filtroVacHasta')?.value||'';
+  const fil=base.filter(r=>{
+    if(fEmp&&r.empleado!==fEmp) return false;
+    if(fD&&r.desde<fD) return false;
+    if(fH&&r.hasta>fH) return false;
+    return true;
+  });
+
+  // ── Stats arriba
+  // Total días en el año (todos los empleados)
+  const diasAnio=allVac
+    .filter(v=>{ if(!v.desde) return false; const d=new Date(v.desde+'T00:00:00'); return d.getFullYear()===anioActual; })
+    .reduce((s,v)=>s+Number(v.dias||0),0);
+  document.getElementById('totDiasAnio').textContent=diasAnio;
+
+  // Días disponibles = tope * cantidad de empleados - díasAnio
+  const diasDisp=Math.max(0, topeAnio*EMPLEADOS.length - diasAnio);
+  document.getElementById('totDiasDisp').textContent=diasDisp;
+
+  // En vacaciones ahora (registros cuyo rango incluye hoy)
+  const hoyStr=hoy.toISOString().substring(0,10);
+  const enVacNow=allVac.filter(v=>v.desde<=hoyStr && v.hasta>=hoyStr).length;
+  document.getElementById('totAhora').textContent=enVacNow;
+
+  // Registros del mes actual (que tocan el mes)
+  const regMes=allVac.filter(r=>{
+    if(!r.desde||!r.hasta) return false;
+    const d1=new Date(r.desde+'T00:00:00');
+    const d2=new Date(r.hasta+'T00:00:00');
+    const inicioMes=new Date(anio,mes,1);
+    const finMes=new Date(anio,mes+1,0,23,59,59);
+    return d1<=finMes && d2>=inicioMes;
+  }).length;
+  document.getElementById('totRegMes').textContent=regMes;
+
+  // Total registros
+  document.getElementById('totRegGral').textContent=allVac.length;
+
+  // ── Tabla de registros
+  const esAdmin=currentUser?.rol==='admin';
+  document.getElementById('tablaVac').innerHTML=fil.map(r=>`
+    <tr>
+      <td><strong>${r.empleado}</strong></td>
+      <td>${r.desde?r.desde.split('-').reverse().join('/'):'-'}</td>
+      <td>${r.hasta?r.hasta.split('-').reverse().join('/'):'-'}</td>
+      <td style="color:#d97706;font-weight:600">${r.dias||0} día${(r.dias||0)===1?'':'s'}</td>
+      <td>${r.obs||'-'}</td>
+      <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
+      <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑</button>`:''}</td>
+    </tr>
+  `).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
+
+  // Resumen abajo de la tabla
+  const totDiasFil=fil.reduce((s,r)=>s+Number(r.dias||0),0);
+  document.getElementById('resumenVac').innerHTML=`<span>📄 ${fil.length} registros</span><span style="color:#d97706">Días: ${totDiasFil}</span>`;
+
+  // Subtítulo dinámico de la card
+  const sub=document.getElementById('registrosVacSub');
+  if(sub){
+    const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes];
+    if(vista==='historico'){
+      sub.textContent=`${allVac.length} registros históricos · tocá para ver`;
+    } else {
+      sub.textContent=`${regMes} registro${regMes===1?'':'s'} en ${nombreMes} · tocá para ver`;
+    }
+  }
+
+  // ── Resumen por empleado
+  const mapa={};
+  EMPLEADOS.forEach(e=>{ mapa[e.nombre]={dias:0,esSocio:e.esSocio,iniciales:e.iniciales}; });
+  allVac.forEach(v=>{
+    if(!v.desde) return;
+    const d=new Date(v.desde+'T00:00:00');
+    if(d.getFullYear()===anioActual && mapa[v.empleado]){
+      mapa[v.empleado].dias+=Number(v.dias||0);
+    }
+  });
+  document.getElementById('tablaVacResumen').innerHTML=EMPLEADOS.map(e=>{
+    const m=mapa[e.nombre]||{dias:0};
+    const disp=topeAnio-m.dias;
+    let badge, badgeClass;
+    if(m.dias===0){ badge='Sin usar'; badgeClass='badge-warn'; }
+    else if(m.dias<topeAnio){ badge='Al día'; badgeClass='badge-ok'; }
+    else if(m.dias===topeAnio){ badge='Completo'; badgeClass='badge-ok'; }
+    else { badge='Excedido'; badgeClass='badge-danger'; }
+    return `<tr>
+      <td><strong>${e.nombre}</strong></td>
+      <td style="color:#d97706;font-weight:600">${m.dias}</td>
+      <td>${topeAnio}</td>
+      <td style="color:${disp>0?'#16a34a':'#dc2626'};font-weight:600">${disp}</td>
+      <td><span class="badge ${badgeClass}">${badge}</span></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888">Sin empleados</td></tr>';
+
+  ocultarSpinner();
+};
+
+// ── EXCEL ────────────────────────────────────────────────
+window.exportarVacExcel=function(ev){
+  if(ev){ ev.stopPropagation(); }
+  const wb=XLSX.utils.book_new();
+  const data=[['Empleado','Desde','Hasta','Días','Observaciones','Cargado por']];
+  allVac.forEach(r=>data.push([
+    r.empleado||'',
+    r.desde?r.desde.split('-').reverse().join('/'):'',
+    r.hasta?r.hasta.split('-').reverse().join('/'):'',
+    Number(r.dias||0),
+    r.obs||'',
+    r.creadoPor||''
+  ]));
+  const ws=XLSX.utils.aoa_to_sheet(data);
+  ws['!autofilter']={ref:'A1:F1'};
+  ws['!cols']=[{wch:18},{wch:12},{wch:12},{wch:8},{wch:24},{wch:14}];
+  XLSX.utils.book_append_sheet(wb,ws,'Vacaciones');
+
+  // Segunda hoja: resumen por empleado
+  const anioActual=new Date().getFullYear();
+  const mapa={};
+  EMPLEADOS.forEach(e=>{ mapa[e.nombre]={dias:0}; });
+  allVac.forEach(v=>{
+    if(!v.desde) return;
+    const d=new Date(v.desde+'T00:00:00');
+    if(d.getFullYear()===anioActual && mapa[v.empleado]){
+      mapa[v.empleado].dias+=Number(v.dias||0);
+    }
+  });
+  const resu=[['Empleado','Días tomados','Tope','Disponibles','Estado']];
+  EMPLEADOS.forEach(e=>{
+    const m=mapa[e.nombre]||{dias:0};
+    const disp=topeAnio-m.dias;
+    let estado;
+    if(m.dias===0) estado='Sin usar';
+    else if(m.dias<topeAnio) estado='Al día';
+    else if(m.dias===topeAnio) estado='Completo';
+    else estado='Excedido';
+    resu.push([e.nombre,m.dias,topeAnio,disp,estado]);
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(resu);
+  ws2['!cols']=[{wch:18},{wch:12},{wch:8},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Resumen '+anioActual);
+
+  XLSX.writeFile(wb,'Vacaciones_'+today().replace(/\//g,'-')+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
+window.limpiarFiltrosVac=function(){
+  ['filtroVacEmpleado','filtroVacDesde','filtroVacHasta'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  renderVacaciones();
+};
+
+</script>
+</body>
+</html>
