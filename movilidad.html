@@ -123,6 +123,20 @@ tr:hover td{background:#fafbff;}
     }
     if(typeof window.renderMovilidad === 'function') window.renderMovilidad();
   };
+  // Lo mismo para Fines de Semana
+  window.vistaFS = 'mes';
+  window.setVistaFS = function(v, ev){
+    if(ev){ ev.stopPropagation(); }
+    window.vistaFS = v;
+    var buttons = document.querySelectorAll('#toggleVistaFS button');
+    buttons.forEach(function(b){ b.classList.remove('active'); });
+    if(ev && ev.target){ ev.target.classList.add('active'); }
+    else {
+      var idx = (v==='historico') ? 1 : 0;
+      if(buttons[idx]) buttons[idx].classList.add('active');
+    }
+    if(typeof window.renderFS === 'function') window.renderFS();
+  };
 </script>
 
 <div id="spinnerOverlay" class="spinner-overlay">
@@ -291,30 +305,48 @@ tr:hover td{background:#fafbff;}
         <button class="btn btn-primary" onclick="guardarFS()">💾 Guardar</button>
       </div>
 
-      <div class="section">
-        <div class="section-title">
-          Registros de Fines de Semana
-          <button class="btn btn-success btn-sm" onclick="exportarFSExcel()">📊 Excel</button>
-        </div>
-        <div class="filtros">
-          <div><label>Empleado</label>
-            <select id="filtroFSEmpleado" onchange="renderFS()">
-              <option value="">Todos</option>
-              <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
-              <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
-            </select>
+      <!-- Tabla registros FS (card colapsable) -->
+      <div class="registros-card" id="cardRegistrosFS">
+        <div class="registros-card-header" onclick="toggleCard('cardRegistrosFS')">
+          <div class="registros-card-header-left">
+            <div class="registros-card-icon">🗓️</div>
+            <div>
+              <div class="registros-card-title">Registros de Fines de Semana</div>
+              <div class="registros-card-sub" id="registrosFsSub">Tocá para ver</div>
+            </div>
           </div>
-          <div><label>Desde</label><input type="date" id="filtroFSDesde" onchange="renderFS()" /></div>
-          <div><label>Hasta</label><input type="date" id="filtroFSHasta" onchange="renderFS()" /></div>
-          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosFS()" style="width:100%">✕ Limpiar</button></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button class="btn btn-success btn-sm" onclick="exportarFSExcel(event)">📊 Excel</button>
+            <div class="registros-card-toggle">▾</div>
+          </div>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Empleado</th><th>Fecha</th><th>Monto</th><th>Observaciones</th><th>Cargado por</th><th>Acciones</th></tr></thead>
-            <tbody id="tablaFS"></tbody>
-          </table>
+        <div class="registros-card-body">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+            <div class="seg-toggle" id="toggleVistaFS">
+              <button class="active" onclick="setVistaFS('mes',event)">📅 Mes actual</button>
+              <button onclick="setVistaFS('historico',event)">📚 Histórico</button>
+            </div>
+            <button class="btn btn-outline btn-sm" onclick="limpiarFiltrosFS()">✕ Limpiar filtros</button>
+          </div>
+          <div class="filtros">
+            <div><label>Empleado</label>
+              <select id="filtroFSEmpleado" onchange="renderFS()">
+                <option value="">Todos</option>
+                <option>ADRIAN</option><option>DANIEL</option><option>BRUNO</option>
+                <option>DIEGO</option><option>PABLO</option><option>SEBASTIAN</option>
+              </select>
+            </div>
+            <div><label>Desde</label><input type="date" id="filtroFSDesde" onchange="renderFS()" /></div>
+            <div><label>Hasta</label><input type="date" id="filtroFSHasta" onchange="renderFS()" /></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Empleado</th><th>Fecha</th><th>Monto</th><th>Observaciones</th><th>Cargado por</th><th>Acciones</th></tr></thead>
+              <tbody id="tablaFS"></tbody>
+            </table>
+          </div>
+          <div id="resumenFS" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
         </div>
-        <div id="resumenFS" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
       </div>
 
       <div class="section">
@@ -634,7 +666,16 @@ window.renderFS=function(){
   const fD=document.getElementById('filtroFSDesde')?.value||'';
   const fH=document.getElementById('filtroFSHasta')?.value||'';
   const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
-  let fil=allFS.filter(r=>{
+  // Vista actual: 'mes' (solo mes actual) o 'historico' (todos)
+  const vista = window.vistaFS || 'mes';
+  // Base según vista
+  let base = (vista==='historico') ? allFS : allFS.filter(r=>{
+    if(!r.fecha) return false;
+    const d=new Date(r.fecha+'T00:00:00');
+    return d.getMonth()===mes && d.getFullYear()===anio;
+  });
+  // Aplica filtros del usuario encima de la base
+  let fil=base.filter(r=>{
     if(fEmp&&r.empleado!==fEmp) return false;
     if(fD&&r.fecha<fD) return false;
     if(fH&&r.fecha>fH) return false;
@@ -655,6 +696,16 @@ window.renderFS=function(){
   </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
   const tot=fil.reduce((s,r)=>s+Number(r.monto||0),0);
   document.getElementById('resumenFS').innerHTML=`<span>📄 ${fil.length} registros</span><span style="color:#16a34a">Total: ${fmtMoney(tot)}</span>`;
+  // Subtítulo dinámico de la card (visible sin abrir)
+  const sub=document.getElementById('registrosFsSub');
+  if(sub){
+    const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes];
+    if(vista==='historico'){
+      sub.textContent = `${allFS.length} registros históricos · tocá para ver`;
+    } else {
+      sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
+    }
+  }
   const mapa={};
   allFS.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={cant:0,total:0};mapa[r.empleado].cant++;mapa[r.empleado].total+=Number(r.monto||0);});
   document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
@@ -662,7 +713,8 @@ window.renderFS=function(){
 
 window.eliminarFS=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
 window.limpiarFiltrosFS=function(){['filtroFSEmpleado','filtroFSDesde','filtroFSHasta'].forEach(id=>document.getElementById(id).value='');renderFS();};
-window.exportarFSExcel=function(){
+window.exportarFSExcel=function(ev){
+  if(ev){ ev.stopPropagation(); }
   const wb=XLSX.utils.book_new();
   const data=[['Empleado','Fecha','Monto','Observaciones','Cargado por']];
   allFS.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',Number(r.monto||0),r.obs||'',r.creadoPor||'']));
