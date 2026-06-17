@@ -233,7 +233,7 @@ tr:hover td{background:#fafbff;}
       <div class="section-title">Resumen por Empleado (año <span id="anioResumen">—</span>)</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Empleado</th><th>Días tomados</th><th>Tope</th><th>Disponibles</th><th>Estado</th></tr></thead>
+          <thead><tr><th>Empleado</th><th>Días tomados</th><th>Tope base</th><th>Acumulado</th><th>Tope total</th><th>Disponibles</th><th>Estado</th></tr></thead>
           <tbody id="tablaVacResumen"></tbody>
         </table>
       </div>
@@ -292,11 +292,51 @@ function toast(msg,type=''){
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
-// Devuelve el tope de un empleado (de topePorEmpleado o TOPE_DEFAULT si no está seteado)
+// Devuelve el tope base de un empleado (de topePorEmpleado o TOPE_DEFAULT si no está seteado)
 function topeDe(empleado){
   const v = topePorEmpleado[empleado];
   if(v === undefined || v === null || isNaN(v)) return TOPE_DEFAULT;
   return Number(v);
+}
+
+// Días de vacaciones tomados por un empleado en un año específico
+function diasTomadosEnAnio(empleado, anio){
+  return allVac
+    .filter(v=>v.empleado===empleado && v.desde)
+    .reduce((s,v)=>{
+      const d=new Date(v.desde+'T00:00:00');
+      if(d.getFullYear()===anio) return s+Number(v.dias||0);
+      return s;
+    },0);
+}
+
+// Saldo acumulado de años anteriores (días no tomados que se arrastran al año actual).
+// Recorre desde el primer año con registro hasta el año anterior al actual,
+// sumando (tope_del_empleado - dias_tomados) de cada año. Si el resultado es negativo, se ignora (no se puede deber).
+function saldoAcumulado(empleado, anioActual){
+  // Encontrar el primer año con vacaciones registradas para este empleado
+  let primerAnio = anioActual;
+  allVac.forEach(v=>{
+    if(v.empleado===empleado && v.desde){
+      const a=new Date(v.desde+'T00:00:00').getFullYear();
+      if(a<primerAnio) primerAnio=a;
+    }
+  });
+  // Sumar saldos no negativos de cada año desde primerAnio hasta anioActual-1
+  let saldo=0;
+  for(let a=primerAnio; a<anioActual; a++){
+    const topeAnio = topeDe(empleado);  // mismo tope para todos los años (no guardamos histórico de topes)
+    const tomados = diasTomadosEnAnio(empleado, a);
+    const saldoAnio = topeAnio - tomados;
+    if(saldoAnio>0) saldo += saldoAnio;
+    // Si saldoAnio es negativo o cero, no acumula (no se puede deber vacaciones)
+  }
+  return saldo;
+}
+
+// Tope efectivo del año = tope base + saldo acumulado de años anteriores
+function topeEfectivo(empleado, anioActual){
+  return topeDe(empleado) + saldoAcumulado(empleado, anioActual);
 }
 
 function mostrarSistema(user){
@@ -450,14 +490,17 @@ window.guardarVacacion=async function(){
   if(!empleado||!desde||!hasta){toast('Completá empleado, fecha desde y fecha hasta','error');return;}
   const dias=diasEntre(desde,hasta);
   if(dias<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
-  // Aviso (no bloqueante) si se pasa del tope anual de este empleado
+  // Aviso (no bloqueante) si se pasa del tope anual efectivo (base + acumulado de años anteriores)
   const anioActual=new Date().getFullYear();
   const yaTomados=allVac
     .filter(v=>v.empleado===empleado)
     .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
-  const topeEmp = topeDe(empleado);
+  const topeBase = topeDe(empleado);
+  const acum = saldoAcumulado(empleado, anioActual);
+  const topeEmp = topeBase + acum;  // tope efectivo = base + saldo acumulado
+  const msgAcum = acum>0 ? ` (base ${topeBase} + ${acum} acumulados de años anteriores)` : '';
   if(yaTomados+dias>topeEmp){
-    if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+'.\n\n¿Querés registrar igual?')) return;
+    if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+msgAcum+'.\n\n¿Querés registrar igual?')) return;
   }
   try {
     await addDoc(collection(db,'vacaciones'),{
@@ -473,7 +516,7 @@ window.guardarVacacion=async function(){
 };
 
 window.eliminarVac=async function(id){
-  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  if(currentUser?.rol!=='admin' && currentUser?.rol!=='cargador'){toast('Sin permiso','error');return;}
   if(!confirm('¿Eliminar estas vacaciones? Esta acción no se puede deshacer.')) return;
   await deleteDoc(doc(db,'vacaciones',id));
   toast('Vacaciones eliminadas','error');
@@ -519,8 +562,8 @@ window.renderVacaciones=function(){
     .reduce((s,v)=>s+Number(v.dias||0),0);
   document.getElementById('totDiasAnio').textContent=diasAnio;
 
-  // Días disponibles = suma de topes individuales - díasAnio
-  const sumaTopes = EMPLEADOS.reduce((s,e)=>s+topeDe(e.nombre),0);
+  // Días disponibles = suma de topes efectivos (base + acumulado) - díasAnio
+  const sumaTopes = EMPLEADOS.reduce((s,e)=>s+topeEfectivo(e.nombre, anioActual),0);
   const diasDisp=Math.max(0, sumaTopes - diasAnio);
   document.getElementById('totDiasDisp').textContent=diasDisp;
 
@@ -545,6 +588,9 @@ window.renderVacaciones=function(){
 
   // ── Tabla de registros
   const esAdmin=currentUser?.rol==='admin';
+  const esCargador=currentUser?.rol==='cargador';
+  // Tanto admin como cargador pueden eliminar registros (por si se equivocan al cargar)
+  // Viewer no ve el botón.
   document.getElementById('tablaVac').innerHTML=fil.map(r=>`
     <tr>
       <td><strong>${r.empleado}</strong></td>
@@ -553,7 +599,7 @@ window.renderVacaciones=function(){
       <td style="color:#d97706;font-weight:600">${r.dias||0} día${(r.dias||0)===1?'':'s'}</td>
       <td>${r.obs||'-'}</td>
       <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
-      <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑 Eliminar</button>`:''}</td>
+      <td>${(esAdmin||esCargador)?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑 Eliminar</button>`:''}</td>
     </tr>
   `).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
 
@@ -584,21 +630,25 @@ window.renderVacaciones=function(){
   });
   document.getElementById('tablaVacResumen').innerHTML=EMPLEADOS.map(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const topeEmp = topeDe(e.nombre);
-    const disp=topeEmp-m.dias;
+    const topeBase = topeDe(e.nombre);
+    const acum = saldoAcumulado(e.nombre, anioActual);
+    const topeTotal = topeBase + acum;
+    const disp=topeTotal-m.dias;
     let badge, badgeClass;
     if(m.dias===0){ badge='Sin usar'; badgeClass='badge-warn'; }
-    else if(m.dias<topeEmp){ badge='Al día'; badgeClass='badge-ok'; }
-    else if(m.dias===topeEmp){ badge='Completo'; badgeClass='badge-ok'; }
+    else if(m.dias<topeTotal){ badge='Al día'; badgeClass='badge-ok'; }
+    else if(m.dias===topeTotal){ badge='Completo'; badgeClass='badge-ok'; }
     else { badge='Excedido'; badgeClass='badge-danger'; }
     return `<tr>
       <td><strong>${e.nombre}</strong></td>
       <td style="color:#d97706;font-weight:600">${m.dias}</td>
-      <td>${topeEmp}</td>
+      <td>${topeBase}</td>
+      <td style="color:${acum>0?'#16a34a':'#94a3b8'};font-weight:600">${acum>0?'+'+acum:'—'}</td>
+      <td style="font-weight:700;color:#1e3a8a">${topeTotal}</td>
       <td style="color:${disp>0?'#16a34a':'#dc2626'};font-weight:600">${disp}</td>
       <td><span class="badge ${badgeClass}">${badge}</span></td>
     </tr>`;
-  }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888">Sin empleados</td></tr>';
+  }).join('')||'<tr><td colspan="7" style="text-align:center;color:#888">Sin empleados</td></tr>';
 
   ocultarSpinner();
 };
@@ -632,20 +682,22 @@ window.exportarVacExcel=function(ev){
       mapa[v.empleado].dias+=Number(v.dias||0);
     }
   });
-  const resu=[['Empleado','Días tomados','Tope','Disponibles','Estado']];
+  const resu=[['Empleado','Días tomados','Tope base','Acumulado','Tope total','Disponibles','Estado']];
   EMPLEADOS.forEach(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const topeEmp = topeDe(e.nombre);
-    const disp=topeEmp-m.dias;
+    const topeBase = topeDe(e.nombre);
+    const acum = saldoAcumulado(e.nombre, anioActual);
+    const topeTotal = topeBase + acum;
+    const disp=topeTotal-m.dias;
     let estado;
     if(m.dias===0) estado='Sin usar';
-    else if(m.dias<topeEmp) estado='Al día';
-    else if(m.dias===topeEmp) estado='Completo';
+    else if(m.dias<topeTotal) estado='Al día';
+    else if(m.dias===topeTotal) estado='Completo';
     else estado='Excedido';
-    resu.push([e.nombre,m.dias,topeEmp,disp,estado]);
+    resu.push([e.nombre,m.dias,topeBase,acum,topeTotal,disp,estado]);
   });
   const ws2=XLSX.utils.aoa_to_sheet(resu);
-  ws2['!cols']=[{wch:18},{wch:12},{wch:8},{wch:12},{wch:12}];
+  ws2['!cols']=[{wch:18},{wch:12},{wch:10},{wch:11},{wch:11},{wch:12},{wch:12}];
   XLSX.utils.book_append_sheet(wb,ws2,'Resumen '+anioActual);
 
   XLSX.writeFile(wb,'Vacaciones_'+today().replace(/\//g,'-')+'.xlsx');
