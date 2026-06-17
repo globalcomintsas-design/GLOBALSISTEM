@@ -136,42 +136,32 @@ tr:hover td{background:#fafbff;}
       <div class="card"><div class="card-label">Total registros</div><div class="card-value" id="totRegGral">0</div></div>
     </div>
 
-    <!-- Configuración tope anual (solo admin) -->
+    <!-- Configuración topes anuales por empleado (solo admin) -->
     <div class="destinos-card" id="cardConfig" style="display:none">
       <div class="destinos-card-header" onclick="toggleCard('cardConfig')">
         <div class="destinos-card-header-left">
           <div class="destinos-card-icon">⚙️</div>
           <div>
-            <div class="destinos-card-title">Configuración del tope anual y alertas</div>
-            <div class="destinos-card-sub" id="configSub">Tocá para cambiar el tope y configurar alertas por mail</div>
+            <div class="destinos-card-title">Topes anuales por empleado</div>
+            <div class="destinos-card-sub" id="configSub">Tocá para cambiar el tope de días de cada empleado</div>
           </div>
         </div>
         <div class="destinos-card-toggle">▾</div>
       </div>
       <div class="destinos-card-body">
-        <div style="display:flex;align-items:center;gap:12px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;margin-bottom:12px;">
-          <span style="font-weight:600;color:#1e3a8a;font-size:13px">Tope de días de vacaciones por empleado por año:</span>
-          <input type="number" id="topeAnioInput" value="14" min="0" max="60" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" />
-          <button class="btn btn-success btn-sm" onclick="guardarTope()">💾 Guardar tope</button>
-          <span style="font-size:11px;color:#888;">El tope aplica a todos los empleados por igual</span>
+        <div style="background:#eff6ff;padding:10px 12px;border-radius:10px;border:1px solid #bfdbfe;margin-bottom:12px;font-size:12px;color:#1e3a8a;">
+          💡 Seteá el tope de días de vacaciones que le corresponde a cada empleado por año. Si cambiás un tope, tocá <strong>💾 Guardar</strong> abajo para que persista.
         </div>
-
-        <!-- Alertas por mail -->
-        <div style="background:#fef3c7;padding:12px;border-radius:10px;border:1px solid #fde68a;">
-          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-            <div>
-              <div style="font-weight:600;color:#92400e;font-size:13px;display:flex;align-items:center;gap:6px;">
-                🔔 Alertas por mail
-                <span id="mailStatus" style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fee2e2;color:#dc2626;font-weight:700;">NO CONFIGURADO</span>
-              </div>
-              <div style="font-size:11px;color:#92400e;margin-top:4px;max-width:540px;">
-                Cada vez que se registre una vacación nueva, se manda un mail a Bruno.
-                Para activar: andá a <strong>web3forms.com</strong>, ingresá el mail de Bruno, recibí tu access key por mail,
-                y reemplazá <code style="background:#fff;padding:1px 5px;border-radius:3px;">TU_ACCESS_KEY_ACA</code> en el código (variable <code style="background:#fff;padding:1px 5px;border-radius:3px;">WEB3FORMS_ACCESS_KEY</code> cerca de la línea 284).
-              </div>
-            </div>
-            <button class="btn btn-primary btn-sm" onclick="probarMail()">🧪 Probar mail</button>
-          </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Tipo</th><th>Tope anual (días)</th></tr></thead>
+            <tbody id="topesGrid"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <button class="btn btn-success btn-sm" onclick="guardarTopes()">💾 Guardar topes</button>
+          <button class="btn btn-outline btn-sm" onclick="resetTopes()">↺ Resetear a 14</button>
+          <span style="font-size:11px;color:#888;">Los cambios se guardan en <code>config/topes-vacaciones</code></span>
         </div>
       </div>
     </div>
@@ -288,53 +278,8 @@ let EMPLEADOS = [
 // Estado en memoria
 let currentUser = null;
 let allVac = [];           // todos los registros de vacaciones
-let topeAnio = 14;         // tope de días por año (configurable)
-
-// ── CONFIGURACIÓN DE ALERTAS POR MAIL ────────────────────
-// Para activar las alertas por mail:
-// 1. Andá a https://web3forms.com (no requiere cuenta)
-// 2. Ingresá el mail de Bruno (donde querés recibir las alertas)
-// 3. Te van a mandar un mail con tu ACCESS KEY
-// 4. Reemplazá 'TU_ACCESS_KEY_ACA' por esa key abajo
-// 5. Guardá y subí el archivo al hosting
-// Mientras la key sea 'TU_ACCESS_KEY_ACA', el sistema va a simular el envío
-// (no va a mandar nada real) pero va a mostrar que está "configurado".
-const WEB3FORMS_ACCESS_KEY = 'bce5be01-1dfe-4c2d-8c07-b747d0770df0';
-const ALERTA_MAIL_DESTINO = 'bruno@globalcomint.com'; // solo informativo: Web3Forms envía al mail registrado con la key
-
-function mailConfigurado(){
-  return WEB3FORMS_ACCESS_KEY && WEB3FORMS_ACCESS_KEY !== 'TU_ACCESS_KEY_ACA' && WEB3FORMS_ACCESS_KEY.length > 10;
-}
-
-// Envía una alerta por mail vía Web3Forms.
-// Es async pero NO bloquea: si falla, no afecta el guardado en Firestore.
-async function enviarAlertaMail(asunto, mensajeHtml){
-  if(!mailConfigurado()){
-    console.info('[Vacaciones] Alerta por mail NO enviada (falta configurar WEB3FORMS_ACCESS_KEY). Asunto:', asunto);
-    return { success:false, motivo:'no-configurado' };
-  }
-  try {
-    const res = await fetch('https://api.web3forms.com/submit', {
-      method:'POST',
-      headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
-      body: JSON.stringify({
-        access_key: WEB3FORMS_ACCESS_KEY,
-        subject: asunto,
-        from_name: 'Sistema Vacaciones · GLOBALCOMINT',
-        name: 'Sistema Vacaciones',
-        email: 'noreply@globalcomint.com',
-        message: mensajeHtml,
-        // Honeypot anti-spam (campo oculto que los bots llenan)
-        botcheck: ''
-      })
-    });
-    const data = await res.json();
-    return { success: data.success===true, data };
-  } catch(e){
-    console.warn('[Vacaciones] Error enviando mail:', e);
-    return { success:false, motivo:'error', error:e.message };
-  }
-}
+let topePorEmpleado = {};  // { 'Bruno Cola': 14, 'María Angeles': 10, ... }
+const TOPE_DEFAULT = 14;   // tope por defecto si no hay config
 
 // ── HELPERS ──────────────────────────────────────────────
 function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR'); }
@@ -347,28 +292,22 @@ function toast(msg,type=''){
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
+// Devuelve el tope de un empleado (de topePorEmpleado o TOPE_DEFAULT si no está seteado)
+function topeDe(empleado){
+  const v = topePorEmpleado[empleado];
+  if(v === undefined || v === null || isNaN(v)) return TOPE_DEFAULT;
+  return Number(v);
+}
+
 function mostrarSistema(user){
   currentUser = user;
   document.getElementById('sistema').style.display='block';
   const rolLabel = user.rol==='admin'?'👑 Admin':user.rol==='cargador'?'✏️ Cargador':'👁 Viewer';
   document.getElementById('userBadge').textContent=rolLabel+' '+user.nombre;
-  // Mostrar secciones según rol: solo admin puede registrar y configurar tope
+  // Mostrar secciones según rol: solo admin puede registrar y configurar topes
   const esAdmin = user.rol==='admin';
   document.getElementById('cardConfig').style.display = esAdmin?'':'none';
   document.getElementById('cardRegistrar').style.display = esAdmin?'':'none';
-  // Actualiza el badge de estado del mail (NO CONFIGURADO / ACTIVO)
-  const ms=document.getElementById('mailStatus');
-  if(ms){
-    if(mailConfigurado()){
-      ms.textContent='ACTIVO';
-      ms.style.background='#dcfce7';
-      ms.style.color='#16a34a';
-    } else {
-      ms.textContent='NO CONFIGURADO';
-      ms.style.background='#fee2e2';
-      ms.style.color='#dc2626';
-    }
-  }
   initFirestore();
 }
 
@@ -390,15 +329,16 @@ function initFirestore(){
     allVac.sort((a,b)=>(b.ts||0)-(a.ts||0));
     renderVacaciones();
   });
-  // Snapshot del tope anual (config/vacaciones)
-  onSnapshot(doc(db,'config','vacaciones'), snap=>{
+  // Snapshot de topes por empleado (config/topes-vacaciones)
+  onSnapshot(doc(db,'config','topes-vacaciones'), snap=>{
     if(snap.exists()){
-      topeAnio = Number(snap.data().topeAnio)||14;
-      const el=document.getElementById('topeAnioInput');
-      if(el) el.value=topeAnio;
+      const data=snap.data();
+      // data.topes es { 'Bruno Cola': 14, 'María Angeles': 10, ... }
+      topePorEmpleado = data.topes && typeof data.topes==='object' ? data.topes : {};
+    } else {
+      topePorEmpleado = {};
     }
-    const sub=document.getElementById('configSub');
-    if(sub) sub.textContent='Tope actual: '+topeAnio+' días por empleado por año · tocá para cambiar';
+    renderTopes();
     renderVacaciones();
   });
   // Snapshot de la lista de empleados (compartida con sueldos)
@@ -414,10 +354,55 @@ function initFirestore(){
       }
     }
     refrescarSelectsEmpleados();
+    renderTopes();
     renderVacaciones();
   });
   refrescarSelectsEmpleados();
 }
+
+// Render de la tabla de topes (en la card de configuración)
+window.renderTopes=function(){
+  const tbody=document.getElementById('topesGrid');
+  if(!tbody) return;
+  tbody.innerHTML = EMPLEADOS.map((e,i)=>{
+    const t = topeDe(e.nombre);
+    return `<tr>
+      <td><strong>${e.nombre}</strong></td>
+      <td>${e.esSocio?'Socio':'Empleado'}</td>
+      <td><input type="number" id="topeInput-${i}" value="${t}" min="0" max="60" style="width:80px;padding:6px 10px;border-radius:6px;border:1.5px solid #e2e8f0;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1e3a8a'" onblur="this.style.borderColor='#e2e8f0'" /></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="3" style="text-align:center;color:#888;padding:16px">Sin empleados</td></tr>';
+};
+
+// Guardar topes en Firestore
+window.guardarTopes=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const topes={};
+  EMPLEADOS.forEach((e,i)=>{
+    const el=document.getElementById('topeInput-'+i);
+    const v=parseInt(el?.value);
+    topes[e.nombre]=isNaN(v)?TOPE_DEFAULT:Math.max(0,Math.min(60,v));
+  });
+  try {
+    await setDoc(doc(db,'config','topes-vacaciones'),{
+      topes,
+      updatedAt:new Date().toISOString(),
+      updatedBy:currentUser?.nombre||'unknown'
+    });
+    toast('Topes guardados ✓','success');
+  } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+// Resetear todos los topes a 14 (default)
+window.resetTopes=function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  if(!confirm('¿Resetear todos los topes a '+TOPE_DEFAULT+' días?')) return;
+  EMPLEADOS.forEach((e,i)=>{
+    const el=document.getElementById('topeInput-'+i);
+    if(el) el.value=TOPE_DEFAULT;
+  });
+  toast('Topes reseteados a '+TOPE_DEFAULT+' (acordate de tocar Guardar)','success');
+};
 
 // Llena los selects de empleado (formulario + filtro)
 function refrescarSelectsEmpleados(){
@@ -465,13 +450,14 @@ window.guardarVacacion=async function(){
   if(!empleado||!desde||!hasta){toast('Completá empleado, fecha desde y fecha hasta','error');return;}
   const dias=diasEntre(desde,hasta);
   if(dias<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
-  // Aviso (no bloqueante) si se pasa del tope anual
+  // Aviso (no bloqueante) si se pasa del tope anual de este empleado
   const anioActual=new Date().getFullYear();
   const yaTomados=allVac
     .filter(v=>v.empleado===empleado)
     .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
-  if(yaTomados+dias>topeAnio){
-    if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando el tope de '+topeAnio+'.\n\n¿Querés registrar igual?')) return;
+  const topeEmp = topeDe(empleado);
+  if(yaTomados+dias>topeEmp){
+    if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+'.\n\n¿Querés registrar igual?')) return;
   }
   try {
     await addDoc(collection(db,'vacaciones'),{
@@ -483,65 +469,14 @@ window.guardarVacacion=async function(){
     document.getElementById('vacObs').value='';
     document.getElementById('vacDias').value='';
     toast('Vacaciones guardadas ✓','success');
-    // ── Alerta por mail a Bruno (no bloqueante) ──
-    const fechaDesdeFmt=desde.split('-').reverse().join('/');
-    const fechaHastaFmt=hasta.split('-').reverse().join('/');
-    const excede = (yaTomados+dias>topeAnio) ? `\n⚠️ ATENCIÓN: supera el tope anual de ${topeAnio} días (ya llevaba ${yaTomados}).\n` : '';
-    const cuerpo =
-`Nueva vacación registrada en el sistema.
-
-Empleado: ${empleado}
-Desde: ${fechaDesdeFmt}
-Hasta: ${fechaHastaFmt}
-Días: ${dias}
-Observaciones: ${obs || '(sin observaciones)'}
-Cargado por: ${currentUser.nombre}
-Fecha de carga: ${today()}${excede ? '\n' + excede : ''}
-
-— Sistema de Vacaciones · GLOBALCOMINT`;
-    enviarAlertaMail('🌴 Nueva vacación: ' + empleado + ' (' + dias + ' días)', cuerpo)
-      .then(r=>{
-        if(r.success){ toast('Alerta por mail enviada a Bruno ✓','success'); }
-        else if(r.motivo==='no-configurado'){ /* silencioso, ya está en console */ }
-        else { toast('No se pudo enviar el mail de alerta','error'); }
-      });
   } catch(e){ toast('Error: '+e.message,'error'); }
-};
-
-// Botón para probar que el mail funcione
-window.probarMail=async function(){
-  if(!mailConfigurado()){
-    toast('Falta configurar WEB3FORMS_ACCESS_KEY en el código','error');
-    return;
-  }
-  toast('Enviando mail de prueba...','');
-  const r = await enviarAlertaMail(
-    '🧪 Mail de prueba · Sistema Vacaciones',
-    'Este es un mail de prueba del sistema de Vacaciones de GLOBALCOMINT.\n\nSi estás leyendo esto, las alertas por mail funcionan correctamente.\n\n— Sistema de Vacaciones · GLOBALCOMINT'
-  );
-  if(r.success){ toast('Mail de prueba enviado ✓ Revisá la casilla','success'); }
-  else { toast('Error: '+(r.error||'no se pudo enviar'),'error'); }
 };
 
 window.eliminarVac=async function(id){
   if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
-  if(!confirm('¿Eliminar estas vacaciones?')) return;
+  if(!confirm('¿Eliminar estas vacaciones? Esta acción no se puede deshacer.')) return;
   await deleteDoc(doc(db,'vacaciones',id));
-  toast('Eliminado','error');
-};
-
-window.guardarTope=async function(){
-  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
-  const nuevo=parseInt(document.getElementById('topeAnioInput').value)||0;
-  if(nuevo<0||nuevo>60){toast('El tope debe estar entre 0 y 60 días','error');return;}
-  try {
-    await setDoc(doc(db,'config','vacaciones'),{
-      topeAnio:nuevo,
-      updatedAt:new Date().toISOString(),
-      updatedBy:currentUser?.nombre||'unknown'
-    });
-    toast('Tope guardado ✓','success');
-  } catch(e){ toast('Error: '+e.message,'error'); }
+  toast('Vacaciones eliminadas','error');
 };
 
 // ── RENDER PRINCIPAL ─────────────────────────────────────
@@ -584,8 +519,9 @@ window.renderVacaciones=function(){
     .reduce((s,v)=>s+Number(v.dias||0),0);
   document.getElementById('totDiasAnio').textContent=diasAnio;
 
-  // Días disponibles = tope * cantidad de empleados - díasAnio
-  const diasDisp=Math.max(0, topeAnio*EMPLEADOS.length - diasAnio);
+  // Días disponibles = suma de topes individuales - díasAnio
+  const sumaTopes = EMPLEADOS.reduce((s,e)=>s+topeDe(e.nombre),0);
+  const diasDisp=Math.max(0, sumaTopes - diasAnio);
   document.getElementById('totDiasDisp').textContent=diasDisp;
 
   // En vacaciones ahora (registros cuyo rango incluye hoy)
@@ -617,7 +553,7 @@ window.renderVacaciones=function(){
       <td style="color:#d97706;font-weight:600">${r.dias||0} día${(r.dias||0)===1?'':'s'}</td>
       <td>${r.obs||'-'}</td>
       <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
-      <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑</button>`:''}</td>
+      <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑 Eliminar</button>`:''}</td>
     </tr>
   `).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
 
@@ -648,16 +584,17 @@ window.renderVacaciones=function(){
   });
   document.getElementById('tablaVacResumen').innerHTML=EMPLEADOS.map(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const disp=topeAnio-m.dias;
+    const topeEmp = topeDe(e.nombre);
+    const disp=topeEmp-m.dias;
     let badge, badgeClass;
     if(m.dias===0){ badge='Sin usar'; badgeClass='badge-warn'; }
-    else if(m.dias<topeAnio){ badge='Al día'; badgeClass='badge-ok'; }
-    else if(m.dias===topeAnio){ badge='Completo'; badgeClass='badge-ok'; }
+    else if(m.dias<topeEmp){ badge='Al día'; badgeClass='badge-ok'; }
+    else if(m.dias===topeEmp){ badge='Completo'; badgeClass='badge-ok'; }
     else { badge='Excedido'; badgeClass='badge-danger'; }
     return `<tr>
       <td><strong>${e.nombre}</strong></td>
       <td style="color:#d97706;font-weight:600">${m.dias}</td>
-      <td>${topeAnio}</td>
+      <td>${topeEmp}</td>
       <td style="color:${disp>0?'#16a34a':'#dc2626'};font-weight:600">${disp}</td>
       <td><span class="badge ${badgeClass}">${badge}</span></td>
     </tr>`;
@@ -698,13 +635,14 @@ window.exportarVacExcel=function(ev){
   const resu=[['Empleado','Días tomados','Tope','Disponibles','Estado']];
   EMPLEADOS.forEach(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const disp=topeAnio-m.dias;
+    const topeEmp = topeDe(e.nombre);
+    const disp=topeEmp-m.dias;
     let estado;
     if(m.dias===0) estado='Sin usar';
-    else if(m.dias<topeAnio) estado='Al día';
-    else if(m.dias===topeAnio) estado='Completo';
+    else if(m.dias<topeEmp) estado='Al día';
+    else if(m.dias===topeEmp) estado='Completo';
     else estado='Excedido';
-    resu.push([e.nombre,m.dias,topeAnio,disp,estado]);
+    resu.push([e.nombre,m.dias,topeEmp,disp,estado]);
   });
   const ws2=XLSX.utils.aoa_to_sheet(resu);
   ws2['!cols']=[{wch:18},{wch:12},{wch:8},{wch:12},{wch:12}];
