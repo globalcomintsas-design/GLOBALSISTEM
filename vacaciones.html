@@ -142,18 +142,36 @@ tr:hover td{background:#fafbff;}
         <div class="destinos-card-header-left">
           <div class="destinos-card-icon">⚙️</div>
           <div>
-            <div class="destinos-card-title">Configuración del tope anual</div>
-            <div class="destinos-card-sub" id="configSub">Tocá para cambiar el tope de días por año</div>
+            <div class="destinos-card-title">Configuración del tope anual y alertas</div>
+            <div class="destinos-card-sub" id="configSub">Tocá para cambiar el tope y configurar alertas por mail</div>
           </div>
         </div>
         <div class="destinos-card-toggle">▾</div>
       </div>
       <div class="destinos-card-body">
-        <div style="display:flex;align-items:center;gap:12px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:12px;background:#eff6ff;padding:12px;border-radius:10px;border:1px solid #bfdbfe;flex-wrap:wrap;margin-bottom:12px;">
           <span style="font-weight:600;color:#1e3a8a;font-size:13px">Tope de días de vacaciones por empleado por año:</span>
           <input type="number" id="topeAnioInput" value="14" min="0" max="60" style="width:90px;padding:8px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-size:14px;font-weight:700;font-family:'DM Sans',sans-serif;outline:none;" />
           <button class="btn btn-success btn-sm" onclick="guardarTope()">💾 Guardar tope</button>
           <span style="font-size:11px;color:#888;">El tope aplica a todos los empleados por igual</span>
+        </div>
+
+        <!-- Alertas por mail -->
+        <div style="background:#fef3c7;padding:12px;border-radius:10px;border:1px solid #fde68a;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+            <div>
+              <div style="font-weight:600;color:#92400e;font-size:13px;display:flex;align-items:center;gap:6px;">
+                🔔 Alertas por mail
+                <span id="mailStatus" style="font-size:10px;padding:2px 8px;border-radius:10px;background:#fee2e2;color:#dc2626;font-weight:700;">NO CONFIGURADO</span>
+              </div>
+              <div style="font-size:11px;color:#92400e;margin-top:4px;max-width:540px;">
+                Cada vez que se registre una vacación nueva, se manda un mail a Bruno.
+                Para activar: andá a <strong>web3forms.com</strong>, ingresá el mail de Bruno, recibí tu access key por mail,
+                y reemplazá <code style="background:#fff;padding:1px 5px;border-radius:3px;">TU_ACCESS_KEY_ACA</code> en el código (variable <code style="background:#fff;padding:1px 5px;border-radius:3px;">WEB3FORMS_ACCESS_KEY</code> cerca de la línea 284).
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="probarMail()">🧪 Probar mail</button>
+          </div>
         </div>
       </div>
     </div>
@@ -272,6 +290,52 @@ let currentUser = null;
 let allVac = [];           // todos los registros de vacaciones
 let topeAnio = 14;         // tope de días por año (configurable)
 
+// ── CONFIGURACIÓN DE ALERTAS POR MAIL ────────────────────
+// Para activar las alertas por mail:
+// 1. Andá a https://web3forms.com (no requiere cuenta)
+// 2. Ingresá el mail de Bruno (donde querés recibir las alertas)
+// 3. Te van a mandar un mail con tu ACCESS KEY
+// 4. Reemplazá 'TU_ACCESS_KEY_ACA' por esa key abajo
+// 5. Guardá y subí el archivo al hosting
+// Mientras la key sea 'TU_ACCESS_KEY_ACA', el sistema va a simular el envío
+// (no va a mandar nada real) pero va a mostrar que está "configurado".
+const WEB3FORMS_ACCESS_KEY = 'TU_ACCESS_KEY_ACA';
+const ALERTA_MAIL_DESTINO = 'bruno@globalcomint.com'; // solo informativo: Web3Forms envía al mail registrado con la key
+
+function mailConfigurado(){
+  return WEB3FORMS_ACCESS_KEY && WEB3FORMS_ACCESS_KEY !== 'TU_ACCESS_KEY_ACA' && WEB3FORMS_ACCESS_KEY.length > 10;
+}
+
+// Envía una alerta por mail vía Web3Forms.
+// Es async pero NO bloquea: si falla, no afecta el guardado en Firestore.
+async function enviarAlertaMail(asunto, mensajeHtml){
+  if(!mailConfigurado()){
+    console.info('[Vacaciones] Alerta por mail NO enviada (falta configurar WEB3FORMS_ACCESS_KEY). Asunto:', asunto);
+    return { success:false, motivo:'no-configurado' };
+  }
+  try {
+    const res = await fetch('https://api.web3forms.com/submit', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Accept':'application/json' },
+      body: JSON.stringify({
+        access_key: WEB3FORMS_ACCESS_KEY,
+        subject: asunto,
+        from_name: 'Sistema Vacaciones · GLOBALCOMINT',
+        name: 'Sistema Vacaciones',
+        email: 'noreply@globalcomint.com',
+        message: mensajeHtml,
+        // Honeypot anti-spam (campo oculto que los bots llenan)
+        botcheck: ''
+      })
+    });
+    const data = await res.json();
+    return { success: data.success===true, data };
+  } catch(e){
+    console.warn('[Vacaciones] Error enviando mail:', e);
+    return { success:false, motivo:'error', error:e.message };
+  }
+}
+
 // ── HELPERS ──────────────────────────────────────────────
 function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR'); }
 function today(){ return new Date().toLocaleDateString('es-AR'); }
@@ -292,6 +356,19 @@ function mostrarSistema(user){
   const esAdmin = user.rol==='admin';
   document.getElementById('cardConfig').style.display = esAdmin?'':'none';
   document.getElementById('cardRegistrar').style.display = esAdmin?'':'none';
+  // Actualiza el badge de estado del mail (NO CONFIGURADO / ACTIVO)
+  const ms=document.getElementById('mailStatus');
+  if(ms){
+    if(mailConfigurado()){
+      ms.textContent='ACTIVO';
+      ms.style.background='#dcfce7';
+      ms.style.color='#16a34a';
+    } else {
+      ms.textContent='NO CONFIGURADO';
+      ms.style.background='#fee2e2';
+      ms.style.color='#dc2626';
+    }
+  }
   initFirestore();
 }
 
@@ -406,7 +483,44 @@ window.guardarVacacion=async function(){
     document.getElementById('vacObs').value='';
     document.getElementById('vacDias').value='';
     toast('Vacaciones guardadas ✓','success');
+    // ── Alerta por mail a Bruno (no bloqueante) ──
+    const fechaDesdeFmt=desde.split('-').reverse().join('/');
+    const fechaHastaFmt=hasta.split('-').reverse().join('/');
+    const excede = (yaTomados+dias>topeAnio) ? `\n⚠️ ATENCIÓN: supera el tope anual de ${topeAnio} días (ya llevaba ${yaTomados}).\n` : '';
+    const cuerpo =
+`Nueva vacación registrada en el sistema.
+
+Empleado: ${empleado}
+Desde: ${fechaDesdeFmt}
+Hasta: ${fechaHastaFmt}
+Días: ${dias}
+Observaciones: ${obs || '(sin observaciones)'}
+Cargado por: ${currentUser.nombre}
+Fecha de carga: ${today()}${excede ? '\n' + excede : ''}
+
+— Sistema de Vacaciones · GLOBALCOMINT`;
+    enviarAlertaMail('🌴 Nueva vacación: ' + empleado + ' (' + dias + ' días)', cuerpo)
+      .then(r=>{
+        if(r.success){ toast('Alerta por mail enviada a Bruno ✓','success'); }
+        else if(r.motivo==='no-configurado'){ /* silencioso, ya está en console */ }
+        else { toast('No se pudo enviar el mail de alerta','error'); }
+      });
   } catch(e){ toast('Error: '+e.message,'error'); }
+};
+
+// Botón para probar que el mail funcione
+window.probarMail=async function(){
+  if(!mailConfigurado()){
+    toast('Falta configurar WEB3FORMS_ACCESS_KEY en el código','error');
+    return;
+  }
+  toast('Enviando mail de prueba...','');
+  const r = await enviarAlertaMail(
+    '🧪 Mail de prueba · Sistema Vacaciones',
+    'Este es un mail de prueba del sistema de Vacaciones de GLOBALCOMINT.\n\nSi estás leyendo esto, las alertas por mail funcionan correctamente.\n\n— Sistema de Vacaciones · GLOBALCOMINT'
+  );
+  if(r.success){ toast('Mail de prueba enviado ✓ Revisá la casilla','success'); }
+  else { toast('Error: '+(r.error||'no se pudo enviar'),'error'); }
 };
 
 window.eliminarVac=async function(id){
