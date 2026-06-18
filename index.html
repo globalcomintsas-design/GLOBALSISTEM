@@ -1,197 +1,499 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GLOBALCOMINT · Inicio</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;background:linear-gradient(135deg,#1e3a8a,#1e40af);padding:24px;}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GlobalComint - Sistema Integral</title>
+    <style>
+        /* === ESTILOS DEL MENÚ PRINCIPAL (TU INDEX) === */
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1e3a8a; /* Fondo azul */
+            color: white;
+            min-height: 100vh;
+        }
+        .header-sistema {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background-color: rgba(0,0,0,0.2);
+        }
+        .header-sistema h2 { margin: 0; font-size: 1.5rem; }
+        .user-info span { margin-right: 15px; }
+        .btn-salir {
+            background: #dc2626; color: white; padding: 8px 15px;
+            text-decoration: none; border-radius: 5px; font-weight: bold;
+        }
+        .main-menu {
+            text-align: center;
+            padding: 60px 20px;
+        }
+        .main-menu h1 { font-size: 2.2rem; margin-bottom: 50px; }
+        .cards-container {
+            display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; max-width: 1200px; margin: auto;
+        }
+        .card-menu {
+            background: white; color: #1e293b; width: 280px; padding: 30px;
+            border-radius: 12px; box-shadow: 0 10px 15px rgba(0,0,0,0.2);
+            text-align: center; transition: transform 0.2s;
+        }
+        .card-menu:hover { transform: translateY(-5px); }
+        .card-menu .icon { font-size: 3rem; margin-bottom: 15px; display: block; }
+        .card-menu h3 { margin: 0 0 10px 0; color: #1e40af; }
+        .card-menu p { font-size: 0.9rem; color: #64748b; min-height: 40px; }
+        .card-menu .btn-ingresar {
+            display: inline-block; margin-top: 20px; background: #2563eb; color: white;
+            padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;
+        }
+        .card-menu.nuevo { border: 2px solid #16a34a; }
+        .card-menu.nuevo .btn-ingresar { background: #16a34a; }
 
-.login-box{background:#fff;padding:40px;border-radius:20px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,0.3);margin-bottom:0;}
-.login-logo{font-size:26px;font-weight:700;color:#1e3a8a;margin-bottom:4px;}
-.login-sub{color:#888;font-size:13px;margin-bottom:24px;}
-.login-box input{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;margin-bottom:12px;outline:none;}
-.login-box input:focus{border-color:#1e3a8a;}
-.pass-wrap{position:relative;margin-bottom:12px;}
-.pass-wrap input{width:100%;padding:12px 40px 12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;box-sizing:border-box;margin-bottom:0;}
-.pass-wrap input:focus{border-color:#1e3a8a;}
-.pass-eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);cursor:pointer;font-size:18px;user-select:none;}
-.login-btn{width:100%;padding:13px;background:#1e3a8a;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-top:4px;}
-.login-btn:hover{background:#1e40af;}
-.login-error{color:#dc2626;font-size:12px;margin-top:8px;text-align:center;display:none;}
-
-.logo-wrap{text-align:center;margin-bottom:32px;}
-.logo-title{font-size:32px;font-weight:700;color:#fff;letter-spacing:1px;}
-.logo-sub-main{font-size:13px;color:#93c5fd;margin-top:6px;}
-
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;width:100%;max-width:900px;display:none;}
-.card{background:#fff;border-radius:20px;padding:32px 28px;display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;text-decoration:none;box-shadow:0 8px 32px rgba(0,0,0,0.18);transition:transform .18s,box-shadow .18s;border:2px solid transparent;}
-.card:hover{transform:translateY(-4px);box-shadow:0 16px 48px rgba(0,0,0,0.28);border-color:#bfdbfe;}
-.card:active{transform:scale(.97);}
-.card-icon{font-size:42px;line-height:1;}
-.card-title{font-size:17px;font-weight:700;color:#1e3a8a;text-align:center;}
-.card-desc{font-size:12px;color:#888;text-align:center;line-height:1.5;}
-.card-arrow{margin-top:6px;background:#eff6ff;color:#1e3a8a;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:600;}
-
-.user-bar{background:rgba(255,255,255,0.15);border-radius:20px;padding:8px 16px;font-size:12px;color:#fff;display:none;margin-bottom:20px;display:none;align-items:center;gap:12px;}
-.user-bar span{font-weight:600;}
-.logout-btn{background:#dc2626;border:none;color:#fff;padding:5px 12px;border-radius:20px;cursor:pointer;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:600;}
-
-.footer{margin-top:44px;font-size:11px;color:#93c5fd;opacity:.7;}
-
-.spinner-overlay{position:fixed;inset:0;background:rgba(30,58,138,0.7);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
-.spinner{width:44px;height:44px;border:4px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.spinner-text{font-size:13px;color:#fff;font-weight:600;}
-</style>
+        /* === ESTILOS DEL MÓDULO DE OPERACIONES === */
+        :root {
+            --primary: #2563eb; --success: #16a34a; --danger: #dc2626;
+            --light: #f8fafc; --dark: #1e293b; --border: #cbd5e1; --warning: #d97706; --purple: #7c3aed;
+        }
+        #modulo-operaciones { display: none; background-color: #e2e8f0; padding: 20px; color: var(--dark); }
+        .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 40px; }
+        h1, h2, h3 { color: var(--dark); margin-top: 0; }
+        .header-nav { max-width: 1400px; margin: auto; margin-bottom: 20px; }
+        .btn-volver { background: var(--dark); color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; }
+        .tarifas-panel { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 20px; margin-bottom: 30px; }
+        .tarifas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }
+        .tarifa-item { display: flex; flex-direction: column; background: white; padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
+        .tarifa-item label { font-size: 0.85rem; margin-bottom: 5px; }
+        .tarifa-inputs { display: flex; gap: 5px; }
+        .tarifa-inputs input { width: 70%; }
+        .tarifa-inputs select { width: 30%; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .form-group { display: flex; flex-direction: column; }
+        label { font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; }
+        input, select { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
+        .botonera { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .btn { border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold; }
+        .btn-calcular { background: var(--primary); color: white; }
+        .btn-exportar { background: var(--success); color: white; }
+        .btn-mudanza { background: var(--purple); color: white; }
+        .btn-pago { padding: 6px 12px; font-size: 0.8rem; border-radius: 4px; margin-top: 5px; }
+        .btn-pago-pend { background: var(--danger); color: white; }
+        .btn-pago-ok { background: var(--success); color: white; }
+        .tabla-container { overflow-x: auto; margin-top: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        th { background: var(--dark); color: white; padding: 12px; text-align: left; }
+        td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        tr:nth-child(even) { background: var(--light); }
+        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
+        .badge-rojo { background: #fee2e2; color: #991b1b; }
+        .badge-naranja { background: #ffedd5; color: #9a3412; }
+        .badge-verde { background: #dcfce7; color: #166534; }
+        .summary-cards { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
+        .card { flex: 1; min-width: 180px; background: var(--light); padding: 15px; border-radius: 8px; text-align: center; }
+        .card h3 { font-size: 1rem; color: #64748b; margin: 0 0 5px 0;}
+        .card p { font-size: 1.8rem; font-weight: bold; margin: 0; color: var(--primary); }
+        .card-alert p { color: var(--danger); }
+        .text-success { color: var(--success); font-weight: bold; }
+        .text-danger { color: var(--danger); }
+        .section-divider { border: 0; border-top: 2px dashed var(--border); margin: 40px 0; }
+    </style>
 </head>
 <body>
 
-<div class="logo-wrap">
-  <div class="logo-title">GLOBALCOMINT</div>
-  <div class="logo-sub-main" id="subtitulo">Sistema de gestión · Ingreso seguro</div>
+<!-- ========================================== -->
+<!-- PANTALLA 1: MENÚ PRINCIPAL (INDEX)         -->
+<!-- ========================================== -->
+<div id="dashboard">
+    <div class="header-sistema">
+        <h2>GLOBALCOMINT</h2>
+        <div class="user-info">
+            <span>Usuario: Bruno Cola</span>
+            <a href="#" class="btn-salir">Salir</a>
+        </div>
+    </div>
+    
+    <div class="main-menu">
+        <h1>Seleccioná el módulo al que querés acceder</h1>
+        
+        <div class="cards-container">
+            <!-- Tarjetas existentes -->
+            <div class="card-menu">
+                <span class="icon">💰</span>
+                <h3>Caja & Finanzas</h3>
+                <p>Movimientos de fondos, bancos, cajas chicas y rendiciones.</p>
+                <a href="#" class="btn-ingresar">Ingresar →</a>
+            </div>
+            <div class="card-menu">
+                <span class="icon">🚛</span>
+                <h3>Movilidad & FS</h3>
+                <p>Gestión de flota, viajes, combustible y muelle.</p>
+                <a href="#" class="btn-ingresar">Ingresar →</a>
+            </div>
+            <div class="card-menu">
+                <span class="icon">🧾</span>
+                <h3>Sueldos</h3>
+                <p>Liquidación de haberes, cargas sociales y sindicales.</p>
+                <a href="#" class="btn-ingresar">Ingresar →</a>
+            </div>
+            <div class="card-menu">
+                <span class="icon">🏖️</span>
+                <h3>Vacaciones</h3>
+                <p>Gestión de licencias, vacaciones y permisos.</p>
+                <a href="#" class="btn-ingresar">Ingresar →</a>
+            </div>
+
+            <!-- NUEVA TARJETA -->
+            <div class="card-menu nuevo">
+                <span class="icon">📊</span>
+                <h3>Operaciones y Mudanzas</h3>
+                <p>Carga de despachantes, cálculo de tarifa, IVA y mudanzas.</p>
+                <a href="#" onclick="mostrarModulo()" class="btn-ingresar">Ingresar →</a>
+            </div>
+        </div>
+    </div>
 </div>
 
-<!-- LOGIN -->
-<div class="login-box" id="loginBox">
-  <div class="login-logo">Bienvenido</div>
-  <div class="login-sub">Ingresá tus credenciales para continuar</div>
-  <input type="text" id="inpUsuario" placeholder="Usuario" autocomplete="username"/>
-  <div class="pass-wrap">
-    <input type="password" id="inpPassword" placeholder="Contraseña" onkeydown="if(event.key==='Enter')ingresar()" autocomplete="current-password"/>
-    <span class="pass-eye" onclick="var i=document.getElementById('inpPassword');i.type=i.type==='password'?'text':'password'">👁</span>
-  </div>
-  <button class="login-btn" onclick="ingresar()">Ingresar al sistema</button>
-  <div class="login-error" id="loginError">Usuario o contraseña incorrectos</div>
+<!-- ========================================== -->
+<!-- PANTALLA 2: MÓDULO DE OPERACIONES          -->
+<!-- ========================================== -->
+<div id="modulo-operaciones">
+    <div class="header-nav">
+        <a href="#" onclick="mostrarDashboard()" class="btn-volver">← Volver al Menú Principal</a>
+    </div>
+
+    <!-- MÓDULO DESPACHANTES -->
+    <div class="container">
+        <h1>📊 Módulo de Operaciones de Despachantes</h1>
+        
+        <div class="tarifas-panel">
+            <h3 style="margin-top:0; color:var(--warning)">⚙️ Configuración de Tarifas (Modificable)</h3>
+            <div class="tarifas-grid">
+                <div class="tarifa-item"><label>Base Verde / Naranja</label><div class="tarifa-inputs"><input type="number" id="precio_base_vn" value="17" step="0.01"><select id="moneda_base_vn"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Base Rojo</label><div class="tarifa-inputs"><input type="number" id="precio_base_r" value="20" step="0.01"><select id="moneda_base_r"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Armado de Sobre</label><div class="tarifa-inputs"><input type="number" id="precio_sobre" value="4" step="0.01"><select id="moneda_sobre"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Camión AD (V/N)</label><div class="tarifa-inputs"><input type="number" id="precio_cam_vn" value="5" step="0.01"><select id="moneda_cam_vn"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Camión AD (Rojo)</label><div class="tarifa-inputs"><input type="number" id="precio_cam_r" value="6" step="0.01"><select id="moneda_cam_r"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Senasa Pallets</label><div class="tarifa-inputs"><input type="number" id="precio_senasa_p" value="2" step="0.01"><select id="moneda_senasa_p"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Senasa Producto</label><div class="tarifa-inputs"><input type="number" id="precio_senasa_pr" value="3" step="0.01"><select id="moneda_senasa_pr"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Hojas Adic. (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_hojas" value="0.15" step="0.01"><select id="moneda_hojas"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>MIC</label><div class="tarifa-inputs"><input type="number" id="precio_mic" value="5" step="0.01"><select id="moneda_mic"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Foja AD (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_fojas" value="2" step="0.01"><select id="moneda_fojas"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Multinotas (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_multinota" value="2" step="0.01"><select id="moneda_multinota"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
+                <div class="tarifa-item"><label>Toma de Contenedor</label><div class="tarifa-inputs"><input type="number" id="precio_toma" value="200" step="0.01"><select id="moneda_toma"><option value="ARS">ARS</option><option value="USD">USD</option></select></div></div>
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group"><label>Cliente / Despachante</label><input type="text" id="cliente" placeholder="Ej: ENVACO"></div>
+            <div class="form-group"><label>Destinación</label><input type="text" id="destinacion" placeholder="Ej: IC03 1251N"></div>
+            <div class="form-group"><label>Canal</label><select id="canal"><option value="V">Verde (V)</option><option value="N">Naranja (N)</option><option value="R">Rojo (R)</option></select></div>
+            <div class="form-group"><label>Frecuencia de Cobro</label><select id="frecuencia"><option value="Diario">Diario</option><option value="Semanal">Semanal</option><option value="Mensual">Mensual</option></select></div>
+            <div class="form-group"><label>Tipo de Cambio (PE)</label><input type="number" id="tc" value="1400" step="0.01"></div>
+        </div>
+
+        <h3>Servicios de la Operación</h3>
+        <div class="form-grid">
+            <div class="form-group"><label>Armado de Sobre (Cant)</label><input type="number" id="sobre" value="0" min="0"></div>
+            <div class="form-group"><label>Cant. Camiones AD</label><input type="number" id="camiones" value="0" min="0"></div>
+            <div class="form-group"><label>Senasa Pallets (Cant)</label><input type="number" id="senasaP" value="0" min="0"></div>
+            <div class="form-group"><label>Senasa Producto (Cant)</label><input type="number" id="senasaPr" value="0" min="0"></div>
+            <div class="form-group"><label>Hojas Adic. (Cant)</label><input type="number" id="hojas" value="0" min="0"></div>
+            <div class="form-group"><label>MIC (Cant)</label><input type="number" id="mic" value="0" min="0"></div>
+            <div class="form-group"><label>N° de MIC</label><input type="text" id="numMic" placeholder="Ej: 26AR225103A"></div>
+            <div class="form-group"><label>Fojas AD (Cant)</label><input type="number" id="fojas" value="0" min="0"></div>
+            <div class="form-group"><label>Multinotas (Cant)</label><input type="number" id="multinotas" value="0" min="0"></div>
+            <div class="form-group"><label>N° de Multinota</label><input type="text" id="numMultinota" placeholder="Ej: MULTINOTA 295"></div>
+            <div class="form-group"><label>Toma de Contenedor (Cant)</label><input type="number" id="tomaCont" value="0" min="0"></div>
+            <div class="form-group"><label>Otros Adicionales (ARS $)</label><input type="number" id="adicArs" value="0" step="0.01"></div>
+        </div>
+
+        <div class="botonera">
+            <button class="btn btn-calcular" onclick="calcularYGuardar()">+ Calcular y Cargar Operación</button>
+            <button class="btn btn-exportar" onclick="exportarExcel('operaciones')">📄 Exportar a Excel</button>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card"><h3>Operaciones Cargadas</h3><p id="totalOps">0</p></div>
+            <div class="card"><h3>Total USD Generado</h3><p id="totalUsdGenerado">$0.00</p></div>
+            <div class="card"><h3>Total Bruto ARS</h3><p id="totalArsGenerado">$0.00</p></div>
+        </div>
+
+        <div class="tabla-container">
+            <table id="tablaDatos">
+                <thead>
+                    <tr>
+                        <th>N° Op</th><th>Cliente</th><th>Dest.</th><th>Canal</th><th>N° MIC</th><th>N° Multinota</th><th>Cobro</th><th>Total USD</th><th>Valor ARS</th><th>Neto ARS</th><th>IVA ARS</th><th>Bruto ARS</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaOperaciones"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <hr class="section-divider">
+
+    <!-- MÓDULO MUDANZAS -->
+    <div class="container">
+        <h1>🚚 Módulo de Mudanzas</h1>
+        <p>Carga los datos de la mudanza. El pago a Ramiro se calcula en USD y se pasa a pesos con el TC que indiques.</p>
+
+        <div class="form-grid">
+            <div class="form-group"><label>Cliente</label><input type="text" id="mud_cliente" placeholder="Ej: H OJEDA"></div>
+            <div class="form-group"><label>Destinación</label><input type="text" id="mud_destinacion" placeholder="Ej: EC02000196P"></div>
+            <div class="form-group"><label>Tipo de Cambio (PE)</label><input type="number" id="mud_tc" value="1400" step="0.01"></div>
+            <div class="form-group"><label>Pago Ramiro (USD)</label><input type="number" id="mud_ramiro_usd" value="190" step="0.01"></div>
+            <div class="form-group"><label>Valor Fiscal (ARS)</label><input type="number" id="mud_fiscal_ars" value="0" step="0.01" placeholder="Si lo pagamos"></div>
+            <div class="form-group"><label>N° Precinto Electrónico</label><input type="text" id="mud_precinto" placeholder="Ej: 123456"></div>
+        </div>
+
+        <div class="botonera">
+            <button class="btn btn-mudanza" onclick="cargarMudanza()">+ Cargar Mudanza</button>
+            <button class="btn btn-exportar" onclick="exportarExcel('mudanzas')">📄 Exportar a Excel</button>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card"><h3>Total Mudanzas</h3><p id="mud_total_ops">0</p></div>
+            <div class="card"><h3>Total Bruto Facturado</h3><p id="mud_total_bruto">$0.00</p></div>
+            <div class="card card-alert"><h3>Adeudado a Ramiro (USD)</h3><p id="mud_adeudado_ramiro">$0.00</p></div>
+        </div>
+
+        <div class="tabla-container">
+            <table id="tablaMudanzas">
+                <thead>
+                    <tr>
+                        <th>N° Mud</th><th>Cliente</th><th>Dest.</th><th>N° Precinto</th><th>TC</th><th>Ramiro (USD)</th><th>Ramiro (ARS)</th><th>Fiscal (ARS)</th><th>Neto ARS</th><th>IVA ARS</th><th>Bruto ARS</th><th>Estado Pago Ramiro</th>
+                    </tr>
+                </thead>
+                <tbody id="tablaMudanzasBody"></tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
-<!-- USER BAR -->
-<div class="user-bar" id="userBar">
-  <span id="userNombre"></span>
-  <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
-</div>
+<script>
+    // === FUNCIONES DE NAVEGACIÓN ===
+    function mostrarModulo() {
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('modulo-operaciones').style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+    function mostrarDashboard() {
+        document.getElementById('modulo-operaciones').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        window.scrollTo(0, 0);
+    }
 
-<!-- CARDS -->
-<div class="cards" id="cards">
-  <a class="card" id="cardCaja" href="caja.html">
-    <div class="card-icon">💰</div>
-    <div class="card-title">Caja & Finanzas</div>
-    <div class="card-desc">Movimientos, cheques, cuenta corriente y reportes</div>
-    <div class="card-arrow">Ingresar →</div>
-  </a>
-  <a class="card" id="cardMovilidad" href="movilidad.html">
-    <div class="card-icon">🚗</div>
-    <div class="card-title">Movilidad & FS</div>
-    <div class="card-desc">Viáticos por km, fines de semana y resumen por empleado</div>
-    <div class="card-arrow">Ingresar →</div>
-  </a>
-  <a class="card" id="cardSueldos" href="sueldos.html">
-    <div class="card-icon">👥</div>
-    <div class="card-title">Sueldos</div>
-    <div class="card-desc">Liquidación mensual, adelantos, préstamos y dividendos</div>
-    <div class="card-arrow">Ingresar →</div>
-  </a>
-  <a class="card" id="cardVacaciones" href="vacaciones.html">
-    <div class="card-icon">🌴</div>
-    <div class="card-title">Vacaciones</div>
-    <div class="card-desc">Registro de vacaciones, tope anual por empleado y resumen histórico</div>
-    <div class="card-arrow">Ingresar →</div>
-  </a>
-  <a class="card" id="cardVLP" href="VLP.html">
-    <div class="card-icon">📑</div>
-    <div class="card-title">Control VLP</div>
-    <div class="card-desc">Volantes de liquidación, operaciones DUX y reconciliación de pagos</div>
-    <div class="card-arrow">Ingresar →</div>
-  </a>
-</div>
+    // === LÓGICA DESPACHANTES ===
+    let operaciones = [];
+    let contadorOp = 1;
 
-<div class="footer">GLOBALCOMINT SAS · Despachantes de Aduana · Mendoza</div>
+    function getTarifa(idBase) {
+        let precio = parseFloat(document.getElementById('precio_' + idBase).value) || 0;
+        let moneda = document.getElementById('moneda_' + idBase).value;
+        return { precio, moneda };
+    }
 
-<div class="spinner-overlay" id="spinner">
-  <div class="spinner"></div>
-  <div class="spinner-text">Verificando credenciales...</div>
-</div>
+    function calcItem(qty, idBase, canal) {
+        if(qty <= 0) return { usd: 0, ars: 0 };
+        let idCompleto = idBase;
+        if(idBase === 'base') idCompleto = (canal === 'R') ? 'base_r' : 'base_vn';
+        if(idBase === 'cam') idCompleto = (canal === 'R') ? 'cam_r' : 'cam_vn';
+        let { precio, moneda } = getTarifa(idCompleto);
+        if(moneda === 'USD') return { usd: qty * precio, ars: 0 };
+        return { usd: 0, ars: qty * precio };
+    }
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, doc, setDoc, deleteDoc, getDoc }
-  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    function calcularYGuardar() {
+        let cliente = document.getElementById('cliente').value || "S/N";
+        let destinacion = document.getElementById('destinacion').value || "S/D";
+        let canal = document.getElementById('canal').value;
+        let frecuencia = document.getElementById('frecuencia').value;
+        let tc = parseFloat(document.getElementById('tc').value);
+        let numMic = document.getElementById('numMic').value || "-";
+        let numMultinota = document.getElementById('numMultinota').value || "-";
+        
+        let qtySobre = parseInt(document.getElementById('sobre').value) || 0;
+        let qtyCamiones = parseInt(document.getElementById('camiones').value) || 0;
+        let qtySenasaP = parseInt(document.getElementById('senasaP').value) || 0;
+        let qtySenasaPr = parseInt(document.getElementById('senasaPr').value) || 0;
+        let qtyHojas = parseInt(document.getElementById('hojas').value) || 0;
+        let qtyMic = parseInt(document.getElementById('mic').value) || 0;
+        let qtyFojas = parseInt(document.getElementById('fojas').value) || 0;
+        let qtyMultinotas = parseInt(document.getElementById('multinotas').value) || 0;
+        let qtyToma = parseInt(document.getElementById('tomaCont').value) || 0;
+        let adicArs = parseFloat(document.getElementById('adicArs').value) || 0;
 
-const firebaseConfig = {
-  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
-  authDomain: "caja-globalcomint.firebaseapp.com",
-  projectId: "caja-globalcomint",
-  storageBucket: "caja-globalcomint.firebasestorage.app",
-  messagingSenderId: "191266145805",
-  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
-};
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
+        let totalUsd = 0;
+        let totalArsDirecto = 0;
 
-// Usuarios fijos (no se pueden borrar)
-const USERS_DEFAULT = {
-  'Bcola':   { password:'River83$', nombre:'Bruno Cola', rol:'admin',
-               permisos:{ caja:'admin', movilidad:'admin', sueldos:'admin', vlp:'admin' } },
-  'Mcatala': { password:'Global01', nombre:'María Catalá', rol:'cargador',
-               permisos:{ caja:'cargador', movilidad:'viewer', sueldos:'viewer', vlp:'viewer' } },
-  'Dnievas': { password:'Global01', nombre:'Daniel Nievas', rol:'cargador',
-               permisos:{ caja:'viewer', movilidad:'cargador', sueldos:'viewer', vlp:'viewer' } },
-};
+        let r1 = calcItem(1, 'base', canal); totalUsd += r1.usd; totalArsDirecto += r1.ars;
+        let r2 = calcItem(qtySobre, 'sobre', canal); totalUsd += r2.usd; totalArsDirecto += r2.ars;
+        let r3 = calcItem(qtyCamiones, 'cam', canal); totalUsd += r3.usd; totalArsDirecto += r3.ars;
+        let r4 = calcItem(qtySenasaP, 'senasa_p', canal); totalUsd += r4.usd; totalArsDirecto += r4.ars;
+        let r5 = calcItem(qtySenasaPr, 'senasa_pr', canal); totalUsd += r5.usd; totalArsDirecto += r5.ars;
+        let r6 = calcItem(qtyHojas, 'hojas', canal); totalUsd += r6.usd; totalArsDirecto += r6.ars;
+        let r7 = calcItem(qtyMic, 'mic', canal); totalUsd += r7.usd; totalArsDirecto += r7.ars;
+        let r8 = calcItem(qtyFojas, 'fojas', canal); totalUsd += r8.usd; totalArsDirecto += r8.ars;
+        let r9 = calcItem(qtyMultinotas, 'multinota', canal); totalUsd += r9.usd; totalArsDirecto += r9.ars;
+        let r10 = calcItem(qtyToma, 'toma', canal); totalUsd += r10.usd; totalArsDirecto += r10.ars;
 
-let allUsuarios = {};
-let currentUser = null;
+        totalArsDirecto += adicArs;
 
-// Cargar usuarios de Firebase
-onSnapshot(collection(db,'usuarios'), snap => {
-  allUsuarios = {};
-  snap.docs.forEach(d => { allUsuarios[d.id] = d.data(); });
-});
+        let valorArs = totalUsd * tc;          
+        let netoArs = valorArs + totalArsDirecto; 
+        let ivaArs = netoArs * 0.21;           
+        let brutoArs = netoArs + ivaArs;       
 
-function getUsers(){ return { ...USERS_DEFAULT, ...allUsuarios }; }
+        let fecha = new Date();
+        let nOp = `OP-${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(contadorOp).padStart(3, '0')}`;
+        contadorOp++;
 
-// Verificar sesión existente
-const sesion = localStorage.getItem('gc_user');
-if(sesion){
-  try {
-    currentUser = JSON.parse(sesion);
-    mostrarModulos();
-  } catch(e){ localStorage.removeItem('gc_user'); }
-}
+        operaciones.push({ nOp, cliente, destinacion, canal, numMic, numMultinota, frecuencia, totalUsd, valorArs, netoArs, ivaArs, brutoArs });
+        renderTablaDespachantes();
+        limpiarFormulario();
+    }
 
-window.ingresar = function(){
-  const u = document.getElementById('inpUsuario').value.trim();
-  const p = document.getElementById('inpPassword').value;
-  const users = getUsers();
-  const user  = users[u];
-  if(user && user.password === p){
-    currentUser = { username:u, ...user };
-    localStorage.setItem('gc_user', JSON.stringify(currentUser));
-    document.getElementById('loginError').style.display = 'none';
-    mostrarModulos();
-  } else {
-    document.getElementById('loginError').style.display = 'block';
-  }
-};
+    function renderTablaDespachantes() {
+        let tbody = document.getElementById('tablaOperaciones');
+        tbody.innerHTML = '';
+        let totalUsdAcum = 0, totalArsAcum = 0;
 
-window.cerrarSesion = function(){
-  localStorage.removeItem('gc_user');
-  location.reload();
-};
+        operaciones.forEach(op => {
+            let canalClass = op.canal === 'R' ? 'badge-rojo' : (op.canal === 'N' ? 'badge-naranja' : 'badge-verde');
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${op.nOp}</strong></td><td>${op.cliente}</td><td>${op.destinacion}</td>
+                    <td><span class="badge ${canalClass}">${op.canal}</span></td><td>${op.numMic}</td><td>${op.numMultinota}</td>
+                    <td>${op.frecuencia}</td><td>$${op.totalUsd.toFixed(2)}</td><td>$${op.valorArs.toFixed(2)}</td>
+                    <td>$${op.netoArs.toFixed(2)}</td><td class="text-danger">$${op.ivaArs.toFixed(2)}</td><td class="text-success">$${op.brutoArs.toFixed(2)}</td>
+                </tr>`;
+            totalUsdAcum += op.totalUsd;
+            totalArsAcum += op.brutoArs;
+        });
 
-function mostrarModulos(){
-  document.getElementById('loginBox').style.display  = 'none';
-  document.getElementById('subtitulo').textContent   = 'Seleccioná el módulo al que querés acceder';
-  document.getElementById('userBar').style.display   = 'flex';
-  document.getElementById('userNombre').textContent  = '👤 ' + currentUser.nombre;
-  document.getElementById('cards').style.display     = 'grid';
+        document.getElementById('totalOps').innerText = operaciones.length;
+        document.getElementById('totalUsdGenerado').innerText = `$${totalUsdAcum.toFixed(2)}`;
+        document.getElementById('totalArsGenerado').innerText = `$${totalArsAcum.toFixed(2)}`;
+    }
 
-  // Admin ve gestión de usuarios
-  if(currentUser.permisos?.caja === 'admin'){
-    document.getElementById('userNombre').textContent = '👑 ' + currentUser.nombre;
-  }
-}
+    function limpiarFormulario() {
+        document.getElementById('cliente').value = '';
+        document.getElementById('destinacion').value = '';
+        document.getElementById('numMic').value = '';
+        document.getElementById('numMultinota').value = '';
+        ['sobre', 'camiones', 'senasaP', 'senasaPr', 'hojas', 'mic', 'fojas', 'multinotas', 'tomaCont', 'adicArs'].forEach(id => document.getElementById(id).value = 0);
+    }
+
+    // === LÓGICA MUDANZAS ===
+    let mudanzas = [];
+    let contadorMud = 1;
+
+    function cargarMudanza() {
+        let cliente = document.getElementById('mud_cliente').value || "S/N";
+        let destinacion = document.getElementById('mud_destinacion').value || "S/D";
+        let tc = parseFloat(document.getElementById('mud_tc').value) || 0;
+        let ramiroUsd = parseFloat(document.getElementById('mud_ramiro_usd').value) || 0;
+        let fiscalArs = parseFloat(document.getElementById('mud_fiscal_ars').value) || 0;
+        let precinto = document.getElementById('mud_precinto').value || "-";
+
+        let ramiroArs = ramiroUsd * tc;
+        let netoArs = ramiroArs + fiscalArs;
+        let ivaArs = netoArs * 0.21;
+        let brutoArs = netoArs + ivaArs;
+
+        let fecha = new Date();
+        let nMud = `MUD-${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(contadorMud).padStart(3, '0')}`;
+        contadorMud++;
+
+        mudanzas.push({ nMud, cliente, destinacion, precinto, tc, ramiroUsd, ramiroArs, fiscalArs, netoArs, ivaArs, brutoArs, pagadoRamiro: false });
+        renderTablaMudanzas();
+        document.getElementById('mud_cliente').value = '';
+        document.getElementById('mud_destinacion').value = '';
+        document.getElementById('mud_fiscal_ars').value = 0;
+        document.getElementById('mud_precinto').value = '';
+    }
+
+    function renderTablaMudanzas() {
+        let tbody = document.getElementById('tablaMudanzasBody');
+        tbody.innerHTML = '';
+        let totalBruto = 0;
+        let adeudadoRamiro = 0;
+
+        mudanzas.forEach((m, index) => {
+            totalBruto += m.brutoArs;
+            if (!m.pagadoRamiro) adeudadoRamiro += m.ramiroUsd;
+
+            let estadoPago = m.pagadoRamiro ? `<span class="badge badge-verde">PAGADO</span>` : `<span class="badge badge-rojo">PENDIENTE</span>`;
+            let btnPago = m.pagadoRamiro ? 
+                `<button class="btn btn-pago btn-pago-ok" onclick="togglePagoRamiro(${index})">Revertir Pago</button>` :
+                `<button class="btn btn-pago btn-pago-pend" onclick="togglePagoRamiro(${index})">Marcar Pagado</button>`;
+
+            tbody.innerHTML += `
+                <tr>
+                    <td><strong>${m.nMud}</strong></td><td>${m.cliente}</td><td>${m.destinacion}</td><td>${m.precinto}</td>
+                    <td>${m.tc.toFixed(2)}</td><td>$${m.ramiroUsd.toFixed(2)}</td><td>$${m.ramiroArs.toFixed(2)}</td>
+                    <td>$${m.fiscalArs.toFixed(2)}</td><td>$${m.netoArs.toFixed(2)}</td><td class="text-danger">$${m.ivaArs.toFixed(2)}</td>
+                    <td class="text-success">$${m.brutoArs.toFixed(2)}</td>
+                    <td style="text-align:center;">${estadoPago}<br>${btnPago}</td>
+                </tr>`;
+        });
+
+        document.getElementById('mud_total_ops').innerText = mudanzas.length;
+        document.getElementById('mud_total_bruto').innerText = `$${totalBruto.toFixed(2)}`;
+        document.getElementById('mud_adeudado_ramiro').innerText = `$${adeudadoRamiro.toFixed(2)}`;
+    }
+
+    function togglePagoRamiro(index) {
+        mudanzas[index].pagadoRamiro = !mudanzas[index].pagadoRamiro;
+        renderTablaMudanzas();
+    }
+
+    // === EXPORTAR EXCEL ===
+    function exportarExcel(tipo) {
+        let data = tipo === 'operaciones' ? operaciones : mudanzas;
+        let headers = [];
+        let titulo = "";
+
+        if (tipo === 'operaciones') {
+            titulo = "Operaciones_Despachantes";
+            headers = ["N° Op", "Cliente", "Destinación", "Canal", "N° MIC", "N° Multinota", "Frecuencia", "Total USD", "Valor ARS", "Neto ARS", "IVA ARS", "Bruto ARS"];
+        } else {
+            titulo = "Mudanzas";
+            headers = ["N° Mud", "Cliente", "Destinación", "N° Precinto", "TC", "Ramiro USD", "Ramiro ARS", "Fiscal ARS", "Neto ARS", "IVA ARS", "Bruto ARS", "Pago Ramiro"];
+        }
+
+        if (data.length === 0) { alert("No hay datos para exportar."); return; }
+
+        let htmlTabla = `<table border="1"><thead><tr style="background-color:#1e293b;color:white;font-weight:bold;">`;
+        headers.forEach(h => htmlTabla += `<th>${h}</th>`);
+        htmlTabla += `</tr></thead><tbody>`;
+
+        data.forEach(item => {
+            htmlTabla += `<tr>`;
+            if (tipo === 'operaciones') {
+                htmlTabla += `<td>${item.nOp}</td><td>${item.cliente}</td><td>${item.destinacion}</td><td>${item.canal}</td><td>${item.numMic}</td><td>${item.numMultinota}</td><td>${item.frecuencia}</td><td style="text-align:right;">${item.totalUsd.toFixed(2)}</td><td style="text-align:right;">${item.valorArs.toFixed(2)}</td><td style="text-align:right;">${item.netoArs.toFixed(2)}</td><td style="text-align:right;">${item.ivaArs.toFixed(2)}</td><td style="text-align:right;font-weight:bold;">${item.brutoArs.toFixed(2)}</td>`;
+            } else {
+                let estado = item.pagadoRamiro ? "PAGADO" : "PENDIENTE";
+                htmlTabla += `<td>${item.nMud}</td><td>${item.cliente}</td><td>${item.destinacion}</td><td>${item.precinto}</td><td>${item.tc.toFixed(2)}</td><td style="text-align:right;">${item.ramiroUsd.toFixed(2)}</td><td style="text-align:right;">${item.ramiroArs.toFixed(2)}</td><td style="text-align:right;">${item.fiscalArs.toFixed(2)}</td><td style="text-align:right;">${item.netoArs.toFixed(2)}</td><td style="text-align:right;">${item.ivaArs.toFixed(2)}</td><td style="text-align:right;font-weight:bold;">${item.brutoArs.toFixed(2)}</td><td style="text-align:center;">${estado}</td>`;
+            }
+            htmlTabla += `</tr>`;
+        });
+
+        htmlTabla += `</tbody></table>`;
+
+        let blob = new Blob(['\ufeff', htmlTabla], { type: 'application/vnd.ms-excel' });
+        let url = URL.createObjectURL(blob);
+        let a = document.createElement('a');
+        a.href = url;
+        let fecha = new Date();
+        a.download = `${titulo}_${fecha.getDate()}-${fecha.getMonth() + 1}-${fecha.getFullYear()}.xls`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
 </script>
+
 </body>
 </html>
