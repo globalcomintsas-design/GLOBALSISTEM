@@ -1,433 +1,1003 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GlobalComint - Sistema Integral</title>
-    <style>
-        /* === ESTILOS DEL MENÚ PRINCIPAL (INDEX) === */
-        body {
-            font-family: 'Segoe UI', sans-serif;
-            margin: 0; padding: 0;
-            background-color: #1e3a8a;
-            color: white;
-            min-height: 100vh;
-        }
-        .header-sistema {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 20px 40px; background-color: rgba(0,0,0,0.2);
-        }
-        .header-sistema h2 { margin: 0; font-size: 1.5rem; }
-        .user-info span { margin-right: 15px; }
-        .btn-salir {
-            background: #dc2626; color: white; padding: 8px 15px;
-            text-decoration: none; border-radius: 5px; font-weight: bold;
-        }
-        .main-menu { text-align: center; padding: 60px 20px; }
-        .main-menu h1 { font-size: 2.2rem; margin-bottom: 50px; }
-        .cards-container {
-            display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; max-width: 1200px; margin: auto;
-        }
-        .card-menu {
-            background: white; color: #1e293b; width: 280px; padding: 30px;
-            border-radius: 12px; box-shadow: 0 10px 15px rgba(0,0,0,0.2);
-            text-align: center; transition: transform 0.2s;
-        }
-        .card-menu:hover { transform: translateY(-5px); }
-        .card-menu .icon { font-size: 3rem; margin-bottom: 15px; display: block; }
-        .card-menu h3 { margin: 0 0 10px 0; color: #1e40af; }
-        .card-menu p { font-size: 0.9rem; color: #64748b; min-height: 40px; }
-        .card-menu .btn-ingresar {
-            display: inline-block; margin-top: 20px; background: #2563eb; color: white;
-            padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;
-        }
-        .card-menu.nuevo { border: 2px solid #16a34a; }
-        .card-menu.nuevo .btn-ingresar { background: #16a34a; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLOBALCOMINT · Corresponsales</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'DM Sans',sans-serif;background:#f0f4f8;min-height:100vh;color:#1e293b;}
 
-        /* === ESTILOS DEL MÓDULO DE OPERACIONES === */
-        :root {
-            --primary: #2563eb; --success: #16a34a; --danger: #dc2626;
-            --light: #f8fafc; --dark: #1e293b; --border: #cbd5e1; --warning: #d97706; --purple: #7c3aed;
-        }
-        #modulo-operaciones { display: none; background-color: #e2e8f0; padding: 20px; color: var(--dark); }
-        .container { max-width: 1400px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 40px; }
-        h1, h2, h3 { color: var(--dark); margin-top: 0; }
-        .header-nav { max-width: 1400px; margin: auto; margin-bottom: 20px; }
-        .btn-volver { background: var(--dark); color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; }
-        
-        .tarifas-panel { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 20px; margin-bottom: 30px; }
-        .tarifas-header { display: flex; justify-content: space-between; align-items: center; }
-        .btn-toggle-tarifas { background: var(--warning); color: white; border: none; padding: 8px 15px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9rem; }
-        .tarifas-grid { display: none; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-top: 20px; }
-        .tarifa-item { display: flex; flex-direction: column; background: white; padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
-        .tarifa-item label { font-size: 0.85rem; margin-bottom: 5px; }
-        .tarifa-inputs { display: flex; gap: 5px; }
-        .tarifa-inputs input { width: 70%; }
-        .tarifa-inputs select { width: 30%; }
+/* NAV */
+.topbar{background:#1e3a8a;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;}
+.topbar-left{display:flex;align-items:center;gap:14px;}
+.topbar-brand{color:#fff;font-weight:700;font-size:17px;letter-spacing:.5px;}
+.topbar-mod{color:#93c5fd;font-size:13px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+.btn-back{background:rgba(255,255,255,0.15);color:#fff;border:none;padding:7px 14px;border-radius:8px;cursor:pointer;font-size:12px;font-family:'DM Sans',sans-serif;font-weight:600;text-decoration:none;}
+.btn-back:hover{background:rgba(255,255,255,0.25);}
+.user-chip{color:#bfdbfe;font-size:12px;}
 
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .form-group { display: flex; flex-direction: column; }
-        label { font-weight: 600; margin-bottom: 5px; font-size: 0.9rem; }
-        input, select { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; box-sizing: border-box; }
-        .botonera { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-        .btn { border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-size: 1rem; font-weight: bold; }
-        .btn-calcular { background: var(--primary); color: white; }
-        .btn-exportar { background: var(--success); color: white; }
-        .btn-mudanza { background: var(--purple); color: white; }
-        .btn-pago { padding: 6px 12px; font-size: 0.8rem; border-radius: 4px; margin-top: 5px; }
-        .btn-pago-pend { background: var(--danger); color: white; }
-        .btn-pago-ok { background: var(--success); color: white; }
-        .tabla-container { overflow-x: auto; margin-top: 20px; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        th { background: var(--dark); color: white; padding: 12px; text-align: left; }
-        td { padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-        tr:nth-child(even) { background: var(--light); }
-        .badge { padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
-        .badge-rojo { background: #fee2e2; color: #991b1b; }
-        .badge-naranja { background: #ffedd5; color: #9a3412; }
-        .badge-verde { background: #dcfce7; color: #166534; }
-        .summary-cards { display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; }
-        .card { flex: 1; min-width: 180px; background: var(--light); padding: 15px; border-radius: 8px; text-align: center; }
-        .card h3 { font-size: 1rem; color: #64748b; margin: 0 0 5px 0;}
-        .card p { font-size: 1.8rem; font-weight: bold; margin: 0; color: var(--primary); }
-        .card-alert p { color: var(--danger); }
-        .text-success { color: var(--success); font-weight: bold; }
-        .text-danger { color: var(--danger); }
-        .section-divider { border: 0; border-top: 2px dashed var(--border); margin: 40px 0; }
-    </style>
+/* LAYOUT */
+.main{max-width:1400px;margin:0 auto;padding:24px;}
+.page-header{margin-bottom:24px;}
+.page-title{font-size:22px;font-weight:700;color:#1e3a8a;}
+.page-sub{font-size:13px;color:#64748b;margin-top:4px;}
+
+/* TABS */
+.tabs{display:flex;gap:4px;background:#e2e8f0;padding:4px;border-radius:12px;width:fit-content;margin-bottom:24px;}
+.tab{padding:8px 18px;border-radius:9px;border:none;background:transparent;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:#64748b;transition:all .15s;}
+.tab.active{background:#fff;color:#1e3a8a;box-shadow:0 1px 4px rgba(0,0,0,0.12);}
+
+/* TARIFAS PANEL */
+.tarifas-bar{background:#fff;border-radius:14px;padding:16px 20px;margin-bottom:20px;border:1px solid #e2e8f0;}
+.tarifas-bar h3{font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px;}
+.tarifas-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;}
+.tarifa-item{background:#f8fafc;border-radius:8px;padding:8px 12px;display:flex;flex-direction:column;gap:2px;}
+.tarifa-label{font-size:11px;color:#94a3b8;font-weight:500;}
+.tarifa-val{font-size:13px;font-weight:700;color:#1e3a8a;}
+.tarifa-val input{width:60px;border:1px solid #e2e8f0;border-radius:5px;padding:2px 5px;font-size:13px;font-weight:700;color:#1e3a8a;font-family:'DM Sans',sans-serif;text-align:right;}
+.tc-row{display:flex;align-items:center;gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid #f1f5f9;}
+.tc-row label{font-size:13px;font-weight:600;color:#475569;}
+.tc-row input{width:90px;border:1.5px solid #1e3a8a;border-radius:8px;padding:6px 10px;font-size:14px;font-weight:700;color:#1e3a8a;font-family:'DM Sans',sans-serif;text-align:right;}
+
+/* CLIENTE SELECTOR */
+.section-card{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;border:1px solid #e2e8f0;}
+.section-card h3{font-size:13px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;}
+.form-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;align-items:end;}
+.form-group{display:flex;flex-direction:column;gap:4px;}
+.form-group label{font-size:12px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.3px;}
+.form-group input, .form-group select{padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:'DM Sans',sans-serif;color:#1e293b;outline:none;transition:border .15s;}
+.form-group input:focus, .form-group select:focus{border-color:#1e3a8a;}
+.form-group select{background:#fff;cursor:pointer;}
+
+/* CARGA OPERACION */
+.op-form{background:#fff;border-radius:14px;padding:20px;margin-bottom:16px;border:2px solid #bfdbfe;}
+.op-form-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.op-form-title{font-size:14px;font-weight:700;color:#1e3a8a;}
+.op-num-badge{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:12px;padding:4px 12px;border-radius:20px;}
+
+.op-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px;}
+.chk-group{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;}
+.chk-item{display:flex;align-items:center;gap:7px;background:#f8fafc;border-radius:8px;padding:8px 10px;cursor:pointer;border:1.5px solid transparent;transition:all .12s;}
+.chk-item:hover{border-color:#bfdbfe;background:#eff6ff;}
+.chk-item.checked{border-color:#1e3a8a;background:#eff6ff;}
+.chk-item input[type=checkbox]{accent-color:#1e3a8a;width:15px;height:15px;}
+.chk-item label{font-size:12px;font-weight:600;color:#334155;cursor:pointer;}
+.chk-item .chk-extra{width:55px;border:1px solid #e2e8f0;border-radius:5px;padding:2px 5px;font-size:12px;font-family:'DM Sans',sans-serif;text-align:right;margin-left:auto;}
+
+/* RESUMEN */
+.resumen-box{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:12px;padding:16px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px;}
+.res-item{text-align:center;}
+.res-label{font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+.res-val{font-size:18px;font-weight:700;color:#1e3a8a;margin-top:2px;}
+.res-val.green{color:#059669;}
+
+/* BTNS */
+.btn-primary{background:#1e3a8a;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s;}
+.btn-primary:hover{background:#1e40af;}
+.btn-success{background:#059669;color:#fff;border:none;padding:10px 22px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.btn-danger{background:#dc2626;color:#fff;border:none;padding:6px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.btn-outline{background:#fff;color:#1e3a8a;border:1.5px solid #1e3a8a;padding:9px 20px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.btn-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:16px;}
+
+/* TABLA */
+.tabla-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead tr{background:#1e3a8a;color:#fff;}
+th{padding:10px 12px;text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;}
+tbody tr{border-bottom:1px solid #f1f5f9;transition:background .1s;}
+tbody tr:hover{background:#f8fafc;}
+td{padding:9px 12px;color:#334155;white-space:nowrap;}
+td.mono{font-family:monospace;font-size:12px;}
+.canal-badge{padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;display:inline-block;}
+.canal-V{background:#dcfce7;color:#166534;}
+.canal-N{background:#fef9c3;color:#854d0e;}
+.canal-R{background:#fee2e2;color:#991b1b;}
+.tag{background:#eff6ff;color:#1e3a8a;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;margin:1px;display:inline-block;}
+
+/* DASHBOARD */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px;}
+.kpi{background:#fff;border-radius:14px;padding:18px 20px;border:1px solid #e2e8f0;}
+.kpi-label{font-size:11px;color:#94a3b8;font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+.kpi-val{font-size:26px;font-weight:700;color:#1e3a8a;margin-top:4px;}
+.kpi-sub{font-size:11px;color:#94a3b8;margin-top:2px;}
+.kpi.accent{border-color:#bfdbfe;background:linear-gradient(135deg,#eff6ff,#fff);}
+
+/* PERIODO SELECTOR */
+.periodo-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+.periodo-bar select{padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
+.periodo-bar select:focus{border-color:#1e3a8a;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);transform:translateY(80px);opacity:0;transition:all .3s;z-index:1000;}
+.toast.show{transform:translateY(0);opacity:1;}
+
+/* RESPONSIVE */
+@media(max-width:600px){
+  .main{padding:12px;}
+  .op-grid{grid-template-columns:1fr 1fr;}
+  .resumen-box{grid-template-columns:1fr;}
+}
+</style>
 </head>
 <body>
 
-<!-- PANTALLA 1: MENÚ PRINCIPAL -->
-<div id="dashboard">
-    <div class="header-sistema">
-        <h2>GLOBALCOMINT</h2>
-        <div class="user-info">
-            <span>Usuario: Bruno Cola</span>
-            <a href="#" class="btn-salir">Salir</a>
-        </div>
-    </div>
-    <div class="main-menu">
-        <h1>Seleccioná el módulo al que querés acceder</h1>
-        <div class="cards-container">
-            <div class="card-menu"><span class="icon">💰</span><h3>Caja & Finanzas</h3><p>Movimientos de fondos, bancos, cajas chicas y rendiciones.</p><a href="#" class="btn-ingresar">Ingresar →</a></div>
-            <div class="card-menu"><span class="icon">🚛</span><h3>Movilidad & FS</h3><p>Gestión de flota, viajes, combustible y muelle.</p><a href="#" class="btn-ingresar">Ingresar →</a></div>
-            <div class="card-menu"><span class="icon">🧾</span><h3>Sueldos</h3><p>Liquidación de haberes, cargas sociales y sindicales.</p><a href="#" class="btn-ingresar">Ingresar →</a></div>
-            <div class="card-menu"><span class="icon">🏖️</span><h3>Vacaciones</h3><p>Gestión de licencias, vacaciones y permisos.</p><a href="#" class="btn-ingresar">Ingresar →</a></div>
-            <div class="card-menu nuevo"><span class="icon">📊</span><h3>Operaciones y Mudanzas</h3><p>Carga de despachantes, cálculo de tarifa, IVA y mudanzas.</p><a href="#" onclick="mostrarModulo()" class="btn-ingresar">Ingresar →</a></div>
-        </div>
-    </div>
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-brand">GLOBALCOMINT</div>
+    <div class="topbar-mod">📋 Corresponsales</div>
+  </div>
+  <div class="topbar-right">
+    <span class="user-chip" id="userChip"></span>
+    <a class="btn-back" href="index.html">← Inicio</a>
+  </div>
 </div>
 
-<!-- PANTALLA 2: MÓDULO DE OPERACIONES -->
-<div id="modulo-operaciones">
-    <div class="header-nav">
-        <a href="#" onclick="mostrarDashboard()" class="btn-volver">← Volver al Menú Principal</a>
+<div class="main">
+  <div class="page-header">
+    <div class="page-title">Operaciones de Corresponsales</div>
+    <div class="page-sub">Carga, tarifación y seguimiento de operaciones realizadas para otros despachantes</div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('cargar')">➕ Cargar Operación</button>
+    <button class="tab" onclick="switchTab('listado')">📋 Listado</button>
+    <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
+  </div>
+
+  <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
+  <div id="tab-cargar">
+
+    <!-- TARIFAS CONFIGURABLES -->
+    <div class="tarifas-bar">
+      <h3>⚙️ Tarifas vigentes (USD) — editables</h3>
+      <div class="tarifas-grid">
+        <div class="tarifa-item">
+          <span class="tarifa-label">Honorarios V/N</span>
+          <span class="tarifa-val"><input type="number" id="t_vn" value="17" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Honorarios R</span>
+          <span class="tarifa-val"><input type="number" id="t_r" value="20" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Armado sobre</span>
+          <span class="tarifa-val"><input type="number" id="t_sobre" value="4" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Camión AD (V/N)</span>
+          <span class="tarifa-val"><input type="number" id="t_cam_vn" value="5" step="0.5"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Camión AD (R)</span>
+          <span class="tarifa-val"><input type="number" id="t_cam_r" value="6" step="0.5"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">SENASA pallets</span>
+          <span class="tarifa-val"><input type="number" id="t_senasa_p" value="2" step="0.5"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">SENASA producto</span>
+          <span class="tarifa-val"><input type="number" id="t_senasa_prod" value="3" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Hojas adicionales</span>
+          <span class="tarifa-val"><input type="number" id="t_hoja" value="0.15" step="0.05"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">MIC base</span>
+          <span class="tarifa-val"><input type="number" id="t_mic" value="5" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Foja ad. MIC</span>
+          <span class="tarifa-val"><input type="number" id="t_mic_foja" value="2" step="0.5"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Multinota</span>
+          <span class="tarifa-val"><input type="number" id="t_multinota" value="2" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Fin de semana</span>
+          <span class="tarifa-val"><input type="number" id="t_finsem" value="4" step="0.5"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Adicionales (pesos)</span>
+          <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100"> $</span>
+        </div>
+      </div>
+      <div class="tc-row">
+        <label>TC Oficialización:</label>
+        <input type="number" id="tc_global" value="1440" step="0.5" oninput="recalcularFormulario()">
+        <span style="font-size:12px;color:#94a3b8;">$/USD</span>
+        <span style="margin-left:16px;font-size:12px;color:#64748b;">Tipo de despacho:</span>
+        <select id="tipo_desp_global" onchange="recalcularFormulario()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
+          <option value="corresponsal">Corresponsal (tarifa estándar)</option>
+          <option value="desp_externo">Desp. externo (tarifa premium)</option>
+        </select>
+        <span id="premium-badge" style="display:none;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">+20% PREMIUM</span>
+      </div>
     </div>
 
-    <div class="container">
-        <h1>📊 Módulo de Operaciones de Despachantes</h1>
-        
-        <div class="tarifas-panel">
-            <div class="tarifas-header">
-                <h3 style="margin: 0; color:var(--warning)">⚙️ Configuración de Tarifas</h3>
-                <button class="btn-toggle-tarifas" onclick="toggleTarifas()">Mostrar / Ocultar</button>
-            </div>
-            <div id="tarifasGrid" class="tarifas-grid">
-                <div class="tarifa-item"><label>Base Verde / Naranja</label><div class="tarifa-inputs"><input type="number" id="precio_base_vn" value="17" step="0.01"><select id="moneda_base_vn"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Base Rojo</label><div class="tarifa-inputs"><input type="number" id="precio_base_r" value="20" step="0.01"><select id="moneda_base_r"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Armado de Sobre</label><div class="tarifa-inputs"><input type="number" id="precio_sobre" value="4" step="0.01"><select id="moneda_sobre"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Camión AD (V/N)</label><div class="tarifa-inputs"><input type="number" id="precio_cam_vn" value="5" step="0.01"><select id="moneda_cam_vn"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Camión AD (Rojo)</label><div class="tarifa-inputs"><input type="number" id="precio_cam_r" value="6" step="0.01"><select id="moneda_cam_r"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Senasa Pallets</label><div class="tarifa-inputs"><input type="number" id="precio_senasa_p" value="2" step="0.01"><select id="moneda_senasa_p"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Senasa Producto</label><div class="tarifa-inputs"><input type="number" id="precio_senasa_pr" value="3" step="0.01"><select id="moneda_senasa_pr"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Hojas Adic. (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_hojas" value="0.15" step="0.01"><select id="moneda_hojas"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>MIC</label><div class="tarifa-inputs"><input type="number" id="precio_mic" value="5" step="0.01"><select id="moneda_mic"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Foja AD (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_fojas" value="2" step="0.01"><select id="moneda_fojas"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Multinotas (c/u)</label><div class="tarifa-inputs"><input type="number" id="precio_multinota" value="2" step="0.01"><select id="moneda_multinota"><option value="USD">USD</option><option value="ARS">ARS</option></select></div></div>
-                <div class="tarifa-item"><label>Toma de Contenedor</label><div class="tarifa-inputs"><input type="number" id="precio_toma" value="200" step="0.01"><select id="moneda_toma"><option value="ARS">ARS</option><option value="USD">USD</option></select></div></div>
-            </div>
+    <!-- DATOS GENERALES -->
+    <div class="section-card">
+      <h3>📄 Datos de la operación</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="op_fecha">
         </div>
-
-        <div class="form-grid">
-            <div class="form-group"><label>Cliente / Despachante</label><input type="text" id="cliente" placeholder="Ej: ENVACO"></div>
-            <div class="form-group"><label>Destinación</label><input type="text" id="destinacion" placeholder="Ej: IC03 1251N"></div>
-            <div class="form-group"><label>Canal</label><select id="canal"><option value="V">Verde (V)</option><option value="N">Naranja (N)</option><option value="R">Rojo (R)</option></select></div>
-            <div class="form-group"><label>Frecuencia de Cobro</label><select id="frecuencia"><option value="Diario">Diario</option><option value="Semanal">Semanal</option><option value="Mensual">Mensual</option></select></div>
-            <div class="form-group"><label>Tipo de Cambio (PE)</label><input type="number" id="tc" value="1400" step="0.01"></div>
+        <div class="form-group">
+          <label>Corresponsal / Despachante</label>
+          <select id="op_corresponsal" onchange="onCambiarCorresponsal()">
+            <option value="">— Seleccionar —</option>
+          </select>
         </div>
-
-        <h3>Servicios de la Operación</h3>
-        <div class="form-grid">
-            <div class="form-group"><label>Armado de Sobre (Cant)</label><input type="number" id="sobre" value="0" min="0"></div>
-            <div class="form-group"><label>Cant. Camiones AD</label><input type="number" id="camiones" value="0" min="0"></div>
-            <div class="form-group"><label>Senasa Pallets (Cant)</label><input type="number" id="senasaP" value="0" min="0"></div>
-            <div class="form-group"><label>Senasa Producto (Cant)</label><input type="number" id="senasaPr" value="0" min="0"></div>
-            <div class="form-group"><label>Hojas Adic. (Cant)</label><input type="number" id="hojas" value="0" min="0"></div>
-            <div class="form-group"><label>MIC (Cant)</label><input type="number" id="mic" value="0" min="0"></div>
-            <div class="form-group"><label>N° de MIC</label><input type="text" id="numMic" placeholder="Ej: 26AR225103A"></div>
-            <div class="form-group"><label>Fojas AD (Cant)</label><input type="number" id="fojas" value="0" min="0"></div>
-            <div class="form-group"><label>Multinotas (Cant)</label><input type="number" id="multinotas" value="0" min="0"></div>
-            <div class="form-group"><label>N° de Multinota</label><input type="text" id="numMultinota" placeholder="Ej: MULTINOTA 295"></div>
-            <div class="form-group"><label>Toma de Contenedor (Cant)</label><input type="number" id="tomaCont" value="0" min="0"></div>
-            <div class="form-group"><label>Otros Adicionales (ARS $)</label><input type="number" id="adicArs" value="0" step="0.01"></div>
+        <div class="form-group">
+          <label>Cliente final</label>
+          <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME...">
         </div>
-
-        <div class="botonera">
-            <button class="btn btn-calcular" onclick="calcularYGuardar()">+ Calcular y Cargar Operación</button>
-            <button class="btn btn-exportar" onclick="exportarExcel('operaciones')">📄 Exportar a Excel</button>
+        <div class="form-group">
+          <label>Destinación / Permiso</label>
+          <input type="text" id="op_destinacion" placeholder="IC03 1251N / EC01..." style="text-transform:uppercase;">
         </div>
-
-        <div class="summary-cards">
-            <div class="card"><h3>Operaciones Cargadas</h3><p id="totalOps">0</p></div>
-            <div class="card"><h3>Total USD Generado</h3><p id="totalUsdGenerado">$0.00</p></div>
-            <div class="card"><h3>Total Bruto ARS</h3><p id="totalArsGenerado">$0.00</p></div>
+        <div class="form-group">
+          <label>Canal</label>
+          <select id="op_canal" onchange="recalcularFormulario()">
+            <option value="V">Verde (V)</option>
+            <option value="N">Naranja (N)</option>
+            <option value="R" >Rojo (R)</option>
+          </select>
         </div>
-
-        <div class="tabla-container">
-            <table id="tablaDatos">
-                <thead>
-                    <tr><th>N° Op</th><th>Cliente</th><th>Dest.</th><th>Canal</th><th>N° MIC</th><th>N° Multinota</th><th>Cobro</th><th>Total USD</th><th>Valor ARS</th><th>Neto ARS</th><th>IVA ARS</th><th>Bruto ARS</th></tr>
-                </thead>
-                <tbody id="tablaOperaciones"></tbody>
-            </table>
+        <div class="form-group">
+          <label>ZPA / Fiscal</label>
+          <input type="text" id="op_zpa" placeholder="PS / PTM / TCA...">
         </div>
+        <div class="form-group">
+          <label>Tipo</label>
+          <select id="op_tipo">
+            <option value="EXPO">Exportación (EC)</option>
+            <option value="IMPO">Importación (IC)</option>
+            <option value="TRAN">Tránsito (IT)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Período facturación</label>
+          <select id="op_periodo_factura">
+            <option value="diario">Por operación / diario</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensual">Mensual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>N° MIC</label>
+          <input type="text" id="op_mic" placeholder="Ej: 26AR225103A" style="text-transform:uppercase;">
+        </div>
+        <div class="form-group">
+          <label>Toma de contenedor / detalle</label>
+          <input type="text" id="op_toma" placeholder="Ej: 13/5 AL 5/6  237-48-51...">
+        </div>
+      </div>
     </div>
 
-    <hr class="section-divider">
+    <!-- ADICIONALES -->
+    <div class="section-card">
+      <h3>➕ Adicionales y servicios</h3>
+      <div class="chk-group" id="adicionales-chk">
 
-    <div class="container">
-        <h1>🚚 Módulo de Mudanzas</h1>
-        <p>Carga los datos de la mudanza. El pago a Ramiro se calcula en USD y se pasa a pesos con el TC que indiques.</p>
-        <div class="form-grid">
-            <div class="form-group"><label>Cliente</label><input type="text" id="mud_cliente" placeholder="Ej: H OJEDA"></div>
-            <div class="form-group"><label>Destinación</label><input type="text" id="mud_destinacion" placeholder="Ej: EC02000196P"></div>
-            <div class="form-group"><label>Tipo de Cambio (PE)</label><input type="number" id="mud_tc" value="1400" step="0.01"></div>
-            <div class="form-group"><label>Pago Ramiro (USD)</label><input type="number" id="mud_ramiro_usd" value="190" step="0.01"></div>
-            <div class="form-group"><label>Valor Fiscal (ARS)</label><input type="number" id="mud_fiscal_ars" value="0" step="0.01" placeholder="Si lo pagamos"></div>
-            <div class="form-group"><label>N° Precinto Electrónico</label><input type="text" id="mud_precinto" placeholder="Ej: 123456"></div>
+        <label class="chk-item" id="chk-sobre-wrap">
+          <input type="checkbox" id="chk_sobre" onchange="recalcularFormulario()">
+          <label for="chk_sobre">Armado sobre</label>
+        </label>
+
+        <label class="chk-item" id="chk-cam-wrap">
+          <input type="checkbox" id="chk_cam" onchange="recalcularFormulario()">
+          <label for="chk_cam">Camión AD</label>
+          <input type="number" class="chk-extra" id="n_cam" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
+        </label>
+
+        <label class="chk-item" id="chk-senasa-p-wrap">
+          <input type="checkbox" id="chk_senasa_p" onchange="recalcularFormulario()">
+          <label for="chk_senasa_p">SENASA pallets</label>
+          <input type="number" class="chk-extra" id="n_senasa_p" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
+        </label>
+
+        <label class="chk-item" id="chk-senasa-prod-wrap">
+          <input type="checkbox" id="chk_senasa_prod" onchange="recalcularFormulario()">
+          <label for="chk_senasa_prod">SENASA producto</label>
+        </label>
+
+        <label class="chk-item" id="chk-hojas-wrap">
+          <input type="checkbox" id="chk_hojas" onchange="recalcularFormulario()">
+          <label for="chk_hojas">Hojas adicionales</label>
+          <input type="number" class="chk-extra" id="n_hojas" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
+        </label>
+
+        <label class="chk-item" id="chk-mic-wrap">
+          <input type="checkbox" id="chk_mic" onchange="recalcularFormulario()">
+          <label for="chk_mic">MIC</label>
+          <input type="text" class="chk-extra" id="n_mic_num" placeholder="N° MIC" style="width:80px;">
+        </label>
+
+        <label class="chk-item" id="chk-mic-fojas-wrap">
+          <input type="checkbox" id="chk_mic_fojas" onchange="recalcularFormulario()">
+          <label for="chk_mic_fojas">Fojas ad. MIC</label>
+          <input type="number" class="chk-extra" id="n_mic_fojas" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
+        </label>
+
+        <label class="chk-item" id="chk-multinota-wrap">
+          <input type="checkbox" id="chk_multinota" onchange="recalcularFormulario()">
+          <label for="chk_multinota">Multinota</label>
+        </label>
+
+        <label class="chk-item" id="chk-finsem-wrap">
+          <input type="checkbox" id="chk_finsem" onchange="recalcularFormulario()">
+          <label for="chk_finsem">Fin de semana</label>
+        </label>
+
+      </div>
+      <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div class="form-group" style="min-width:200px;">
+          <label>Adicionales en pesos</label>
+          <input type="number" id="op_adicionales_pesos" value="0" oninput="recalcularFormulario()" placeholder="$ 0">
         </div>
-        <div class="botonera">
-            <button class="btn btn-mudanza" onclick="cargarMudanza()">+ Cargar Mudanza</button>
-            <button class="btn btn-exportar" onclick="exportarExcel('mudanzas')">📄 Exportar a Excel</button>
+        <div class="form-group" style="min-width:240px;">
+          <label>Observaciones</label>
+          <input type="text" id="op_obs" placeholder="Notas, referencia...">
         </div>
-        <div class="summary-cards">
-            <div class="card"><h3>Total Mudanzas</h3><p id="mud_total_ops">0</p></div>
-            <div class="card"><h3>Total Bruto Facturado</h3><p id="mud_total_bruto">$0.00</p></div>
-            <div class="card card-alert"><h3>Adeudado a Ramiro (USD)</h3><p id="mud_adeudado_ramiro">$0.00</p></div>
+        <div class="form-group" style="min-width:140px;">
+          <label>TC de la operación</label>
+          <input type="number" id="op_tc" placeholder="Usar TC global" oninput="recalcularFormulario()">
         </div>
-        <div class="tabla-container">
-            <table id="tablaMudanzas">
-                <thead><tr><th>N° Mud</th><th>Cliente</th><th>Dest.</th><th>N° Precinto</th><th>TC</th><th>Ramiro (USD)</th><th>Ramiro (ARS)</th><th>Fiscal (ARS)</th><th>Neto ARS</th><th>IVA ARS</th><th>Bruto ARS</th><th>Estado Pago Ramiro</th></tr></thead>
-                <tbody id="tablaMudanzasBody"></tbody>
-            </table>
-        </div>
+      </div>
     </div>
-</div>
 
-<script>
-    // === NAVEGACIÓN ===
-    function mostrarModulo() {
-        document.getElementById('dashboard').style.display = 'none';
-        document.getElementById('modulo-operaciones').style.display = 'block';
-        window.scrollTo(0, 0);
-    }
-    function mostrarDashboard() {
-        document.getElementById('modulo-operaciones').style.display = 'none';
-        document.getElementById('dashboard').style.display = 'block';
-        window.scrollTo(0, 0);
-    }
+    <!-- RESUMEN PREVIO -->
+    <div class="section-card">
+      <h3>💰 Liquidación previa</h3>
+      <div id="desglose-prev" style="font-size:12px;color:#64748b;margin-bottom:12px;min-height:20px;"></div>
+      <div class="resumen-box">
+        <div class="res-item">
+          <div class="res-label">Neto (sin IVA)</div>
+          <div class="res-val" id="prev_neto">$ 0</div>
+        </div>
+        <div class="res-item">
+          <div class="res-label">IVA 21%</div>
+          <div class="res-val" id="prev_iva">$ 0</div>
+        </div>
+        <div class="res-item">
+          <div class="res-label">Total bruto</div>
+          <div class="res-val green" id="prev_bruto">$ 0</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-primary" onclick="guardarOperacion()">💾 Guardar operación</button>
+        <button class="btn-outline" onclick="limpiarFormulario()">🗑 Limpiar</button>
+        <span id="op-numero-preview" style="font-size:12px;color:#94a3b8;margin-left:8px;"></span>
+      </div>
+    </div>
 
-    // === DESPLEGAR TARIFAS ===
-    function toggleTarifas() {
-        let grid = document.getElementById('tarifasGrid');
-        if (grid.style.display === 'none' || grid.style.display === '') {
-            grid.style.display = 'grid';
-        } else {
-            grid.style.display = 'none';
-        }
-    }
+  </div><!-- /tab-cargar -->
 
-    // === LÓGICA DESPACHANTES ===
-    let operaciones = [];
-    let contadorOp = 1;
+  <!-- ═══════════════ TAB: LISTADO ═══════════════ -->
+  <div id="tab-listado" style="display:none;">
+    <div class="section-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+        <h3 style="margin:0;">📋 Operaciones registradas</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div class="periodo-bar" style="margin:0;">
+            <select id="filtro_corresponsal">
+              <option value="">Todos los corresponsales</option>
+            </select>
+            <select id="filtro_mes">
+              <option value="">Todos los meses</option>
+            </select>
+          </div>
+          <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
+        </div>
+      </div>
+      <div class="tabla-wrap">
+        <table id="tabla-ops">
+          <thead>
+            <tr>
+              <th>N° Op</th>
+              <th>Fecha</th>
+              <th>Corresponsal</th>
+              <th>Cliente</th>
+              <th>Destinación</th>
+              <th>MIC</th>
+              <th>Toma cont.</th>
+              <th>Canal</th>
+              <th>TC</th>
+              <th>USD</th>
+              <th>Neto $</th>
+              <th>IVA $</th>
+              <th>Total $</th>
+              <th>Adicionales</th>
+              <th>Obs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-ops">
+            <tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones cargadas</td></tr>
+          </tbody>
+          <tfoot id="tfoot-ops"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    function getTarifa(idBase) {
-        let precio = parseFloat(document.getElementById('precio_' + idBase).value) || 0;
-        let moneda = document.getElementById('moneda_' + idBase).value;
-        return { precio, moneda };
-    }
+  <!-- ═══════════════ TAB: DASHBOARD ═══════════════ -->
+  <div id="tab-dashboard" style="display:none;">
+    <div class="periodo-bar">
+      <select id="dash_mes" onchange="renderDashboard()">
+        <option value="">Todos los meses</option>
+      </select>
+      <select id="dash_corresponsal" onchange="renderDashboard()">
+        <option value="">Todos los corresponsales</option>
+      </select>
+    </div>
+    <div class="kpis" id="kpis-wrap"></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;" id="dash-detalle"></div>
+  </div>
 
-    function calcItem(qty, idBase, canal) {
-        if(qty <= 0) return { usd: 0, ars: 0 };
-        let idCompleto = idBase;
-        if(idBase === 'base') idCompleto = (canal === 'R') ? 'base_r' : 'base_vn';
-        if(idBase === 'cam') idCompleto = (canal === 'R') ? 'cam_r' : 'cam_vn';
-        let { precio, moneda } = getTarifa(idCompleto);
-        if(moneda === 'USD') return { usd: qty * precio, ars: 0 };
-        return { usd: 0, ars: qty * precio };
-    }
+  <!-- ═══════════════ TAB: CLIENTES ═══════════════ -->
+  <div id="tab-clientes" style="display:none;">
+    <div class="section-card">
+      <h3>🏢 Corresponsales / Despachantes</h3>
+      <div class="form-row" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label>Nombre / Razón Social</label>
+          <input type="text" id="cli_nombre" placeholder="Ej: MARANG JAVIER">
+        </div>
+        <div class="form-group">
+          <label>Tipo</label>
+          <select id="cli_tipo">
+            <option value="corresponsal">Corresponsal interno</option>
+            <option value="desp_externo">Despachante externo (premium)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Período de facturación</label>
+          <select id="cli_factura">
+            <option value="mensual">Mensual</option>
+            <option value="semanal">Semanal</option>
+            <option value="diario">Por operación</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>CUIT</label>
+          <input type="text" id="cli_cuit" placeholder="20-XXXXXXXX-X">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn-primary" onclick="guardarCliente()">Agregar corresponsal</button>
+        </div>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Facturación</th>
+              <th>CUIT</th>
+              <th>Ops registradas</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-clientes">
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin corresponsales cargados</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
-    function calcularYGuardar() {
-        let cliente = document.getElementById('cliente').value || "S/N";
-        let destinacion = document.getElementById('destinacion').value || "S/D";
-        let canal = document.getElementById('canal').value;
-        let frecuencia = document.getElementById('frecuencia').value;
-        let tc = parseFloat(document.getElementById('tc').value);
-        let numMic = document.getElementById('numMic').value || "-";
-        let numMultinota = document.getElementById('numMultinota').value || "-";
-        
-        let qtySobre = parseInt(document.getElementById('sobre').value) || 0;
-        let qtyCamiones = parseInt(document.getElementById('camiones').value) || 0;
-        let qtySenasaP = parseInt(document.getElementById('senasaP').value) || 0;
-        let qtySenasaPr = parseInt(document.getElementById('senasaPr').value) || 0;
-        let qtyHojas = parseInt(document.getElementById('hojas').value) || 0;
-        let qtyMic = parseInt(document.getElementById('mic').value) || 0;
-        let qtyFojas = parseInt(document.getElementById('fojas').value) || 0;
-        let qtyMultinotas = parseInt(document.getElementById('multinotas').value) || 0;
-        let qtyToma = parseInt(document.getElementById('tomaCont').value) || 0;
-        let adicArs = parseFloat(document.getElementById('adicArs').value) || 0;
+</div><!-- /main -->
 
-        let totalUsd = 0;
-        let totalArsDirecto = 0;
+<div class="toast" id="toast"></div>
 
-        let r1 = calcItem(1, 'base', canal); totalUsd += r1.usd; totalArsDirecto += r1.ars;
-        let r2 = calcItem(qtySobre, 'sobre', canal); totalUsd += r2.usd; totalArsDirecto += r2.ars;
-        let r3 = calcItem(qtyCamiones, 'cam', canal); totalUsd += r3.usd; totalArsDirecto += r3.ars;
-        let r4 = calcItem(qtySenasaP, 'senasa_p', canal); totalUsd += r4.usd; totalArsDirecto += r4.ars;
-        let r5 = calcItem(qtySenasaPr, 'senasa_pr', canal); totalUsd += r5.usd; totalArsDirecto += r5.ars;
-        let r6 = calcItem(qtyHojas, 'hojas', canal); totalUsd += r6.usd; totalArsDirecto += r6.ars;
-        let r7 = calcItem(qtyMic, 'mic', canal); totalUsd += r7.usd; totalArsDirecto += r7.ars;
-        let r8 = calcItem(qtyFojas, 'fojas', canal); totalUsd += r8.usd; totalArsDirecto += r8.ars;
-        let r9 = calcItem(qtyMultinotas, 'multinota', canal); totalUsd += r9.usd; totalArsDirecto += r9.ars;
-        let r10 = calcItem(qtyToma, 'toma', canal); totalUsd += r10.usd; totalArsDirecto += r10.ars;
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-        totalArsDirecto += adicArs;
-        let valorArs = totalUsd * tc;          
-        let netoArs = valorArs + totalArsDirecto; 
-        let ivaArs = netoArs * 0.21;           
-        let brutoArs = netoArs + ivaArs;       
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
 
-        let fecha = new Date();
-        let nOp = `OP-${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(contadorOp).padStart(3, '0')}`;
-        contadorOp++;
+// ── Auth check ──
+const sesion = localStorage.getItem('gc_user');
+if(!sesion){ location.href='index.html'; }
+const user = JSON.parse(sesion);
+document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 
-        operaciones.push({ nOp, cliente, destinacion, canal, numMic, numMultinota, frecuencia, totalUsd, valorArs, netoArs, ivaArs, brutoArs });
-        renderTablaDespachantes();
-        limpiarFormulario();
-    }
+// ── Estado ──
+let operaciones = [];
+let clientes = [];
 
-    function renderTablaDespachantes() {
-        let tbody = document.getElementById('tablaOperaciones');
-        tbody.innerHTML = '';
-        let totalUsdAcum = 0, totalArsAcum = 0;
-        operaciones.forEach(op => {
-            let canalClass = op.canal === 'R' ? 'badge-rojo' : (op.canal === 'N' ? 'badge-naranja' : 'badge-verde');
-            tbody.innerHTML += `<tr><td><strong>${op.nOp}</strong></td><td>${op.cliente}</td><td>${op.destinacion}</td><td><span class="badge ${canalClass}">${op.canal}</span></td><td>${op.numMic}</td><td>${op.numMultinota}</td><td>${op.frecuencia}</td><td>$${op.totalUsd.toFixed(2)}</td><td>$${op.valorArs.toFixed(2)}</td><td>$${op.netoArs.toFixed(2)}</td><td class="text-danger">$${op.ivaArs.toFixed(2)}</td><td class="text-success">$${op.brutoArs.toFixed(2)}</td></tr>`;
-            totalUsdAcum += op.totalUsd;
-            totalArsAcum += op.brutoArs;
-        });
-        document.getElementById('totalOps').innerText = operaciones.length;
-        document.getElementById('totalUsdGenerado').innerText = `$${totalUsdAcum.toFixed(2)}`;
-        document.getElementById('totalArsGenerado').innerText = `$${totalArsAcum.toFixed(2)}`;
-    }
+// ── Fecha default ──
+document.getElementById('op_fecha').value = new Date().toISOString().split('T')[0];
 
-    function limpiarFormulario() {
-        document.getElementById('cliente').value = '';
-        document.getElementById('destinacion').value = '';
-        document.getElementById('numMic').value = '';
-        document.getElementById('numMultinota').value = '';
-        ['sobre', 'camiones', 'senasaP', 'senasaPr', 'hojas', 'mic', 'fojas', 'multinotas', 'tomaCont', 'adicArs'].forEach(id => document.getElementById(id).value = 0);
-    }
+// Auto fin de semana segun fecha
+document.getElementById('op_fecha').addEventListener('change', function(){
+  const d = new Date(this.value + 'T12:00:00');
+  const esFinsem = d.getDay() === 0 || d.getDay() === 6;
+  document.getElementById('chk_finsem').checked = esFinsem;
+  recalcularFormulario();
+});
 
-    // === LÓGICA MUDANZAS ===
-    let mudanzas = [];
-    let contadorMud = 1;
+// ── NUMERO DE OP ──
+function generarNumOp(){
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const seq = String(operaciones.length + 1).padStart(4,'0');
+  return `OP-${yy}${mm}-${seq}`;
+}
 
-    function cargarMudanza() {
-        let cliente = document.getElementById('mud_cliente').value || "S/N";
-        let destinacion = document.getElementById('mud_destinacion').value || "S/D";
-        let tc = parseFloat(document.getElementById('mud_tc').value) || 0;
-        let ramiroUsd = parseFloat(document.getElementById('mud_ramiro_usd').value) || 0;
-        let fiscalArs = parseFloat(document.getElementById('mud_fiscal_ars').value) || 0;
-        let precinto = document.getElementById('mud_precinto').value || "-";
+// ── FIRESTORE listeners ──
+onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
+  operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderTabla();
+  renderDashboard();
+  renderFiltros();
+});
 
-        let ramiroArs = ramiroUsd * tc;
-        let netoArs = ramiroArs + fiscalArs;
-        let ivaArs = netoArs * 0.21;
-        let brutoArs = netoArs + ivaArs;
+onSnapshot(collection(db,'corresponsales_clientes'), snap => {
+  clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderSelectCorresponsales();
+  renderTablaClientes();
+  renderFiltros();
+});
 
-        let fecha = new Date();
-        let nMud = `MUD-${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(contadorMud).padStart(3, '0')}`;
-        contadorMud++;
+// ── CÁLCULO ──
+function getTarifas(){
+  const canal = document.getElementById('op_canal').value;
+  const tipo = document.getElementById('tipo_desp_global').value;
+  const mult = tipo === 'desp_externo' ? 1.2 : 1;
+  const tc = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
 
-        mudanzas.push({ nMud, cliente, destinacion, precinto, tc, ramiroUsd, ramiroArs, fiscalArs, netoArs, ivaArs, brutoArs, pagadoRamiro: false });
-        renderTablaMudanzas();
-        document.getElementById('mud_cliente').value = '';
-        document.getElementById('mud_destinacion').value = '';
-        document.getElementById('mud_fiscal_ars').value = 0;
-        document.getElementById('mud_precinto').value = '';
-    }
+  const hon_usd = canal === 'R'
+    ? parseFloat(document.getElementById('t_r').value)
+    : parseFloat(document.getElementById('t_vn').value);
 
-    function renderTablaMudanzas() {
-        let tbody = document.getElementById('tablaMudanzasBody');
-        tbody.innerHTML = '';
-        let totalBruto = 0, adeudadoRamiro = 0;
-        mudanzas.forEach((m, index) => {
-            totalBruto += m.brutoArs;
-            if (!m.pagadoRamiro) adeudadoRamiro += m.ramiroUsd;
-            let estadoPago = m.pagadoRamiro ? `<span class="badge badge-verde">PAGADO</span>` : `<span class="badge badge-rojo">PENDIENTE</span>`;
-            let btnPago = m.pagadoRamiro ? `<button class="btn btn-pago btn-pago-ok" onclick="togglePagoRamiro(${index})">Revertir Pago</button>` : `<button class="btn btn-pago btn-pago-pend" onclick="togglePagoRamiro(${index})">Marcar Pagado</button>`;
-            tbody.innerHTML += `<tr><td><strong>${m.nMud}</strong></td><td>${m.cliente}</td><td>${m.destinacion}</td><td>${m.precinto}</td><td>${m.tc.toFixed(2)}</td><td>$${m.ramiroUsd.toFixed(2)}</td><td>$${m.ramiroArs.toFixed(2)}</td><td>$${m.fiscalArs.toFixed(2)}</td><td>$${m.netoArs.toFixed(2)}</td><td class="text-danger">$${m.ivaArs.toFixed(2)}</td><td class="text-success">$${m.brutoArs.toFixed(2)}</td><td style="text-align:center;">${estadoPago}<br>${btnPago}</td></tr>`;
-        });
-        document.getElementById('mud_total_ops').innerText = mudanzas.length;
-        document.getElementById('mud_total_bruto').innerText = `$${totalBruto.toFixed(2)}`;
-        document.getElementById('mud_adeudado_ramiro').innerText = `$${adeudadoRamiro.toFixed(2)}`;
-    }
+  const items = [];
+  const usd = (u, label) => { items.push({label, usd: u * mult, pesos: u * mult * tc}); };
 
-    function togglePagoRamiro(index) {
-        mudanzas[index].pagadoRamiro = !mudanzas[index].pagadoRamiro;
-        renderTablaMudanzas();
-    }
+  usd(hon_usd, `Honorarios canal ${canal}`);
 
-    // === EXPORTAR EXCEL ===
-    function exportarExcel(tipo) {
-        let data = tipo === 'operaciones' ? operaciones : mudanzas;
-        let headers = [], titulo = "";
-        if (tipo === 'operaciones') {
-            titulo = "Operaciones_Despachantes";
-            headers = ["N° Op", "Cliente", "Destinación", "Canal", "N° MIC", "N° Multinota", "Frecuencia", "Total USD", "Valor ARS", "Neto ARS", "IVA ARS", "Bruto ARS"];
-        } else {
-            titulo = "Mudanzas";
-            headers = ["N° Mud", "Cliente", "Destinación", "N° Precinto", "TC", "Ramiro USD", "Ramiro ARS", "Fiscal ARS", "Neto ARS", "IVA ARS", "Bruto ARS", "Pago Ramiro"];
-        }
-        if (data.length === 0) { alert("No hay datos para exportar."); return; }
-        let htmlTabla = `<table border="1"><thead><tr style="background-color:#1e293b;color:white;font-weight:bold;">`;
-        headers.forEach(h => htmlTabla += `<th>${h}</th>`);
-        htmlTabla += `</tr></thead><tbody>`;
-        data.forEach(item => {
-            htmlTabla += `<tr>`;
-            if (tipo === 'operaciones') {
-                htmlTabla += `<td>${item.nOp}</td><td>${item.cliente}</td><td>${item.destinacion}</td><td>${item.canal}</td><td>${item.numMic}</td><td>${item.numMultinota}</td><td>${item.frecuencia}</td><td style="text-align:right;">${item.totalUsd.toFixed(2)}</td><td style="text-align:right;">${item.valorArs.toFixed(2)}</td><td style="text-align:right;">${item.netoArs.toFixed(2)}</td><td style="text-align:right;">${item.ivaArs.toFixed(2)}</td><td style="text-align:right;font-weight:bold;">${item.brutoArs.toFixed(2)}</td>`;
-            } else {
-                let estado = item.pagadoRamiro ? "PAGADO" : "PENDIENTE";
-                htmlTabla += `<td>${item.nMud}</td><td>${item.cliente}</td><td>${item.destinacion}</td><td>${item.precinto}</td><td>${item.tc.toFixed(2)}</td><td style="text-align:right;">${item.ramiroUsd.toFixed(2)}</td><td style="text-align:right;">${item.ramiroArs.toFixed(2)}</td><td style="text-align:right;">${item.fiscalArs.toFixed(2)}</td><td style="text-align:right;">${item.netoArs.toFixed(2)}</td><td style="text-align:right;">${item.ivaArs.toFixed(2)}</td><td style="text-align:right;font-weight:bold;">${item.brutoArs.toFixed(2)}</td><td style="text-align:center;">${estado}</td>`;
-            }
-            htmlTabla += `</tr>`;
-        });
-        htmlTabla += `</tbody></table>`;
-        let blob = new Blob(['\ufeff', htmlTabla], { type: 'application/vnd.ms-excel' });
-        let url = URL.createObjectURL(blob);
-        let a = document.createElement('a');
-        a.href = url;
-        let fecha = new Date();
-        a.download = `${titulo}_${fecha.getDate()}-${fecha.getMonth() + 1}-${fecha.getFullYear()}.xls`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
+  if(document.getElementById('chk_sobre').checked)
+    usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
+
+  if(document.getElementById('chk_cam').checked){
+    const n = parseInt(document.getElementById('n_cam').value)||1;
+    const t = canal === 'R'
+      ? parseFloat(document.getElementById('t_cam_r').value)
+      : parseFloat(document.getElementById('t_cam_vn').value);
+    usd(t*n, `Camión AD ×${n}`);
+  }
+
+  if(document.getElementById('chk_senasa_p').checked){
+    const n = parseInt(document.getElementById('n_senasa_p').value)||1;
+    usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA pallets ×${n}`);
+  }
+
+  if(document.getElementById('chk_senasa_prod').checked)
+    usd(parseFloat(document.getElementById('t_senasa_prod').value), 'SENASA producto');
+
+  if(document.getElementById('chk_hojas').checked){
+    const n = parseInt(document.getElementById('n_hojas').value)||1;
+    usd(parseFloat(document.getElementById('t_hoja').value)*n, `Hojas adicionales ×${n}`);
+  }
+
+  if(document.getElementById('chk_mic').checked)
+    usd(parseFloat(document.getElementById('t_mic').value), 'MIC base');
+
+  if(document.getElementById('chk_mic_fojas').checked){
+    const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
+    usd(parseFloat(document.getElementById('t_mic_foja').value)*n, `Fojas adicionales MIC ×${n}`);
+  }
+
+  if(document.getElementById('chk_multinota').checked)
+    usd(parseFloat(document.getElementById('t_multinota').value), 'Multinota');
+
+  if(document.getElementById('chk_finsem').checked)
+    usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
+
+  // Adicionales en pesos (directos, sin conversión)
+  const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
+  if(adicPesos > 0) items.push({label:'Adicionales en pesos', usd:0, pesos: adicPesos});
+
+  const totalNeto = items.reduce((a,b) => a + b.pesos, 0);
+  const iva = totalNeto * 0.21;
+  const bruto = totalNeto + iva;
+  const totalUsd = items.reduce((a,b) => a + b.usd, 0);
+
+  return { items, totalNeto, iva, bruto, tc, totalUsd, mult };
+}
+
+window.recalcularFormulario = function(){
+  const tipo = document.getElementById('tipo_desp_global').value;
+  document.getElementById('premium-badge').style.display = tipo === 'desp_externo' ? 'inline-block' : 'none';
+
+  const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
+
+  document.getElementById('prev_neto').textContent = '$ ' + fmt(totalNeto);
+  document.getElementById('prev_iva').textContent  = '$ ' + fmt(iva);
+  document.getElementById('prev_bruto').textContent = '$ ' + fmt(bruto);
+
+  const desglose = items.map(i =>
+    `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt(i.pesos)}</span>`
+  ).join(' ');
+  document.getElementById('desglose-prev').innerHTML = desglose;
+
+  // Actualizar número preview
+  document.getElementById('op-numero-preview').textContent = '→ ' + generarNumOp();
+};
+
+// Init cálculo
+recalcularFormulario();
+
+// ── GUARDAR ──
+window.guardarOperacion = async function(){
+  const corresponsal = document.getElementById('op_corresponsal').value;
+  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  if(!corresponsal){ toast('Seleccioná un corresponsal'); return; }
+  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
+
+  const { items, totalNeto, iva, bruto, tc, totalUsd, mult } = getTarifas();
+
+  const adicTags = [];
+  if(document.getElementById('chk_sobre').checked) adicTags.push('Sobre');
+  if(document.getElementById('chk_cam').checked) adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
+  if(document.getElementById('chk_senasa_p').checked) adicTags.push(`SENASA-P×${document.getElementById('n_senasa_p').value}`);
+  if(document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
+  if(document.getElementById('chk_hojas').checked) adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
+  if(document.getElementById('chk_mic').checked) adicTags.push(`MIC:${document.getElementById('n_mic_num').value||'s/n'}`);
+  if(document.getElementById('chk_mic_fojas').checked) adicTags.push(`FojaMIC×${document.getElementById('n_mic_fojas').value}`);
+  if(document.getElementById('chk_multinota').checked) adicTags.push('Multinota');
+  if(document.getElementById('chk_finsem').checked) adicTags.push('F/S');
+
+  const op = {
+    numOp: generarNumOp(),
+    fecha: document.getElementById('op_fecha').value,
+    corresponsal,
+    cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
+    destinacion,
+    canal: document.getElementById('op_canal').value,
+    zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
+    tipo: document.getElementById('op_tipo').value,
+    mic: document.getElementById('op_mic').value.trim().toUpperCase(),
+    toma: document.getElementById('op_toma').value.trim(),
+    tc,
+    totalUsd,
+    neto: totalNeto,
+    iva,
+    bruto,
+    adicionales: adicTags.join(', '),
+    obs: document.getElementById('op_obs').value.trim(),
+    periodoFactura: document.getElementById('op_periodo_factura').value,
+    esPremium: mult > 1,
+    cargadoPor: user.username,
+    ts: Date.now()
+  };
+
+  try {
+    await addDoc(collection(db,'corresponsales_ops'), op);
+    toast('✅ Operación guardada: ' + op.numOp);
+    limpiarFormulario();
+  } catch(e){
+    toast('❌ Error al guardar: ' + e.message);
+  }
+};
+
+// ── ELIMINAR ──
+window.eliminarOp = async function(id){
+  if(!confirm('¿Eliminar esta operación?')) return;
+  await deleteDoc(doc(db,'corresponsales_ops',id));
+  toast('Operación eliminada');
+};
+
+// ── LIMPIAR FORM ──
+window.limpiarFormulario = function(){
+  document.getElementById('op_destinacion').value = '';
+  document.getElementById('op_cliente').value = '';
+  document.getElementById('op_obs').value = '';
+  document.getElementById('op_mic').value = '';
+  document.getElementById('op_toma').value = '';
+  document.getElementById('op_adicionales_pesos').value = '0';
+  document.getElementById('op_tc').value = '';
+  document.querySelectorAll('.chk-item input[type=checkbox]').forEach(c => c.checked = false);
+  recalcularFormulario();
+};
+
+// ── GUARDAR CLIENTE ──
+window.guardarCliente = async function(){
+  const nombre = document.getElementById('cli_nombre').value.trim().toUpperCase();
+  if(!nombre){ toast('Ingresá el nombre'); return; }
+  const cli = {
+    nombre,
+    tipo: document.getElementById('cli_tipo').value,
+    factura: document.getElementById('cli_factura').value,
+    cuit: document.getElementById('cli_cuit').value.trim()
+  };
+  await setDoc(doc(db,'corresponsales_clientes', nombre.replace(/\s+/g,'_')), cli);
+  document.getElementById('cli_nombre').value = '';
+  document.getElementById('cli_cuit').value = '';
+  toast('✅ Corresponsal guardado');
+};
+
+window.eliminarCliente = async function(id){
+  if(!confirm('¿Eliminar corresponsal?')) return;
+  await deleteDoc(doc(db,'corresponsales_clientes',id));
+  toast('Corresponsal eliminado');
+};
+
+// ── RENDERS ──
+function renderSelectCorresponsales(){
+  const sel = document.getElementById('op_corresponsal');
+  const val = sel.value;
+  sel.innerHTML = '<option value="">— Seleccionar —</option>';
+  clientes.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.nombre;
+    opt.textContent = c.nombre + (c.tipo === 'desp_externo' ? ' ⭐' : '');
+    sel.appendChild(opt);
+  });
+  sel.value = val;
+}
+
+window.onCambiarCorresponsal = function(){
+  const nombre = document.getElementById('op_corresponsal').value;
+  const cli = clientes.find(c => c.nombre === nombre);
+  if(cli){
+    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'corresponsal';
+    document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
+  }
+  recalcularFormulario();
+};
+
+function renderTabla(){
+  const filtCorr = document.getElementById('filtro_corresponsal')?.value || '';
+  const filtMes  = document.getElementById('filtro_mes')?.value || '';
+  let ops = [...operaciones];
+  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+  if(filtMes)  ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
+
+  const tbody = document.getElementById('tbody-ops');
+  if(!ops.length){
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
+    document.getElementById('tfoot-ops').innerHTML = '';
+    return;
+  }
+
+  tbody.innerHTML = ops.map(o => `
+    <tr>
+      <td class="mono">${o.numOp||'-'}</td>
+      <td>${o.fecha||''}</td>
+      <td><strong>${o.corresponsal||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e">PREM</span>':''}</td>
+      <td>${o.cliente||''}</td>
+      <td class="mono">${o.destinacion||''}</td>
+      <td class="mono">${o.mic||'-'}</td>
+      <td style="font-size:11px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${o.toma||''}">${o.toma||'-'}</td>
+      <td><span class="canal-badge canal-${o.canal}">${o.canal}</span></td>
+      <td class="mono">${o.tc||''}</td>
+      <td class="mono">${o.totalUsd||''}</td>
+      <td style="color:#1e3a8a;font-weight:600;">$${fmt(o.neto)}</td>
+      <td>$${fmt(o.iva)}</td>
+      <td style="color:#059669;font-weight:700;">$${fmt(o.bruto)}</td>
+      <td>${o.adicionales ? o.adicionales.split(',').map(a=>`<span class="tag">${a.trim()}</span>`).join('') : '-'}</td>
+      <td style="color:#64748b;font-size:11px;">${o.obs||''}</td>
+      <td><button class="btn-danger" onclick="eliminarOp('${o.id}')">✕</button></td>
+    </tr>
+  `).join('');
+
+  // TOTALES
+  const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
+  const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
+  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
+  const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  document.getElementById('tfoot-ops').innerHTML = `
+    <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+      <td colspan="9">TOTAL (${ops.length} ops)</td>
+      <td class="mono">${totUsd.toFixed(0)}</td>
+      <td style="color:#1e3a8a;">$${fmt(totNeto)}</td>
+      <td>$${fmt(totIva)}</td>
+      <td style="color:#059669;">$${fmt(totBruto)}</td>
+      <td colspan="3"></td>
+    </tr>`;
+}
+
+function renderFiltros(){
+  const corrSel  = document.getElementById('filtro_corresponsal');
+  const mesSel   = document.getElementById('filtro_mes');
+  const corrSelD = document.getElementById('dash_corresponsal');
+  const mesSelD  = document.getElementById('dash_mes');
+  const corrSelL = corrSel ? corrSel.value : '';
+  const mesSelL  = mesSel ? mesSel.value : '';
+
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  const meses   = [...new Set(operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+
+  [corrSel, corrSelD].forEach(sel => {
+    if(!sel) return;
+    const v = sel.value;
+    sel.innerHTML = '<option value="">Todos los corresponsales</option>';
+    nombres.forEach(n => { const opt = document.createElement('option'); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
+    sel.value = v;
+  });
+  [mesSel, mesSelD].forEach(sel => {
+    if(!sel) return;
+    const v = sel.value;
+    sel.innerHTML = '<option value="">Todos los meses</option>';
+    meses.forEach(m => { const opt = document.createElement('option'); opt.value=m; opt.textContent=m; sel.appendChild(opt); });
+    sel.value = v;
+  });
+}
+
+window.renderDashboard = function(){
+  const filtMes  = document.getElementById('dash_mes')?.value || '';
+  const filtCorr = document.getElementById('dash_corresponsal')?.value || '';
+  let ops = [...operaciones];
+  if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
+  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+
+  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
+  const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
+  const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  const canales  = {V:0,N:0,R:0};
+  ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
+
+  document.getElementById('kpis-wrap').innerHTML = `
+    <div class="kpi accent">
+      <div class="kpi-label">Operaciones</div>
+      <div class="kpi-val">${ops.length}</div>
+      <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total bruto facturado</div>
+      <div class="kpi-val">$${fmt(totBruto)}</div>
+      <div class="kpi-sub">Neto: $${fmt(totNeto)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Total USD facturado</div>
+      <div class="kpi-val">USD ${fmt(totUsd)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Promedio por operación</div>
+      <div class="kpi-val">$${ops.length ? fmt(totBruto/ops.length) : 0}</div>
+    </div>
+  `;
+
+  // Por corresponsal
+  const byCorr = {};
+  ops.forEach(o => {
+    if(!byCorr[o.corresponsal]) byCorr[o.corresponsal] = {ops:0, bruto:0};
+    byCorr[o.corresponsal].ops++;
+    byCorr[o.corresponsal].bruto += o.bruto||0;
+  });
+  // Por mes
+  const byMes = {};
+  ops.forEach(o => {
+    const m = o.fecha?.slice(0,7) || 'S/F';
+    if(!byMes[m]) byMes[m] = {ops:0, bruto:0};
+    byMes[m].ops++;
+    byMes[m].bruto += o.bruto||0;
+  });
+
+  document.getElementById('dash-detalle').innerHTML = `
+    <div class="section-card" style="margin:0;">
+      <h3>Por corresponsal</h3>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Corresponsal</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <tbody>
+          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
+          ).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="section-card" style="margin:0;">
+      <h3>Por mes</h3>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Mes</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <tbody>
+          ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
+          ).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+};
+
+function renderTablaClientes(){
+  const tbody = document.getElementById('tbody-clientes');
+  if(!clientes.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin corresponsales cargados</td></tr>';
+    return;
+  }
+  tbody.innerHTML = clientes.map(c => {
+    const opsCount = operaciones.filter(o => o.corresponsal === c.nombre).length;
+    return `<tr>
+      <td><strong>${c.nombre}</strong></td>
+      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Corresponsal'}</span></td>
+      <td>${c.factura}</td>
+      <td class="mono">${c.cuit||'-'}</td>
+      <td style="text-align:center;">${opsCount}</td>
+      <td><button class="btn-danger" onclick="eliminarCliente('${c.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── EXPORTAR ──
+window.exportarExcel = function(){
+  const filtCorr = document.getElementById('filtro_corresponsal').value;
+  const filtMes  = document.getElementById('filtro_mes').value;
+  let ops = [...operaciones];
+  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+  if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
+
+  const header = ['N° Op','Fecha','Corresponsal','Cliente','Destinación','MIC','Toma Cont.','Canal','ZPA','TC','USD','Neto $','IVA $','Total $','Adicionales','Obs','Período'];
+  const rows = ops.map(o => [
+    o.numOp, o.fecha, o.corresponsal, o.cliente, o.destinacion,
+    o.mic||'', o.toma||'',
+    o.canal, o.zpa, o.tc, o.totalUsd,
+    Math.round(o.neto), Math.round(o.iva), Math.round(o.bruto),
+    o.adicionales, o.obs, o.periodoFactura
+  ]);
+
+  let csv = [header, ...rows].map(r => r.map(v => `"${v??''}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `corresponsales_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ── UTILS ──
+function fmt(n){ return Math.round(n).toLocaleString('es-AR'); }
+window.fmt = fmt;
+
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+window.toast = toast;
+
+// ── TABS ──
+window.switchTab = function(tab){
+  ['cargar','listado','dashboard','clientes'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((btn,i) => {
+    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes'][i]===tab);
+  });
+  if(tab==='listado') renderTabla();
+  if(tab==='dashboard') renderDashboard();
+};
+
+// ── FILTROS con evento ──
+document.getElementById('filtro_corresponsal')?.addEventListener('change', renderTabla);
+document.getElementById('filtro_mes')?.addEventListener('change', renderTabla);
+
+// Init recalc
+recalcularFormulario();
 </script>
-
 </body>
 </html>
