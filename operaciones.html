@@ -164,7 +164,11 @@ td.mono{font-family:monospace;font-size:12px;}
 
     <!-- TARIFAS CONFIGURABLES -->
     <div class="tarifas-bar">
-      <h3>⚙️ Tarifas vigentes (USD) — editables</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleTarifas()">
+        <h3 style="margin:0;">⚙️ Tarifas vigentes</h3>
+        <span id="tarifas-toggle-icon" style="font-size:18px;color:#1e3a8a;">🔒</span>
+      </div>
+      <div id="tarifas-body" style="display:none;margin-top:14px;">
       <div class="tarifas-grid">
         <div class="tarifa-item">
           <span class="tarifa-label">Honorarios V/N</span>
@@ -537,10 +541,11 @@ td.mono{font-family:monospace;font-size:12px;}
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Tipo</th>
+              <th>Tipo tarifa</th>
               <th>Facturación</th>
+              <th>Factura</th>
               <th>CUIT</th>
-              <th>Ops registradas</th>
+              <th>Ops</th>
               <th></th>
             </tr>
           </thead>
@@ -972,9 +977,10 @@ window.recalcularFormulario = function(){
 
   const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
 
-  document.getElementById('prev_neto').textContent = '$ ' + fmt(totalNeto);
-  document.getElementById('prev_iva').textContent  = '$ ' + fmt(iva);
+  document.getElementById('prev_neto').textContent  = '$ ' + fmt(totalNeto);
+  document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
   document.getElementById('prev_bruto').textContent = '$ ' + fmt(bruto);
+  document.getElementById('prev_iva').style.color   = tieneFactura ? '' : '#dc2626';
 
   const desglose = items.map(i =>
     `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt(i.pesos)}</span>`
@@ -1077,6 +1083,7 @@ window.guardarCliente = async function(){
     nombre,
     tipo: document.getElementById('cli_tipo').value,
     factura: document.getElementById('cli_factura').value,
+    tieneFactura: document.getElementById('cli_tiene_factura').value,
     cuit: document.getElementById('cli_cuit').value.trim()
   };
   await setDoc(doc(db,'corresponsales_clientes', nombre.replace(/\s+/g,'_')), cli);
@@ -1323,6 +1330,15 @@ function toast(msg){
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 window.toast = toast;
+
+// ── TOGGLE TARIFAS ──
+window.toggleTarifas = function(){
+  const body = document.getElementById('tarifas-body');
+  const icon = document.getElementById('tarifas-toggle-icon');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  icon.textContent = open ? '🔓' : '🔒';
+};
 
 // Init recalc
 recalcularFormulario();
