@@ -228,7 +228,7 @@ td.mono{font-family:monospace;font-size:12px;}
         </div>
         <div class="tarifa-item">
           <span class="tarifa-label">MOV AD</span>
-          <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="100"> $</span>
+          <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="0.5"> USD</span>
         </div>
         <div class="tarifa-item">
           <span class="tarifa-label">Adicionales (pesos)</span>
@@ -264,7 +264,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <select id="tipo_desp_global" onchange="recalcularFormulario()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
           <option value="despachante">Despachante (tarifa estándar)</option>
           <option value="desp_externo">Desp. externo (tarifa premium)</option>
-          <option value="apoderado">Apoderado (USD 100 fijo)</option>
+          <option value="apoderado">Apoderado</option>
         </select>
         <span id="premium-badge" style="display:none;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">+20% PREMIUM</span>
       </div>
@@ -392,7 +392,6 @@ td.mono{font-family:monospace;font-size:12px;}
         <label class="chk-item" id="chk-movad-wrap">
           <input type="checkbox" id="chk_mov_ad" onchange="recalcularFormulario()">
           <label for="chk_mov_ad">MOV AD</label>
-          <input type="number" class="chk-extra" id="n_mov_ad" value="0" step="100" oninput="recalcularFormulario()" placeholder="$" style="width:70px;">
         </label>
 
       </div>
@@ -919,8 +918,8 @@ function getTarifas(){
 
 
   if(document.getElementById('chk_mov_ad').checked){
-    const movVal = parseFloat(document.getElementById('n_mov_ad').value) || parseFloat(document.getElementById('t_mov_ad').value) || 0;
-    if(movVal > 0) pesos(movVal, 'MOV AD');
+    const movVal = parseFloat(document.getElementById('t_mov_ad').value) || 0;
+    if(movVal > 0) usd(movVal, 'MOV AD');
   }
 
   // Adicionales en pesos (directos, sin conversión)
@@ -967,7 +966,9 @@ window.onTipoChange = function(){
 window.recalcularFormulario = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
   document.getElementById('premium-badge').style.display = ['desp_externo','apoderado','kotinya'].includes(tipo) ? 'inline-block' : 'none';
-  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? 'APODERADO USD 100' : tipo === 'kotinya' ? 'KOTINIA · RAMIRO USD 30' : '+20% PREMIUM';
+  const tApod = document.getElementById('t_apoderado')?.value || 100;
+  const tRam  = document.getElementById('t_ramiro_op')?.value || 30;
+  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? `APODERADO USD ${tApod}` : tipo === 'kotinya' ? `KOTINYA · RAMIRO USD ${tRam}` : '+20% PREMIUM';
 
   const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
 
