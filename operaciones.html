@@ -299,11 +299,12 @@ td.mono{font-family:monospace;font-size:12px;}
           <input type="text" id="op_zpa" placeholder="PS / PTM / TCA...">
         </div>
         <div class="form-group">
-          <label>Tipo</label>
-          <select id="op_tipo">
+          <label>Tipo de operación</label>
+          <select id="op_tipo" onchange="onTipoChange()">
             <option value="EXPO">Exportación (EC)</option>
             <option value="IMPO">Importación (IC)</option>
             <option value="TRAN">Tránsito (IT)</option>
+            <option value="MIC">MIC (solo manifiesto)</option>
           </select>
         </div>
         <div class="form-group">
@@ -806,27 +807,31 @@ onSnapshot(collection(db,'despachantees_clientes_finales'), snap => {
 
 // ── CÁLCULO ──
 function getTarifas(){
-  const canal = document.getElementById('op_canal').value;
-  const tipo = document.getElementById('tipo_desp_global').value;
-  const mult = 1; // premium se maneja por tarifa directa
-  const tc = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
-
+  const canal  = document.getElementById('op_canal').value;
+  const tipo   = document.getElementById('tipo_desp_global').value;
+  const tipoOp = document.getElementById('op_tipo').value;
+  const esMIC  = tipoOp === 'MIC';
+  const tc     = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
   const esPremium = tipo === 'desp_externo';
-  let hon_usd;
-  if(esPremium){
-    hon_usd = canal === 'R'
-      ? parseFloat(document.getElementById('t_prem_r').value)
-      : parseFloat(document.getElementById('t_prem_vn').value);
-  } else {
-    hon_usd = canal === 'R'
-      ? parseFloat(document.getElementById('t_r').value)
-      : parseFloat(document.getElementById('t_vn').value);
-  }
 
   const items = [];
-  const usd = (u, label) => { items.push({label, usd: u * mult, pesos: u * mult * tc}); };
+  const usd = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
+  const pesos = (p, label) => { items.push({label, usd: 0, pesos: p}); };
 
-  usd(hon_usd, `Honorarios canal ${canal}`);
+  // ── Honorarios de destinación: SOLO si NO es MIC ──
+  if(!esMIC){
+    let hon_usd;
+    if(esPremium){
+      hon_usd = canal === 'R'
+        ? parseFloat(document.getElementById('t_prem_r').value)
+        : parseFloat(document.getElementById('t_prem_vn').value);
+    } else {
+      hon_usd = canal === 'R'
+        ? parseFloat(document.getElementById('t_r').value)
+        : parseFloat(document.getElementById('t_vn').value);
+    }
+    usd(hon_usd, `Honorarios canal ${canal}`);
+  }
 
   if(document.getElementById('chk_sobre').checked)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
@@ -834,16 +839,19 @@ function getTarifas(){
   if(document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
     let t;
-    if(esPremium){
+    if(esMIC){
+      // MIC no tiene camión AD de destinación
+    } else if(esPremium){
       t = canal === 'R'
         ? parseFloat(document.getElementById('t_prem_cam_r').value)
         : parseFloat(document.getElementById('t_prem_cam_vn').value);
+      usd(t*n, `Camión AD ×${n}`);
     } else {
       t = canal === 'R'
         ? parseFloat(document.getElementById('t_cam_r').value)
         : parseFloat(document.getElementById('t_cam_vn').value);
+      usd(t*n, `Camión AD ×${n}`);
     }
-    usd(t*n, `Camión AD ×${n}`);
   }
 
   if(document.getElementById('chk_senasa_p').checked){
@@ -883,20 +891,51 @@ function getTarifas(){
 
   if(document.getElementById('chk_mov_ad').checked){
     const movVal = parseFloat(document.getElementById('n_mov_ad').value) || parseFloat(document.getElementById('t_mov_ad').value) || 0;
-    if(movVal > 0) items.push({label:'MOV AD', usd:0, pesos: movVal});
+    if(movVal > 0) pesos(movVal, 'MOV AD');
   }
 
   // Adicionales en pesos (directos, sin conversión)
   const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
-  if(adicPesos > 0) items.push({label:'Adicionales en pesos', usd:0, pesos: adicPesos});
+  if(adicPesos > 0) pesos(adicPesos, 'Adicionales en pesos');
 
   const totalNeto = items.reduce((a,b) => a + b.pesos, 0);
   const iva = totalNeto * 0.21;
   const bruto = totalNeto + iva;
   const totalUsd = items.reduce((a,b) => a + b.usd, 0);
 
-  return { items, totalNeto, iva, bruto, tc, totalUsd, mult };
+  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC };
 }
+
+window.onTipoChange = function(){
+  const tipoOp = document.getElementById('op_tipo').value;
+  const esMIC  = tipoOp === 'MIC';
+
+  // Si es MIC: tildar MIC, ocultar canal y adicionales irrelevantes
+  if(esMIC){
+    document.getElementById('chk_mic').checked = true;
+    // Ocultar canal (no aplica en MIC)
+    document.getElementById('op_canal').closest('.form-group').style.opacity = '0.3';
+    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = 'none';
+    // Ocultar sobre
+    document.getElementById('chk-sobre-wrap').style.display = 'none';
+    document.getElementById('chk-cam-wrap').style.display = 'none';
+    document.getElementById('chk-senasa-p-wrap').style.display = 'none';
+    document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
+    document.getElementById('chk-apoderado-wrap').style.display = 'none';
+    document.getElementById('chk-cam-apod-wrap').style.display = 'none';
+  } else {
+    document.getElementById('chk_mic').checked = false;
+    document.getElementById('op_canal').closest('.form-group').style.opacity = '';
+    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = '';
+    document.getElementById('chk-sobre-wrap').style.display = '';
+    document.getElementById('chk-cam-wrap').style.display = '';
+    document.getElementById('chk-senasa-p-wrap').style.display = '';
+    document.getElementById('chk-senasa-prod-wrap').style.display = '';
+    document.getElementById('chk-apoderado-wrap').style.display = '';
+    document.getElementById('chk-cam-apod-wrap').style.display = '';
+  }
+  recalcularFormulario();
+};
 
 window.recalcularFormulario = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
@@ -927,7 +966,7 @@ window.guardarOperacion = async function(){
   if(!despachante){ toast('Seleccioná un despachante'); return; }
   if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
-  const { items, totalNeto, iva, bruto, tc, totalUsd, mult } = getTarifas();
+  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC } = getTarifas();
 
   const adicTags = [];
   if(document.getElementById('chk_sobre').checked) adicTags.push('Sobre');
@@ -960,6 +999,7 @@ window.guardarOperacion = async function(){
     obs: document.getElementById('op_obs').value.trim(),
     periodoFactura: document.getElementById('op_periodo_factura').value,
     esPremium: document.getElementById('tipo_desp_global').value === 'desp_externo',
+    esMIC,
     cargadoPor: user.username,
     ts: Date.now()
   };
