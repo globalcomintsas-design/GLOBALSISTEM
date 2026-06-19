@@ -219,7 +219,7 @@ td.mono{font-family:monospace;font-size:12px;}
           <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
         </div>
         <div class="tarifa-item">
-          <span class="tarifa-label">Ramiro / Kotinia</span>
+          <span class="tarifa-label">Ramiro / Kotinya</span>
           <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
         </div>
         <div class="tarifa-item">
@@ -264,6 +264,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <select id="tipo_desp_global" onchange="recalcularFormulario()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
           <option value="despachante">Despachante (tarifa estándar)</option>
           <option value="desp_externo">Desp. externo (tarifa premium)</option>
+          <option value="apoderado">Apoderado (USD 100 fijo)</option>
         </select>
         <span id="premium-badge" style="display:none;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">+20% PREMIUM</span>
       </div>
@@ -952,7 +953,7 @@ window.onTipoChange = function(){
   } else {
     document.getElementById('chk_mic').checked = false;
     // Canal no importa para apoderado pero lo dejamos visible
-    const sinCanal = esApoderado || esKotinia;
+    const sinCanal = esApoderado || esKotinya;
     document.getElementById('op_canal').closest('.form-group').style.opacity = sinCanal ? '0.4' : '';
     document.getElementById('op_canal').closest('.form-group').style.pointerEvents = sinCanal ? 'none' : '';
     document.getElementById('chk-sobre-wrap').style.display = '';
@@ -965,8 +966,8 @@ window.onTipoChange = function(){
 
 window.recalcularFormulario = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
-  document.getElementById('premium-badge').style.display = ['desp_externo','apoderado','kotinia'].includes(tipo) ? 'inline-block' : 'none';
-  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? 'APODERADO USD 100' : tipo === 'kotinia' ? 'KOTINIA · RAMIRO USD 30' : '+20% PREMIUM';
+  document.getElementById('premium-badge').style.display = ['desp_externo','apoderado','kotinya'].includes(tipo) ? 'inline-block' : 'none';
+  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? 'APODERADO USD 100' : tipo === 'kotinya' ? 'KOTINIA · RAMIRO USD 30' : '+20% PREMIUM';
 
   const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
 
@@ -1026,8 +1027,8 @@ window.guardarOperacion = async function(){
     obs: document.getElementById('op_obs').value.trim(),
     periodoFactura: document.getElementById('op_periodo_factura').value,
     esPremium:  document.getElementById('tipo_desp_global').value === 'desp_externo',
-    esKotinia:  document.getElementById('tipo_desp_global').value === 'kotinia',
-    ramiroDeuda: document.getElementById('tipo_desp_global').value === 'kotinia'
+    esKotinya:  document.getElementById('tipo_desp_global').value === 'kotinya',
+    ramiroDeuda: document.getElementById('tipo_desp_global').value === 'kotinya'
       ? parseFloat(document.getElementById('t_ramiro_op').value) || 30
       : 0,
     ramiroOPagado: 'no',
@@ -1094,6 +1095,14 @@ window.eliminarCliente = async function(id){
 
 window.onCambiarDespachante = function(){
   const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
+
+  // Kotinya: detectar automáticamente por nombre
+  if(nombre.includes('KOTINYA')){
+    document.getElementById('tipo_desp_global').value = 'kotinya';
+    recalcularFormulario();
+    return;
+  }
+
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
     document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
@@ -1465,12 +1474,12 @@ window.renderRamiro = function(){
   const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
   const tc = parseFloat(document.getElementById('tc_global').value) || 1440;
 
-  // Juntar ops Kotinia + mudanzas
+  // Juntar ops Kotinya + mudanzas
   const items = [];
 
-  operaciones.filter(o => o.esKotinia).forEach(o => {
+  operaciones.filter(o => o.esKotinya).forEach(o => {
     items.push({
-      tipo: 'Kotinia',
+      tipo: 'Kotinya',
       fecha: o.fecha,
       cliente: o.cliente || '',
       detalle: o.destinacion || '',
@@ -1519,8 +1528,8 @@ window.renderRamiro = function(){
       <div class="kpi-val" style="color:#059669;">USD ${fmt(pagadoUsd)}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Operaciones Kotinia</div>
-      <div class="kpi-val">${items.filter(i=>i.tipo==='Kotinia').length}</div>
+      <div class="kpi-label">Operaciones Kotinya</div>
+      <div class="kpi-val">${items.filter(i=>i.tipo==='Kotinya').length}</div>
       <div class="kpi-sub">Mudanzas: ${items.filter(i=>i.tipo==='Mudanza').length}</div>
     </div>
   `;
@@ -1528,7 +1537,7 @@ window.renderRamiro = function(){
   document.getElementById('tbody-ramiro').innerHTML = filtrados.length
     ? filtrados.map(i => `
       <tr>
-        <td><span class="tag" style="${i.tipo==='Kotinia'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
+        <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
         <td>${i.fecha||''}</td>
         <td><strong>${i.cliente}</strong></td>
         <td style="font-size:12px;color:#64748b;">${i.detalle}</td>
@@ -1561,7 +1570,7 @@ window.marcarTodoPagadoRamiro = async function(){
   if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro?')) return;
   const { updateDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
   const pending = [
-    ...operaciones.filter(o => o.esKotinia && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'corresponsales_ops', campo:'ramiroOPagado'})),
+    ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'corresponsales_ops', campo:'ramiroOPagado'})),
     ...mudanzas.filter(m => m.ramiroPagado !== 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
   ];
   for(const p of pending){
