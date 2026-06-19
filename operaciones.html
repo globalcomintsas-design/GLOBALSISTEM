@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GLOBALCOMINT · Despachantees</title>
+<title>GLOBALCOMINT · Operaciones</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -135,7 +135,7 @@ td.mono{font-family:monospace;font-size:12px;}
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-brand">GLOBALCOMINT</div>
-    <div class="topbar-mod">📋 Despachantees</div>
+    <div class="topbar-mod">📋 Operaciones</div>
   </div>
   <div class="topbar-right">
     <span class="user-chip" id="userChip"></span>
@@ -145,7 +145,7 @@ td.mono{font-family:monospace;font-size:12px;}
 
 <div class="main">
   <div class="page-header">
-    <div class="page-title">Operaciones de Despachantees</div>
+    <div class="page-title">Operaciones de Despachantes</div>
     <div class="page-sub">Carga, tarifación y seguimiento de operaciones realizadas para otros despachantes</div>
   </div>
 
@@ -156,6 +156,7 @@ td.mono{font-family:monospace;font-size:12px;}
     <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
     <button class="tab" onclick="switchTab('mudanzas')">📦 Mudanzas</button>
+    <button class="tab" onclick="switchTab('ramiro')">👷 Cuenta Ramiro</button>
   </div>
 
   <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
@@ -218,6 +219,10 @@ td.mono{font-family:monospace;font-size:12px;}
           <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
         </div>
         <div class="tarifa-item">
+          <span class="tarifa-label">Ramiro / Kotinia</span>
+          <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
+        </div>
+        <div class="tarifa-item">
           <span class="tarifa-label">Camión AD (apod.)</span>
           <span class="tarifa-val"><input type="number" id="t_cam_apod" value="10" step="0.5"> USD/u</span>
         </div>
@@ -274,7 +279,7 @@ td.mono{font-family:monospace;font-size:12px;}
         </div>
         <div class="form-group" style="position:relative;">
           <label>Despachante</label>
-          <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off" oninput="filtrarAC('op_despachante','ac_despachante',despachanteesNombres, onCambiarDespachante)" onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
+          <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off" oninput="filtrarAC('op_despachante','ac_despachante',despachantesNombres, onCambiarDespachante)" onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
           <div id="ac_despachante" class="ac-list"></div>
         </div>
         <div class="form-group">
@@ -381,16 +386,7 @@ td.mono{font-family:monospace;font-size:12px;}
           <label for="chk_finsem">Fin de semana</label>
         </label>
 
-        <label class="chk-item" id="chk-apoderado-wrap">
-          <input type="checkbox" id="chk_apoderado" onchange="recalcularFormulario()">
-          <label for="chk_apoderado">Apoderado</label>
-        </label>
 
-        <label class="chk-item" id="chk-cam-apod-wrap">
-          <input type="checkbox" id="chk_cam_apod" onchange="recalcularFormulario()">
-          <label for="chk_cam_apod">Camión AD (apod.)</label>
-          <input type="number" class="chk-extra" id="n_cam_apod" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
-        </label>
 
         <label class="chk-item" id="chk-movad-wrap">
           <input type="checkbox" id="chk_mov_ad" onchange="recalcularFormulario()">
@@ -450,7 +446,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <div class="periodo-bar" style="margin:0;">
             <select id="filtro_despachante">
-              <option value="">Todos los despachantees</option>
+              <option value="">Todos los despachantes</option>
             </select>
             <select id="filtro_mes">
               <option value="">Todos los meses</option>
@@ -497,7 +493,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <option value="">Todos los meses</option>
       </select>
       <select id="dash_despachante" onchange="renderDashboard()">
-        <option value="">Todos los despachantees</option>
+        <option value="">Todos los despachantes</option>
       </select>
     </div>
     <div class="kpis" id="kpis-wrap"></div>
@@ -549,7 +545,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-clientes">
-            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantees cargados</td></tr>
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>
           </tbody>
         </table>
       </div>
@@ -686,6 +682,45 @@ td.mono{font-family:monospace;font-size:12px;}
 
   </div><!-- /tab-mudanzas -->
 
+  <!-- ═══════════════ TAB: CUENTA RAMIRO ═══════════════ -->
+  <div id="tab-ramiro" style="display:none;">
+
+    <div class="kpis" id="ramiro-kpis"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" id="ramiro-grids"></div>
+
+    <div class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <h3 style="margin:0;">📋 Detalle completo</h3>
+        <div style="display:flex;gap:8px;">
+          <select id="ramiro_filtro_estado" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
+            <option value="">Todos</option>
+            <option value="no">Solo pendientes</option>
+            <option value="si">Solo pagados</option>
+          </select>
+          <button class="btn-success" onclick="marcarTodoPagadoRamiro()">✅ Marcar todo pagado</button>
+        </div>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Tipo</th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Detalle</th>
+              <th>USD Ramiro</th>
+              <th>$ (TC)</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-ramiro"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div><!-- /main -->
 
 <div class="toast" id="toast"></div>
@@ -715,7 +750,7 @@ document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 // ── Estado ──
 let operaciones = [];
 let clientes = [];
-let despachanteesNombres = [];
+let despachantesNombres = [];
 let clientesNombres = [];
 
 // ── AUTOCOMPLETE ──
@@ -752,12 +787,12 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
   document.getElementById(listId).style.display = 'none';
   if(esDespachante){
     const id = val.replace(/\s+/g,'_');
-    await setDoc(doc(db,'despachantees_clientes',id), {nombre:val, tipo:'despachante', factura:'mensual', cuit:''});
+    await setDoc(doc(db,'corresponsales_clientes',id), {nombre:val, tipo:'despachante', factura:'mensual', cuit:''});
     toast('✅ Despachante guardado: ' + val);
   } else {
     // guardar cliente en coleccion aparte
     const id = val.replace(/\s+/g,'_');
-    await setDoc(doc(db,'despachantees_clientes_finales',id), {nombre:val});
+    await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
     clientesNombres = [...new Set([...clientesNombres, val])].sort();
     toast('✅ Cliente guardado: ' + val);
   }
@@ -784,21 +819,23 @@ function generarNumOp(){
 }
 
 // ── FIRESTORE listeners ──
-onSnapshot(query(collection(db,'despachantees_ops'), orderBy('fecha','asc')), snap => {
+onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  renderTabla();
-  renderDashboard();
+  // solo renderizar si el tab activo lo necesita
   renderFiltros();
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Listado')) renderTabla();
+  if(tabActivo.includes('Dashboard')) renderDashboard();
 });
 
-onSnapshot(collection(db,'despachantees_clientes'), snap => {
+onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  despachanteesNombres = clientes.map(c => c.nombre).sort();
+  despachantesNombres = clientes.map(c => c.nombre).sort();
   renderTablaClientes();
   renderFiltros();
 });
 
-onSnapshot(collection(db,'despachantees_clientes_finales'), snap => {
+onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
   const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
   // tambien sacar clientes unicos de operaciones cargadas
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
@@ -838,18 +875,19 @@ function getTarifas(){
 
   if(document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
-    let t;
-    if(esMIC){
-      // MIC no tiene camión AD de destinación
-    } else if(esPremium){
-      t = canal === 'R'
-        ? parseFloat(document.getElementById('t_prem_cam_r').value)
-        : parseFloat(document.getElementById('t_prem_cam_vn').value);
-      usd(t*n, `Camión AD ×${n}`);
-    } else {
-      t = canal === 'R'
-        ? parseFloat(document.getElementById('t_cam_r').value)
-        : parseFloat(document.getElementById('t_cam_vn').value);
+    if(!esMIC){
+      let t;
+      if(esApoderado){
+        t = parseFloat(document.getElementById('t_cam_apod').value);
+      } else if(esPremium){
+        t = canal === 'R'
+          ? parseFloat(document.getElementById('t_prem_cam_r').value)
+          : parseFloat(document.getElementById('t_prem_cam_vn').value);
+      } else {
+        t = canal === 'R'
+          ? parseFloat(document.getElementById('t_cam_r').value)
+          : parseFloat(document.getElementById('t_cam_vn').value);
+      }
       usd(t*n, `Camión AD ×${n}`);
     }
   }
@@ -881,13 +919,7 @@ function getTarifas(){
   if(document.getElementById('chk_finsem').checked)
     usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
 
-  if(document.getElementById('chk_apoderado').checked)
-    usd(parseFloat(document.getElementById('t_apoderado').value), 'Apoderado');
 
-  if(document.getElementById('chk_cam_apod').checked){
-    const n = parseInt(document.getElementById('n_cam_apod').value)||1;
-    usd(parseFloat(document.getElementById('t_cam_apod').value)*n, `Camión AD apod. ×${n}`);
-  }
 
   if(document.getElementById('chk_mov_ad').checked){
     const movVal = parseFloat(document.getElementById('n_mov_ad').value) || parseFloat(document.getElementById('t_mov_ad').value) || 0;
@@ -907,39 +939,38 @@ function getTarifas(){
 }
 
 window.onTipoChange = function(){
-  const tipoOp = document.getElementById('op_tipo').value;
-  const esMIC  = tipoOp === 'MIC';
+  const tipoOp     = document.getElementById('op_tipo').value;
+  const esMIC      = tipoOp === 'MIC';
+  const tipo       = document.getElementById('tipo_desp_global').value;
+  const esApoderado = tipo === 'apoderado';
 
   // Si es MIC: tildar MIC, ocultar canal y adicionales irrelevantes
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
-    // Ocultar canal (no aplica en MIC)
     document.getElementById('op_canal').closest('.form-group').style.opacity = '0.3';
     document.getElementById('op_canal').closest('.form-group').style.pointerEvents = 'none';
-    // Ocultar sobre
     document.getElementById('chk-sobre-wrap').style.display = 'none';
     document.getElementById('chk-cam-wrap').style.display = 'none';
     document.getElementById('chk-senasa-p-wrap').style.display = 'none';
     document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
-    document.getElementById('chk-apoderado-wrap').style.display = 'none';
-    document.getElementById('chk-cam-apod-wrap').style.display = 'none';
   } else {
     document.getElementById('chk_mic').checked = false;
-    document.getElementById('op_canal').closest('.form-group').style.opacity = '';
-    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = '';
+    // Canal no importa para apoderado pero lo dejamos visible
+    const sinCanal = esApoderado || esKotinia;
+    document.getElementById('op_canal').closest('.form-group').style.opacity = sinCanal ? '0.4' : '';
+    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = sinCanal ? 'none' : '';
     document.getElementById('chk-sobre-wrap').style.display = '';
     document.getElementById('chk-cam-wrap').style.display = '';
     document.getElementById('chk-senasa-p-wrap').style.display = '';
     document.getElementById('chk-senasa-prod-wrap').style.display = '';
-    document.getElementById('chk-apoderado-wrap').style.display = '';
-    document.getElementById('chk-cam-apod-wrap').style.display = '';
   }
   recalcularFormulario();
 };
 
 window.recalcularFormulario = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
-  document.getElementById('premium-badge').style.display = tipo === 'desp_externo' ? 'inline-block' : 'none';
+  document.getElementById('premium-badge').style.display = ['desp_externo','apoderado','kotinia'].includes(tipo) ? 'inline-block' : 'none';
+  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? 'APODERADO USD 100' : tipo === 'kotinia' ? 'KOTINIA · RAMIRO USD 30' : '+20% PREMIUM';
 
   const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
 
@@ -998,14 +1029,19 @@ window.guardarOperacion = async function(){
     adicionales: adicTags.join(', '),
     obs: document.getElementById('op_obs').value.trim(),
     periodoFactura: document.getElementById('op_periodo_factura').value,
-    esPremium: document.getElementById('tipo_desp_global').value === 'desp_externo',
+    esPremium:  document.getElementById('tipo_desp_global').value === 'desp_externo',
+    esKotinia:  document.getElementById('tipo_desp_global').value === 'kotinia',
+    ramiroDeuda: document.getElementById('tipo_desp_global').value === 'kotinia'
+      ? parseFloat(document.getElementById('t_ramiro_op').value) || 30
+      : 0,
+    ramiroOPagado: 'no',
     esMIC,
     cargadoPor: user.username,
     ts: Date.now()
   };
 
   try {
-    await addDoc(collection(db,'despachantees_ops'), op);
+    await addDoc(collection(db,'corresponsales_ops'), op);
     toast('✅ Operación guardada: ' + op.numOp);
     limpiarFormulario();
   } catch(e){
@@ -1016,7 +1052,7 @@ window.guardarOperacion = async function(){
 // ── ELIMINAR ──
 window.eliminarOp = async function(id){
   if(!confirm('¿Eliminar esta operación?')) return;
-  await deleteDoc(doc(db,'despachantees_ops',id));
+  await deleteDoc(doc(db,'corresponsales_ops',id));
   toast('Operación eliminada');
 };
 
@@ -1045,7 +1081,7 @@ window.guardarCliente = async function(){
     factura: document.getElementById('cli_factura').value,
     cuit: document.getElementById('cli_cuit').value.trim()
   };
-  await setDoc(doc(db,'despachantees_clientes', nombre.replace(/\s+/g,'_')), cli);
+  await setDoc(doc(db,'corresponsales_clientes', nombre.replace(/\s+/g,'_')), cli);
   document.getElementById('cli_nombre').value = '';
   document.getElementById('cli_cuit').value = '';
   toast('✅ Despachante guardado');
@@ -1053,12 +1089,12 @@ window.guardarCliente = async function(){
 
 window.eliminarCliente = async function(id){
   if(!confirm('¿Eliminar despachante?')) return;
-  await deleteDoc(doc(db,'despachantees_clientes',id));
+  await deleteDoc(doc(db,'corresponsales_clientes',id));
   toast('Despachante eliminado');
 };
 
 // ── RENDERS ──
-// renderSelectDespachantees reemplazado por autocomplete
+// renderSelectDespachantes reemplazado por autocomplete
 
 window.onCambiarDespachante = function(){
   const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
@@ -1135,7 +1171,7 @@ function renderFiltros(){
   [corrSel, corrSelD].forEach(sel => {
     if(!sel) return;
     const v = sel.value;
-    sel.innerHTML = '<option value="">Todos los despachantees</option>';
+    sel.innerHTML = '<option value="">Todos los despachantes</option>';
     nombres.forEach(n => { const opt = document.createElement('option'); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
     sel.value = v;
   });
@@ -1227,7 +1263,7 @@ window.renderDashboard = function(){
 function renderTablaClientes(){
   const tbody = document.getElementById('tbody-clientes');
   if(!clientes.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantees cargados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>';
     return;
   }
   tbody.innerHTML = clientes.map(c => {
@@ -1265,7 +1301,7 @@ window.exportarExcel = function(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `despachantees_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
+  a.download = `despachantes_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 };
@@ -1291,7 +1327,7 @@ let mudanzas = [];
 // Fecha default mudanza
 document.getElementById('mud_fecha').value = new Date().toISOString().split('T')[0];
 
-onSnapshot(query(collection(db,'despachantees_mudanzas'), orderBy('fecha','asc')), snap => {
+onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderMudanzas();
 });
@@ -1358,7 +1394,7 @@ window.guardarMudanza = async function(){
   };
 
   try {
-    await addDoc(collection(db,'despachantees_mudanzas'), mud);
+    await addDoc(collection(db,'corresponsales_mudanzas'), mud);
     toast('✅ Mudanza guardada');
     limpiarMudanza();
   } catch(e){
@@ -1381,7 +1417,7 @@ window.limpiarMudanza = function(){
 
 window.eliminarMudanza = async function(id){
   if(!confirm('¿Eliminar esta mudanza?')) return;
-  await deleteDoc(doc(db,'despachantees_mudanzas',id));
+  await deleteDoc(doc(db,'corresponsales_mudanzas',id));
   toast('Mudanza eliminada');
 };
 
@@ -1428,16 +1464,127 @@ window.exportarMudanzas = function(){
   URL.revokeObjectURL(url);
 };
 
-// ── SWITCH TAB (actualizado con mudanzas) ──
+// ── CUENTA RAMIRO ──
+window.renderRamiro = function(){
+  const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
+  const tc = parseFloat(document.getElementById('tc_global').value) || 1440;
+
+  // Juntar ops Kotinia + mudanzas
+  const items = [];
+
+  operaciones.filter(o => o.esKotinia).forEach(o => {
+    items.push({
+      tipo: 'Kotinia',
+      fecha: o.fecha,
+      cliente: o.cliente || '',
+      detalle: o.destinacion || '',
+      ramiroUsd: o.ramiroDeuda || 30,
+      pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
+      estado: o.ramiroOPagado || 'no',
+      id: o.id,
+      col: 'ops'
+    });
+  });
+
+  mudanzas.forEach(m => {
+    items.push({
+      tipo: 'Mudanza',
+      fecha: m.fecha,
+      cliente: m.cliente || '',
+      detalle: m.obs || '',
+      ramiroUsd: m.ramiroUsd || 190,
+      pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
+      estado: m.ramiroPagado || 'no',
+      id: m.id,
+      col: 'mudanzas'
+    });
+  });
+
+  items.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
+  const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
+
+  const totalUsd     = items.reduce((a,b) => a + b.ramiroUsd, 0);
+  const pendienteUsd = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.ramiroUsd, 0);
+  const pagadoUsd    = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.ramiroUsd, 0);
+  const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.pesos, 0);
+
+  document.getElementById('ramiro-kpis').innerHTML = `
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
+      <div class="kpi-label">Total a pagar (histórico)</div>
+      <div class="kpi-val" style="color:#dc2626;">USD ${fmt(totalUsd)}</div>
+    </div>
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
+      <div class="kpi-label">⚠️ Pendiente de pago</div>
+      <div class="kpi-val" style="color:#dc2626;">USD ${fmt(pendienteUsd)}</div>
+      <div class="kpi-sub">≈ $${fmt(pendientePesos)} al TC ${tc}</div>
+    </div>
+    <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
+      <div class="kpi-label">✅ Ya pagado</div>
+      <div class="kpi-val" style="color:#059669;">USD ${fmt(pagadoUsd)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Operaciones Kotinia</div>
+      <div class="kpi-val">${items.filter(i=>i.tipo==='Kotinia').length}</div>
+      <div class="kpi-sub">Mudanzas: ${items.filter(i=>i.tipo==='Mudanza').length}</div>
+    </div>
+  `;
+
+  document.getElementById('tbody-ramiro').innerHTML = filtrados.length
+    ? filtrados.map(i => `
+      <tr>
+        <td><span class="tag" style="${i.tipo==='Kotinia'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
+        <td>${i.fecha||''}</td>
+        <td><strong>${i.cliente}</strong></td>
+        <td style="font-size:12px;color:#64748b;">${i.detalle}</td>
+        <td style="font-weight:700;color:#dc2626;">USD ${i.ramiroUsd}</td>
+        <td>$${fmt(i.pesos)}</td>
+        <td>
+          ${i.estado === 'si'
+            ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
+            : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}
+        </td>
+        <td>
+          ${i.estado === 'no'
+            ? `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`
+            : ''}
+        </td>
+      </tr>
+    `).join('')
+    : '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+};
+
+window.pagarRamiroItem = async function(id, col){
+  const colName = col === 'ops' ? 'corresponsales_ops' : 'corresponsales_mudanzas';
+  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+  const { updateDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+  await updateDoc(doc(db, colName, id), { [campo]: 'si' });
+  toast('✅ Marcado como pagado');
+};
+
+window.marcarTodoPagadoRamiro = async function(){
+  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro?')) return;
+  const { updateDoc } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+  const pending = [
+    ...operaciones.filter(o => o.esKotinia && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'corresponsales_ops', campo:'ramiroOPagado'})),
+    ...mudanzas.filter(m => m.ramiroPagado !== 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
+  ];
+  for(const p of pending){
+    await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
+  }
+  toast(`✅ ${pending.length} registros marcados como pagados`);
+};
+
+// ── SWITCH TAB ──
 window.switchTab = function(tab){
-  ['cargar','listado','dashboard','clientes','mudanzas'].forEach(t => {
+  ['cargar','listado','dashboard','clientes','mudanzas','ramiro'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn,i) => {
-    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes','mudanzas'][i]===tab);
+    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes','mudanzas','ramiro'][i]===tab);
   });
-  if(tab==='listado') renderTabla();
+  if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='ramiro')    renderRamiro();
 };
 
 recalcMudanza();
