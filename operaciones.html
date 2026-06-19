@@ -114,6 +114,13 @@ td.mono{font-family:monospace;font-size:12px;}
 .toast{position:fixed;bottom:24px;right:24px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);transform:translateY(80px);opacity:0;transition:all .3s;z-index:1000;}
 .toast.show{transform:translateY(0);opacity:1;}
 
+/* AUTOCOMPLETE */
+.ac-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #bfdbfe;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;max-height:200px;overflow-y:auto;display:none;}
+.ac-item{padding:9px 14px;font-size:13px;cursor:pointer;color:#1e293b;border-bottom:1px solid #f1f5f9;}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:hover{background:#eff6ff;color:#1e3a8a;font-weight:600;}
+.ac-new{color:#059669;font-style:italic;}
+
 /* RESPONSIVE */
 @media(max-width:600px){
   .main{padding:12px;}
@@ -147,6 +154,7 @@ td.mono{font-family:monospace;font-size:12px;}
     <button class="tab" onclick="switchTab('listado')">📋 Listado</button>
     <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
+    <button class="tab" onclick="switchTab('mudanzas')">📦 Mudanzas</button>
   </div>
 
   <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
@@ -209,6 +217,27 @@ td.mono{font-family:monospace;font-size:12px;}
           <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100"> $</span>
         </div>
       </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid #fef3c7;background:#fffbeb;border-radius:8px;padding:10px 14px;">
+        <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">⭐ Tarifas despachante externo (premium)</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
+          <div class="tarifa-item" style="background:#fef9c3;">
+            <span class="tarifa-label">Honorarios V/N (prem)</span>
+            <span class="tarifa-val"><input type="number" id="t_prem_vn" value="26" step="0.5"> USD</span>
+          </div>
+          <div class="tarifa-item" style="background:#fef9c3;">
+            <span class="tarifa-label">Honorarios R (prem)</span>
+            <span class="tarifa-val"><input type="number" id="t_prem_r" value="28" step="0.5"> USD</span>
+          </div>
+          <div class="tarifa-item" style="background:#fef9c3;">
+            <span class="tarifa-label">Camión AD V/N (prem)</span>
+            <span class="tarifa-val"><input type="number" id="t_prem_cam_vn" value="6" step="0.5"> USD</span>
+          </div>
+          <div class="tarifa-item" style="background:#fef9c3;">
+            <span class="tarifa-label">Camión AD R (prem)</span>
+            <span class="tarifa-val"><input type="number" id="t_prem_cam_r" value="8" step="0.5"> USD</span>
+          </div>
+        </div>
+      </div>
       <div class="tc-row">
         <label>TC Oficialización:</label>
         <input type="number" id="tc_global" value="1440" step="0.5" oninput="recalcularFormulario()">
@@ -230,15 +259,15 @@ td.mono{font-family:monospace;font-size:12px;}
           <label>Fecha</label>
           <input type="date" id="op_fecha">
         </div>
-        <div class="form-group">
+        <div class="form-group" style="position:relative;">
           <label>Corresponsal / Despachante</label>
-          <select id="op_corresponsal" onchange="onCambiarCorresponsal()">
-            <option value="">— Seleccionar —</option>
-          </select>
+          <input type="text" id="op_corresponsal" placeholder="Escribí el nombre..." autocomplete="off" oninput="filtrarAC('op_corresponsal','ac_corresponsal',corresponsalesNombres, onCambiarCorresponsal)" onblur="setTimeout(()=>cerrarAC('ac_corresponsal'),180)">
+          <div id="ac_corresponsal" class="ac-list"></div>
         </div>
         <div class="form-group">
           <label>Cliente final</label>
-          <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME...">
+          <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME..." autocomplete="off" oninput="filtrarAC('op_cliente','ac_cliente',clientesNombres)" onblur="setTimeout(()=>cerrarAC('ac_cliente'),180)">
+          <div id="ac_cliente" class="ac-list"></div>
         </div>
         <div class="form-group">
           <label>Destinación / Permiso</label>
@@ -496,6 +525,136 @@ td.mono{font-family:monospace;font-size:12px;}
     </div>
   </div>
 
+  <!-- ═══════════════ TAB: MUDANZAS ═══════════════ -->
+  <div id="tab-mudanzas" style="display:none;">
+
+    <div class="section-card">
+      <h3>📦 Nueva mudanza</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="mud_fecha">
+        </div>
+        <div class="form-group" style="position:relative;">
+          <label>Cliente</label>
+          <input type="text" id="mud_cliente" placeholder="Nombre del cliente..." autocomplete="off"
+            oninput="filtrarAC('mud_cliente','ac_mud_cliente',clientesNombres)"
+            onblur="setTimeout(()=>cerrarAC('ac_mud_cliente'),180)">
+          <div id="ac_mud_cliente" class="ac-list"></div>
+        </div>
+        <div class="form-group">
+          <label>TC Oficialización</label>
+          <input type="number" id="mud_tc" placeholder="1440" oninput="recalcMudanza()">
+        </div>
+        <div class="form-group">
+          <label>Valor honorarios (USD)</label>
+          <input type="number" id="mud_valor_usd" placeholder="0" oninput="recalcMudanza()">
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px;">Gastos (en pesos)</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Precinto electrónico</label>
+            <input type="number" id="mud_precinto" value="0" oninput="recalcMudanza()" placeholder="$ 0">
+          </div>
+          <div class="form-group">
+            <label>Gastos de fiscal</label>
+            <input type="number" id="mud_fiscal" value="0" oninput="recalcMudanza()" placeholder="$ 0">
+          </div>
+          <div class="form-group">
+            <label>Pago Ramiro (USD)</label>
+            <input type="number" id="mud_ramiro" value="190" oninput="recalcMudanza()" placeholder="190">
+          </div>
+          <div class="form-group">
+            <label>Otros gastos ($)</label>
+            <input type="number" id="mud_otros" value="0" oninput="recalcMudanza()" placeholder="$ 0">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <div class="form-group">
+          <label>Observaciones</label>
+          <input type="text" id="mud_obs" placeholder="Referencia, destino...">
+        </div>
+        <div class="form-group">
+          <label>Estado pago Ramiro</label>
+          <select id="mud_ramiro_pagado">
+            <option value="no">❌ Pendiente</option>
+            <option value="si">✅ Pagado</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- RESUMEN MUDANZA -->
+      <div style="margin-top:18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px;padding:16px;">
+        <div style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.3px;margin-bottom:12px;">💰 Liquidación</div>
+        <div id="mud_desglose" style="font-size:12px;color:#64748b;margin-bottom:10px;"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
+          <div class="res-item">
+            <div class="res-label">Honorarios neto</div>
+            <div class="res-val" id="mud_neto">$ 0</div>
+          </div>
+          <div class="res-item">
+            <div class="res-label">IVA 21%</div>
+            <div class="res-val" id="mud_iva">$ 0</div>
+          </div>
+          <div class="res-item">
+            <div class="res-label">Total bruto</div>
+            <div class="res-val" id="mud_bruto">$ 0</div>
+          </div>
+          <div class="res-item">
+            <div class="res-label">Total gastos</div>
+            <div class="res-val" style="color:#dc2626;" id="mud_gastos_total">$ 0</div>
+          </div>
+          <div class="res-item">
+            <div class="res-label">✅ Nos queda (neto)</div>
+            <div class="res-val green" id="mud_neto_final">$ 0</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-primary" onclick="guardarMudanza()">💾 Guardar mudanza</button>
+        <button class="btn-outline" onclick="limpiarMudanza()">🗑 Limpiar</button>
+      </div>
+    </div>
+
+    <!-- LISTADO MUDANZAS -->
+    <div class="section-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <h3 style="margin:0;">📋 Mudanzas registradas</h3>
+        <button class="btn-success" onclick="exportarMudanzas()">📥 Exportar CSV</button>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>TC</th>
+              <th>USD</th>
+              <th>Honorarios neto</th>
+              <th>IVA</th>
+              <th>Bruto</th>
+              <th>Gastos</th>
+              <th>Nos queda</th>
+              <th>Ramiro</th>
+              <th>Obs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-mudanzas">
+            <tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-mudanzas -->
+
 </div><!-- /main -->
 
 <div class="toast" id="toast"></div>
@@ -525,6 +684,53 @@ document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 // ── Estado ──
 let operaciones = [];
 let clientes = [];
+let corresponsalesNombres = [];
+let clientesNombres = [];
+
+// ── AUTOCOMPLETE ──
+window.filtrarAC = function(inputId, listId, fuente, onSelect){
+  const val = document.getElementById(inputId).value.trim().toUpperCase();
+  const list = document.getElementById(listId);
+  if(!val){ list.style.display='none'; return; }
+  const matches = fuente.filter(n => n.includes(val)).slice(0,8);
+  // Si no existe como opción exacta, ofrecer guardar
+  const existe = fuente.includes(val);
+  let html = matches.map(n => `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n}',${onSelect?'onCambiarCorresponsal':null})">${n}</div>`).join('');
+  if(!existe && val.length > 1){
+    html += `<div class="ac-item ac-new" onmousedown="guardarNuevoAC('${inputId}','${listId}',${onSelect?'true':'false'})">➕ Guardar "${val}"</div>`;
+  }
+  list.innerHTML = html;
+  list.style.display = html ? 'block' : 'none';
+};
+
+window.elegirAC = function(inputId, listId, val, cb){
+  document.getElementById(inputId).value = val;
+  document.getElementById(listId).style.display = 'none';
+  if(cb) onCambiarCorresponsal();
+  recalcularFormulario();
+};
+
+window.cerrarAC = function(listId){
+  const el = document.getElementById(listId);
+  if(el) el.style.display = 'none';
+};
+
+window.guardarNuevoAC = async function(inputId, listId, esCorresponsal){
+  const val = document.getElementById(inputId).value.trim().toUpperCase();
+  if(!val) return;
+  document.getElementById(listId).style.display = 'none';
+  if(esCorresponsal){
+    const id = val.replace(/\s+/g,'_');
+    await setDoc(doc(db,'corresponsales_clientes',id), {nombre:val, tipo:'corresponsal', factura:'mensual', cuit:''});
+    toast('✅ Corresponsal guardado: ' + val);
+  } else {
+    // guardar cliente en coleccion aparte
+    const id = val.replace(/\s+/g,'_');
+    await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
+    clientesNombres = [...new Set([...clientesNombres, val])].sort();
+    toast('✅ Cliente guardado: ' + val);
+  }
+};
 
 // ── Fecha default ──
 document.getElementById('op_fecha').value = new Date().toISOString().split('T')[0];
@@ -556,21 +762,36 @@ onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), s
 
 onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  renderSelectCorresponsales();
+  corresponsalesNombres = clientes.map(c => c.nombre).sort();
   renderTablaClientes();
   renderFiltros();
+});
+
+onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
+  const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
+  // tambien sacar clientes unicos de operaciones cargadas
+  const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
+  clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
 });
 
 // ── CÁLCULO ──
 function getTarifas(){
   const canal = document.getElementById('op_canal').value;
   const tipo = document.getElementById('tipo_desp_global').value;
-  const mult = tipo === 'desp_externo' ? 1.2 : 1;
+  const mult = 1; // premium se maneja por tarifa directa
   const tc = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
 
-  const hon_usd = canal === 'R'
-    ? parseFloat(document.getElementById('t_r').value)
-    : parseFloat(document.getElementById('t_vn').value);
+  const esPremium = tipo === 'desp_externo';
+  let hon_usd;
+  if(esPremium){
+    hon_usd = canal === 'R'
+      ? parseFloat(document.getElementById('t_prem_r').value)
+      : parseFloat(document.getElementById('t_prem_vn').value);
+  } else {
+    hon_usd = canal === 'R'
+      ? parseFloat(document.getElementById('t_r').value)
+      : parseFloat(document.getElementById('t_vn').value);
+  }
 
   const items = [];
   const usd = (u, label) => { items.push({label, usd: u * mult, pesos: u * mult * tc}); };
@@ -582,9 +803,16 @@ function getTarifas(){
 
   if(document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
-    const t = canal === 'R'
-      ? parseFloat(document.getElementById('t_cam_r').value)
-      : parseFloat(document.getElementById('t_cam_vn').value);
+    let t;
+    if(esPremium){
+      t = canal === 'R'
+        ? parseFloat(document.getElementById('t_prem_cam_r').value)
+        : parseFloat(document.getElementById('t_prem_cam_vn').value);
+    } else {
+      t = canal === 'R'
+        ? parseFloat(document.getElementById('t_cam_r').value)
+        : parseFloat(document.getElementById('t_cam_vn').value);
+    }
     usd(t*n, `Camión AD ×${n}`);
   }
 
@@ -651,7 +879,7 @@ recalcularFormulario();
 
 // ── GUARDAR ──
 window.guardarOperacion = async function(){
-  const corresponsal = document.getElementById('op_corresponsal').value;
+  const corresponsal = document.getElementById('op_corresponsal').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   if(!corresponsal){ toast('Seleccioná un corresponsal'); return; }
   if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
@@ -688,7 +916,7 @@ window.guardarOperacion = async function(){
     adicionales: adicTags.join(', '),
     obs: document.getElementById('op_obs').value.trim(),
     periodoFactura: document.getElementById('op_periodo_factura').value,
-    esPremium: mult > 1,
+    esPremium: document.getElementById('tipo_desp_global').value === 'desp_externo',
     cargadoPor: user.username,
     ts: Date.now()
   };
@@ -713,6 +941,8 @@ window.eliminarOp = async function(id){
 window.limpiarFormulario = function(){
   document.getElementById('op_destinacion').value = '';
   document.getElementById('op_cliente').value = '';
+  cerrarAC('ac_corresponsal');
+  cerrarAC('ac_cliente');
   document.getElementById('op_obs').value = '';
   document.getElementById('op_mic').value = '';
   document.getElementById('op_toma').value = '';
@@ -745,21 +975,10 @@ window.eliminarCliente = async function(id){
 };
 
 // ── RENDERS ──
-function renderSelectCorresponsales(){
-  const sel = document.getElementById('op_corresponsal');
-  const val = sel.value;
-  sel.innerHTML = '<option value="">— Seleccionar —</option>';
-  clientes.forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c.nombre;
-    opt.textContent = c.nombre + (c.tipo === 'desp_externo' ? ' ⭐' : '');
-    sel.appendChild(opt);
-  });
-  sel.value = val;
-}
+// renderSelectCorresponsales reemplazado por autocomplete
 
 window.onCambiarCorresponsal = function(){
-  const nombre = document.getElementById('op_corresponsal').value;
+  const nombre = document.getElementById('op_corresponsal').value.trim().toUpperCase();
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
     document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'corresponsal';
@@ -980,24 +1199,165 @@ function toast(msg){
 }
 window.toast = toast;
 
-// ── TABS ──
+// Init recalc
+recalcularFormulario();
+
+// ── MUDANZAS ──
+let mudanzas = [];
+
+// Fecha default mudanza
+document.getElementById('mud_fecha').value = new Date().toISOString().split('T')[0];
+
+onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
+  mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderMudanzas();
+});
+
+window.recalcMudanza = function(){
+  const tc      = parseFloat(document.getElementById('mud_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
+  const usd     = parseFloat(document.getElementById('mud_valor_usd').value) || 0;
+  const ramiroUsd = parseFloat(document.getElementById('mud_ramiro').value) || 190;
+  const precinto  = parseFloat(document.getElementById('mud_precinto').value) || 0;
+  const fiscal    = parseFloat(document.getElementById('mud_fiscal').value) || 0;
+  const otros     = parseFloat(document.getElementById('mud_otros').value) || 0;
+
+  const honorNeto = usd * tc;
+  const iva       = honorNeto * 0.21;
+  const bruto     = honorNeto + iva;
+  const gastoRamiro = ramiroUsd * tc;
+  const totalGastos = precinto + fiscal + gastoRamiro + otros;
+  const netofinal   = honorNeto - totalGastos;
+
+  document.getElementById('mud_neto').textContent   = '$ ' + fmt(honorNeto);
+  document.getElementById('mud_iva').textContent    = '$ ' + fmt(iva);
+  document.getElementById('mud_bruto').textContent  = '$ ' + fmt(bruto);
+  document.getElementById('mud_gastos_total').textContent = '$ ' + fmt(totalGastos);
+  document.getElementById('mud_neto_final').textContent   = '$ ' + fmt(netofinal);
+
+  const items = [
+    `USD ${usd} × TC ${tc} = $${fmt(honorNeto)}`,
+    `Precinto: $${fmt(precinto)}`,
+    `Fiscal: $${fmt(fiscal)}`,
+    `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt(gastoRamiro)}`,
+    otros > 0 ? `Otros: $${fmt(otros)}` : null
+  ].filter(Boolean);
+  document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
+
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd };
+};
+
+window.guardarMudanza = async function(){
+  const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const fecha   = document.getElementById('mud_fecha').value;
+  if(!cliente){ toast('Ingresá el cliente'); return; }
+  if(!fecha)  { toast('Ingresá la fecha'); return; }
+
+  const vals = recalcMudanza();
+  const mud = {
+    fecha,
+    cliente,
+    tc: vals.tc,
+    valorUsd: vals.usd,
+    honorNeto: vals.honorNeto,
+    iva: vals.iva,
+    bruto: vals.bruto,
+    precinto: vals.precinto,
+    fiscal: vals.fiscal,
+    ramiroUsd: vals.ramiroUsd,
+    gastoRamiro: vals.gastoRamiro,
+    otros: vals.otros,
+    totalGastos: vals.totalGastos,
+    netoFinal: vals.netofinal,
+    ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    obs: document.getElementById('mud_obs').value.trim(),
+    cargadoPor: user.username,
+    ts: Date.now()
+  };
+
+  try {
+    await addDoc(collection(db,'corresponsales_mudanzas'), mud);
+    toast('✅ Mudanza guardada');
+    limpiarMudanza();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  }
+};
+
+window.limpiarMudanza = function(){
+  document.getElementById('mud_cliente').value = '';
+  document.getElementById('mud_valor_usd').value = '';
+  document.getElementById('mud_precinto').value = '0';
+  document.getElementById('mud_fiscal').value = '0';
+  document.getElementById('mud_ramiro').value = '190';
+  document.getElementById('mud_otros').value = '0';
+  document.getElementById('mud_obs').value = '';
+  document.getElementById('mud_ramiro_pagado').value = 'no';
+  document.getElementById('mud_tc').value = '';
+  recalcMudanza();
+};
+
+window.eliminarMudanza = async function(id){
+  if(!confirm('¿Eliminar esta mudanza?')) return;
+  await deleteDoc(doc(db,'corresponsales_mudanzas',id));
+  toast('Mudanza eliminada');
+};
+
+function renderMudanzas(){
+  const tbody = document.getElementById('tbody-mudanzas');
+  if(!mudanzas.length){
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    return;
+  }
+  tbody.innerHTML = mudanzas.map(m => `
+    <tr>
+      <td>${m.fecha||''}</td>
+      <td><strong>${m.cliente||''}</strong></td>
+      <td class="mono">${m.tc||''}</td>
+      <td class="mono">${m.valorUsd||''}</td>
+      <td style="color:#1e3a8a;font-weight:600;">$${fmt(m.honorNeto)}</td>
+      <td>$${fmt(m.iva)}</td>
+      <td style="font-weight:700;">$${fmt(m.bruto)}</td>
+      <td style="color:#dc2626;">$${fmt(m.totalGastos)}</td>
+      <td style="color:#059669;font-weight:700;">$${fmt(m.netoFinal)}</td>
+      <td>${m.ramiroPagado === 'si'
+        ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
+        : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
+      <td style="font-size:11px;color:#64748b;">${m.obs||''}</td>
+      <td><button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button></td>
+    </tr>
+  `).join('');
+}
+
+window.exportarMudanzas = function(){
+  const header = ['Fecha','Cliente','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Ramiro Pagado','Obs'];
+  const rows = mudanzas.map(m => [
+    m.fecha, m.cliente, m.tc, m.valorUsd,
+    Math.round(m.honorNeto), Math.round(m.iva), Math.round(m.bruto),
+    Math.round(m.precinto), Math.round(m.fiscal), m.ramiroUsd, Math.round(m.gastoRamiro),
+    Math.round(m.otros), Math.round(m.totalGastos), Math.round(m.netoFinal),
+    m.ramiroPagado === 'si' ? 'SI' : 'NO', m.obs
+  ]);
+  let csv = [header, ...rows].map(r => r.map(v => `"${v??''}"`).join(',')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'mudanzas.csv'; a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ── SWITCH TAB (actualizado con mudanzas) ──
 window.switchTab = function(tab){
-  ['cargar','listado','dashboard','clientes'].forEach(t => {
+  ['cargar','listado','dashboard','clientes','mudanzas'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn,i) => {
-    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes'][i]===tab);
+    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes','mudanzas'][i]===tab);
   });
   if(tab==='listado') renderTabla();
   if(tab==='dashboard') renderDashboard();
 };
 
-// ── FILTROS con evento ──
-document.getElementById('filtro_corresponsal')?.addEventListener('change', renderTabla);
-document.getElementById('filtro_mes')?.addEventListener('change', renderTabla);
-
-// Init recalc
-recalcularFormulario();
+recalcMudanza();
 </script>
 </body>
 </html>
