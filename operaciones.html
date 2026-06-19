@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GLOBALCOMINT · Corresponsales</title>
+<title>GLOBALCOMINT · Despachantees</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -128,13 +128,14 @@ td.mono{font-family:monospace;font-size:12px;}
   .resumen-box{grid-template-columns:1fr;}
 }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
 <div class="topbar">
   <div class="topbar-left">
     <div class="topbar-brand">GLOBALCOMINT</div>
-    <div class="topbar-mod">📋 Corresponsales</div>
+    <div class="topbar-mod">📋 Despachantees</div>
   </div>
   <div class="topbar-right">
     <span class="user-chip" id="userChip"></span>
@@ -144,7 +145,7 @@ td.mono{font-family:monospace;font-size:12px;}
 
 <div class="main">
   <div class="page-header">
-    <div class="page-title">Operaciones de Corresponsales</div>
+    <div class="page-title">Operaciones de Despachantees</div>
     <div class="page-sub">Carga, tarifación y seguimiento de operaciones realizadas para otros despachantes</div>
   </div>
 
@@ -213,6 +214,18 @@ td.mono{font-family:monospace;font-size:12px;}
           <span class="tarifa-val"><input type="number" id="t_finsem" value="4" step="0.5"> USD</span>
         </div>
         <div class="tarifa-item">
+          <span class="tarifa-label">Apoderado</span>
+          <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">Camión AD (apod.)</span>
+          <span class="tarifa-val"><input type="number" id="t_cam_apod" value="10" step="0.5"> USD/u</span>
+        </div>
+        <div class="tarifa-item">
+          <span class="tarifa-label">MOV AD</span>
+          <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="100"> $</span>
+        </div>
+        <div class="tarifa-item">
           <span class="tarifa-label">Adicionales (pesos)</span>
           <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100"> $</span>
         </div>
@@ -244,7 +257,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <span style="font-size:12px;color:#94a3b8;">$/USD</span>
         <span style="margin-left:16px;font-size:12px;color:#64748b;">Tipo de despacho:</span>
         <select id="tipo_desp_global" onchange="recalcularFormulario()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
-          <option value="corresponsal">Corresponsal (tarifa estándar)</option>
+          <option value="despachante">Despachante (tarifa estándar)</option>
           <option value="desp_externo">Desp. externo (tarifa premium)</option>
         </select>
         <span id="premium-badge" style="display:none;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">+20% PREMIUM</span>
@@ -260,9 +273,9 @@ td.mono{font-family:monospace;font-size:12px;}
           <input type="date" id="op_fecha">
         </div>
         <div class="form-group" style="position:relative;">
-          <label>Corresponsal / Despachante</label>
-          <input type="text" id="op_corresponsal" placeholder="Escribí el nombre..." autocomplete="off" oninput="filtrarAC('op_corresponsal','ac_corresponsal',corresponsalesNombres, onCambiarCorresponsal)" onblur="setTimeout(()=>cerrarAC('ac_corresponsal'),180)">
-          <div id="ac_corresponsal" class="ac-list"></div>
+          <label>Despachante</label>
+          <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off" oninput="filtrarAC('op_despachante','ac_despachante',despachanteesNombres, onCambiarDespachante)" onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
+          <div id="ac_despachante" class="ac-list"></div>
         </div>
         <div class="form-group">
           <label>Cliente final</label>
@@ -367,6 +380,23 @@ td.mono{font-family:monospace;font-size:12px;}
           <label for="chk_finsem">Fin de semana</label>
         </label>
 
+        <label class="chk-item" id="chk-apoderado-wrap">
+          <input type="checkbox" id="chk_apoderado" onchange="recalcularFormulario()">
+          <label for="chk_apoderado">Apoderado</label>
+        </label>
+
+        <label class="chk-item" id="chk-cam-apod-wrap">
+          <input type="checkbox" id="chk_cam_apod" onchange="recalcularFormulario()">
+          <label for="chk_cam_apod">Camión AD (apod.)</label>
+          <input type="number" class="chk-extra" id="n_cam_apod" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
+        </label>
+
+        <label class="chk-item" id="chk-movad-wrap">
+          <input type="checkbox" id="chk_mov_ad" onchange="recalcularFormulario()">
+          <label for="chk_mov_ad">MOV AD</label>
+          <input type="number" class="chk-extra" id="n_mov_ad" value="0" step="100" oninput="recalcularFormulario()" placeholder="$" style="width:70px;">
+        </label>
+
       </div>
       <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <div class="form-group" style="min-width:200px;">
@@ -418,8 +448,8 @@ td.mono{font-family:monospace;font-size:12px;}
         <h3 style="margin:0;">📋 Operaciones registradas</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <div class="periodo-bar" style="margin:0;">
-            <select id="filtro_corresponsal">
-              <option value="">Todos los corresponsales</option>
+            <select id="filtro_despachante">
+              <option value="">Todos los despachantees</option>
             </select>
             <select id="filtro_mes">
               <option value="">Todos los meses</option>
@@ -434,7 +464,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <tr>
               <th>N° Op</th>
               <th>Fecha</th>
-              <th>Corresponsal</th>
+              <th>Despachante</th>
               <th>Cliente</th>
               <th>Destinación</th>
               <th>MIC</th>
@@ -465,8 +495,8 @@ td.mono{font-family:monospace;font-size:12px;}
       <select id="dash_mes" onchange="renderDashboard()">
         <option value="">Todos los meses</option>
       </select>
-      <select id="dash_corresponsal" onchange="renderDashboard()">
-        <option value="">Todos los corresponsales</option>
+      <select id="dash_despachante" onchange="renderDashboard()">
+        <option value="">Todos los despachantees</option>
       </select>
     </div>
     <div class="kpis" id="kpis-wrap"></div>
@@ -476,7 +506,7 @@ td.mono{font-family:monospace;font-size:12px;}
   <!-- ═══════════════ TAB: CLIENTES ═══════════════ -->
   <div id="tab-clientes" style="display:none;">
     <div class="section-card">
-      <h3>🏢 Corresponsales / Despachantes</h3>
+      <h3>🏢 Despachantes</h3>
       <div class="form-row" style="margin-bottom:16px;">
         <div class="form-group">
           <label>Nombre / Razón Social</label>
@@ -485,7 +515,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group">
           <label>Tipo</label>
           <select id="cli_tipo">
-            <option value="corresponsal">Corresponsal interno</option>
+            <option value="despachante">Despachante interno</option>
             <option value="desp_externo">Despachante externo (premium)</option>
           </select>
         </div>
@@ -502,7 +532,7 @@ td.mono{font-family:monospace;font-size:12px;}
           <input type="text" id="cli_cuit" placeholder="20-XXXXXXXX-X">
         </div>
         <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" onclick="guardarCliente()">Agregar corresponsal</button>
+          <button class="btn-primary" onclick="guardarCliente()">Agregar despachante</button>
         </div>
       </div>
       <div class="tabla-wrap">
@@ -518,7 +548,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-clientes">
-            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin corresponsales cargados</td></tr>
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantees cargados</td></tr>
           </tbody>
         </table>
       </div>
@@ -684,7 +714,7 @@ document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 // ── Estado ──
 let operaciones = [];
 let clientes = [];
-let corresponsalesNombres = [];
+let despachanteesNombres = [];
 let clientesNombres = [];
 
 // ── AUTOCOMPLETE ──
@@ -695,7 +725,7 @@ window.filtrarAC = function(inputId, listId, fuente, onSelect){
   const matches = fuente.filter(n => n.includes(val)).slice(0,8);
   // Si no existe como opción exacta, ofrecer guardar
   const existe = fuente.includes(val);
-  let html = matches.map(n => `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n}',${onSelect?'onCambiarCorresponsal':null})">${n}</div>`).join('');
+  let html = matches.map(n => `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n}',${onSelect?'onCambiarDespachante':null})">${n}</div>`).join('');
   if(!existe && val.length > 1){
     html += `<div class="ac-item ac-new" onmousedown="guardarNuevoAC('${inputId}','${listId}',${onSelect?'true':'false'})">➕ Guardar "${val}"</div>`;
   }
@@ -706,7 +736,7 @@ window.filtrarAC = function(inputId, listId, fuente, onSelect){
 window.elegirAC = function(inputId, listId, val, cb){
   document.getElementById(inputId).value = val;
   document.getElementById(listId).style.display = 'none';
-  if(cb) onCambiarCorresponsal();
+  if(cb) onCambiarDespachante();
   recalcularFormulario();
 };
 
@@ -715,18 +745,18 @@ window.cerrarAC = function(listId){
   if(el) el.style.display = 'none';
 };
 
-window.guardarNuevoAC = async function(inputId, listId, esCorresponsal){
+window.guardarNuevoAC = async function(inputId, listId, esDespachante){
   const val = document.getElementById(inputId).value.trim().toUpperCase();
   if(!val) return;
   document.getElementById(listId).style.display = 'none';
-  if(esCorresponsal){
+  if(esDespachante){
     const id = val.replace(/\s+/g,'_');
-    await setDoc(doc(db,'corresponsales_clientes',id), {nombre:val, tipo:'corresponsal', factura:'mensual', cuit:''});
-    toast('✅ Corresponsal guardado: ' + val);
+    await setDoc(doc(db,'despachantees_clientes',id), {nombre:val, tipo:'despachante', factura:'mensual', cuit:''});
+    toast('✅ Despachante guardado: ' + val);
   } else {
     // guardar cliente en coleccion aparte
     const id = val.replace(/\s+/g,'_');
-    await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
+    await setDoc(doc(db,'despachantees_clientes_finales',id), {nombre:val});
     clientesNombres = [...new Set([...clientesNombres, val])].sort();
     toast('✅ Cliente guardado: ' + val);
   }
@@ -753,21 +783,21 @@ function generarNumOp(){
 }
 
 // ── FIRESTORE listeners ──
-onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
+onSnapshot(query(collection(db,'despachantees_ops'), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderTabla();
   renderDashboard();
   renderFiltros();
 });
 
-onSnapshot(collection(db,'corresponsales_clientes'), snap => {
+onSnapshot(collection(db,'despachantees_clientes'), snap => {
   clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  corresponsalesNombres = clientes.map(c => c.nombre).sort();
+  despachanteesNombres = clientes.map(c => c.nombre).sort();
   renderTablaClientes();
   renderFiltros();
 });
 
-onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
+onSnapshot(collection(db,'despachantees_clientes_finales'), snap => {
   const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
   // tambien sacar clientes unicos de operaciones cargadas
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
@@ -843,6 +873,19 @@ function getTarifas(){
   if(document.getElementById('chk_finsem').checked)
     usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
 
+  if(document.getElementById('chk_apoderado').checked)
+    usd(parseFloat(document.getElementById('t_apoderado').value), 'Apoderado');
+
+  if(document.getElementById('chk_cam_apod').checked){
+    const n = parseInt(document.getElementById('n_cam_apod').value)||1;
+    usd(parseFloat(document.getElementById('t_cam_apod').value)*n, `Camión AD apod. ×${n}`);
+  }
+
+  if(document.getElementById('chk_mov_ad').checked){
+    const movVal = parseFloat(document.getElementById('n_mov_ad').value) || parseFloat(document.getElementById('t_mov_ad').value) || 0;
+    if(movVal > 0) items.push({label:'MOV AD', usd:0, pesos: movVal});
+  }
+
   // Adicionales en pesos (directos, sin conversión)
   const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
   if(adicPesos > 0) items.push({label:'Adicionales en pesos', usd:0, pesos: adicPesos});
@@ -879,9 +922,9 @@ recalcularFormulario();
 
 // ── GUARDAR ──
 window.guardarOperacion = async function(){
-  const corresponsal = document.getElementById('op_corresponsal').value.trim().toUpperCase();
+  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
-  if(!corresponsal){ toast('Seleccioná un corresponsal'); return; }
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
   if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
   const { items, totalNeto, iva, bruto, tc, totalUsd, mult } = getTarifas();
@@ -900,7 +943,7 @@ window.guardarOperacion = async function(){
   const op = {
     numOp: generarNumOp(),
     fecha: document.getElementById('op_fecha').value,
-    corresponsal,
+    despachante,
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
     destinacion,
     canal: document.getElementById('op_canal').value,
@@ -922,7 +965,7 @@ window.guardarOperacion = async function(){
   };
 
   try {
-    await addDoc(collection(db,'corresponsales_ops'), op);
+    await addDoc(collection(db,'despachantees_ops'), op);
     toast('✅ Operación guardada: ' + op.numOp);
     limpiarFormulario();
   } catch(e){
@@ -933,7 +976,7 @@ window.guardarOperacion = async function(){
 // ── ELIMINAR ──
 window.eliminarOp = async function(id){
   if(!confirm('¿Eliminar esta operación?')) return;
-  await deleteDoc(doc(db,'corresponsales_ops',id));
+  await deleteDoc(doc(db,'despachantees_ops',id));
   toast('Operación eliminada');
 };
 
@@ -941,7 +984,7 @@ window.eliminarOp = async function(id){
 window.limpiarFormulario = function(){
   document.getElementById('op_destinacion').value = '';
   document.getElementById('op_cliente').value = '';
-  cerrarAC('ac_corresponsal');
+  cerrarAC('ac_despachante');
   cerrarAC('ac_cliente');
   document.getElementById('op_obs').value = '';
   document.getElementById('op_mic').value = '';
@@ -962,36 +1005,36 @@ window.guardarCliente = async function(){
     factura: document.getElementById('cli_factura').value,
     cuit: document.getElementById('cli_cuit').value.trim()
   };
-  await setDoc(doc(db,'corresponsales_clientes', nombre.replace(/\s+/g,'_')), cli);
+  await setDoc(doc(db,'despachantees_clientes', nombre.replace(/\s+/g,'_')), cli);
   document.getElementById('cli_nombre').value = '';
   document.getElementById('cli_cuit').value = '';
-  toast('✅ Corresponsal guardado');
+  toast('✅ Despachante guardado');
 };
 
 window.eliminarCliente = async function(id){
-  if(!confirm('¿Eliminar corresponsal?')) return;
-  await deleteDoc(doc(db,'corresponsales_clientes',id));
-  toast('Corresponsal eliminado');
+  if(!confirm('¿Eliminar despachante?')) return;
+  await deleteDoc(doc(db,'despachantees_clientes',id));
+  toast('Despachante eliminado');
 };
 
 // ── RENDERS ──
-// renderSelectCorresponsales reemplazado por autocomplete
+// renderSelectDespachantees reemplazado por autocomplete
 
-window.onCambiarCorresponsal = function(){
-  const nombre = document.getElementById('op_corresponsal').value.trim().toUpperCase();
+window.onCambiarDespachante = function(){
+  const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
-    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'corresponsal';
+    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
   }
   recalcularFormulario();
 };
 
 function renderTabla(){
-  const filtCorr = document.getElementById('filtro_corresponsal')?.value || '';
+  const filtCorr = document.getElementById('filtro_despachante')?.value || '';
   const filtMes  = document.getElementById('filtro_mes')?.value || '';
   let ops = [...operaciones];
-  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
 
   const tbody = document.getElementById('tbody-ops');
@@ -1005,7 +1048,7 @@ function renderTabla(){
     <tr>
       <td class="mono">${o.numOp||'-'}</td>
       <td>${o.fecha||''}</td>
-      <td><strong>${o.corresponsal||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e">PREM</span>':''}</td>
+      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e">PREM</span>':''}</td>
       <td>${o.cliente||''}</td>
       <td class="mono">${o.destinacion||''}</td>
       <td class="mono">${o.mic||'-'}</td>
@@ -1039,9 +1082,9 @@ function renderTabla(){
 }
 
 function renderFiltros(){
-  const corrSel  = document.getElementById('filtro_corresponsal');
+  const corrSel  = document.getElementById('filtro_despachante');
   const mesSel   = document.getElementById('filtro_mes');
-  const corrSelD = document.getElementById('dash_corresponsal');
+  const corrSelD = document.getElementById('dash_despachante');
   const mesSelD  = document.getElementById('dash_mes');
   const corrSelL = corrSel ? corrSel.value : '';
   const mesSelL  = mesSel ? mesSel.value : '';
@@ -1052,7 +1095,7 @@ function renderFiltros(){
   [corrSel, corrSelD].forEach(sel => {
     if(!sel) return;
     const v = sel.value;
-    sel.innerHTML = '<option value="">Todos los corresponsales</option>';
+    sel.innerHTML = '<option value="">Todos los despachantees</option>';
     nombres.forEach(n => { const opt = document.createElement('option'); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
     sel.value = v;
   });
@@ -1067,10 +1110,10 @@ function renderFiltros(){
 
 window.renderDashboard = function(){
   const filtMes  = document.getElementById('dash_mes')?.value || '';
-  const filtCorr = document.getElementById('dash_corresponsal')?.value || '';
+  const filtCorr = document.getElementById('dash_despachante')?.value || '';
   let ops = [...operaciones];
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
-  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
   const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
   const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
@@ -1099,12 +1142,12 @@ window.renderDashboard = function(){
     </div>
   `;
 
-  // Por corresponsal
+  // Por despachante
   const byCorr = {};
   ops.forEach(o => {
-    if(!byCorr[o.corresponsal]) byCorr[o.corresponsal] = {ops:0, bruto:0};
-    byCorr[o.corresponsal].ops++;
-    byCorr[o.corresponsal].bruto += o.bruto||0;
+    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
+    byCorr[o.despachante].ops++;
+    byCorr[o.despachante].bruto += o.bruto||0;
   });
   // Por mes
   const byMes = {};
@@ -1117,9 +1160,9 @@ window.renderDashboard = function(){
 
   document.getElementById('dash-detalle').innerHTML = `
     <div class="section-card" style="margin:0;">
-      <h3>Por corresponsal</h3>
+      <h3>Por despachante</h3>
       <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Corresponsal</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
             `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
@@ -1144,14 +1187,14 @@ window.renderDashboard = function(){
 function renderTablaClientes(){
   const tbody = document.getElementById('tbody-clientes');
   if(!clientes.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin corresponsales cargados</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantees cargados</td></tr>';
     return;
   }
   tbody.innerHTML = clientes.map(c => {
-    const opsCount = operaciones.filter(o => o.corresponsal === c.nombre).length;
+    const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
     return `<tr>
       <td><strong>${c.nombre}</strong></td>
-      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Corresponsal'}</span></td>
+      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Despachante'}</span></td>
       <td>${c.factura}</td>
       <td class="mono">${c.cuit||'-'}</td>
       <td style="text-align:center;">${opsCount}</td>
@@ -1162,15 +1205,15 @@ function renderTablaClientes(){
 
 // ── EXPORTAR ──
 window.exportarExcel = function(){
-  const filtCorr = document.getElementById('filtro_corresponsal').value;
+  const filtCorr = document.getElementById('filtro_despachante').value;
   const filtMes  = document.getElementById('filtro_mes').value;
   let ops = [...operaciones];
-  if(filtCorr) ops = ops.filter(o => o.corresponsal === filtCorr);
+  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
 
-  const header = ['N° Op','Fecha','Corresponsal','Cliente','Destinación','MIC','Toma Cont.','Canal','ZPA','TC','USD','Neto $','IVA $','Total $','Adicionales','Obs','Período'];
+  const header = ['N° Op','Fecha','Despachante','Cliente','Destinación','MIC','Toma Cont.','Canal','ZPA','TC','USD','Neto $','IVA $','Total $','Adicionales','Obs','Período'];
   const rows = ops.map(o => [
-    o.numOp, o.fecha, o.corresponsal, o.cliente, o.destinacion,
+    o.numOp, o.fecha, o.despachante, o.cliente, o.destinacion,
     o.mic||'', o.toma||'',
     o.canal, o.zpa, o.tc, o.totalUsd,
     Math.round(o.neto), Math.round(o.iva), Math.round(o.bruto),
@@ -1182,7 +1225,7 @@ window.exportarExcel = function(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `corresponsales_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
+  a.download = `despachantees_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 };
@@ -1208,7 +1251,7 @@ let mudanzas = [];
 // Fecha default mudanza
 document.getElementById('mud_fecha').value = new Date().toISOString().split('T')[0];
 
-onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
+onSnapshot(query(collection(db,'despachantees_mudanzas'), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderMudanzas();
 });
@@ -1275,7 +1318,7 @@ window.guardarMudanza = async function(){
   };
 
   try {
-    await addDoc(collection(db,'corresponsales_mudanzas'), mud);
+    await addDoc(collection(db,'despachantees_mudanzas'), mud);
     toast('✅ Mudanza guardada');
     limpiarMudanza();
   } catch(e){
@@ -1298,7 +1341,7 @@ window.limpiarMudanza = function(){
 
 window.eliminarMudanza = async function(id){
   if(!confirm('¿Eliminar esta mudanza?')) return;
-  await deleteDoc(doc(db,'corresponsales_mudanzas',id));
+  await deleteDoc(doc(db,'despachantees_mudanzas',id));
   toast('Mudanza eliminada');
 };
 
