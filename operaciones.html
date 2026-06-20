@@ -729,7 +729,7 @@ td.mono{font-family:monospace;font-size:12px;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query }
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -761,7 +761,6 @@ window.filtrarAC = function(inputId, listId, fuente, onSelect){
   const list = document.getElementById(listId);
   if(!val){ list.style.display='none'; return; }
   const matches = fuente.filter(n => n.includes(val)).slice(0,8);
-  // Si no existe como opción exacta, ofrecer guardar
   const existe = fuente.includes(val);
   let html = matches.map(n => `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n}',${onSelect?'onCambiarDespachante':null})">${n}</div>`).join('');
   if(!existe && val.length > 1){
@@ -792,7 +791,6 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
     await setDoc(doc(db,'corresponsales_clientes',id), {nombre:val, tipo:'despachante', factura:'mensual', cuit:''});
     toast('✅ Despachante guardado: ' + val);
   } else {
-    // guardar cliente en coleccion aparte
     const id = val.replace(/\s+/g,'_');
     await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
     clientesNombres = [...new Set([...clientesNombres, val])].sort();
@@ -803,7 +801,6 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
 // ── Fecha default ──
 document.getElementById('op_fecha').value = new Date().toISOString().split('T')[0];
 
-// Auto fin de semana segun fecha
 document.getElementById('op_fecha').addEventListener('change', function(){
   const d = new Date(this.value + 'T12:00:00');
   const esFinsem = d.getDay() === 0 || d.getDay() === 6;
@@ -816,14 +813,17 @@ function generarNumOp(){
   return operaciones.length + 1;
 }
 
-// ── FIRESTORE listeners ──
-onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
-  operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  // solo renderizar si el tab activo lo necesita
+// ── FIRESTORE listeners (Sin orderBy para evitar errores silenciosos de índices) ──
+onSnapshot(collection(db,'corresponsales_ops'), snap => {
+  operaciones = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
   renderFiltros();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Listado')) renderTabla();
   if(tabActivo.includes('Dashboard')) renderDashboard();
+  if(tabActivo.includes('Ramiro')) renderRamiro();
+}, err => {
+  console.error("Error al cargar operaciones:", err);
+  toast("❌ Error al cargar datos (revisá consola con F12)");
 });
 
 onSnapshot(collection(db,'corresponsales_clientes'), snap => {
@@ -831,11 +831,12 @@ onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   despachantesNombres = clientes.map(c => c.nombre).sort();
   renderTablaClientes();
   renderFiltros();
+}, err => {
+  console.error("Error al cargar clientes:", err);
 });
 
 onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
   const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
-  // tambien sacar clientes unicos de operaciones cargadas
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
   clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
 });
@@ -855,12 +856,10 @@ function getTarifas(){
   const usd = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
   const pesos = (p, label) => { items.push({label, usd: 0, pesos: p}); };
 
-  // Apoderado: tarifa fija
   if(esApoderado){
     usd(parseFloat(document.getElementById('t_apoderado').value), 'Apoderado');
   }
 
-  // Honorarios de destinación: SOLO si NO es MIC y NO es apoderado
   if(!esMIC && !esApoderado){
     let hon_usd;
     if(esPremium){
@@ -929,12 +928,10 @@ function getTarifas(){
     if(movVal > 0) usd(movVal, 'MOV AD');
   }
 
-  // Kotinya: agregar pago a Ramiro
   if(esKotinya){
     usd(parseFloat(document.getElementById('t_ramiro_op').value), 'Ramiro / Kotinya');
   }
 
-  // Adicionales en pesos (directos, sin conversión)
   const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
   if(adicPesos > 0) pesos(adicPesos, 'Adicionales en pesos');
 
@@ -953,7 +950,6 @@ window.onTipoChange = function(){
   const esApoderado = tipo === 'apoderado';
   const esKotinya   = tipo === 'kotinya';
 
-  // Si es MIC: tildar MIC, ocultar canal y adicionales irrelevantes
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
     document.getElementById('op_canal').closest('.form-group').style.opacity = '0.3';
@@ -964,7 +960,6 @@ window.onTipoChange = function(){
     document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
   } else {
     document.getElementById('chk_mic').checked = false;
-    // Canal no importa para apoderado pero lo dejamos visible
     const sinCanal = esApoderado || esKotinya;
     document.getElementById('op_canal').closest('.form-group').style.opacity = sinCanal ? '0.4' : '';
     document.getElementById('op_canal').closest('.form-group').style.pointerEvents = sinCanal ? 'none' : '';
@@ -998,12 +993,8 @@ window.recalcularFormulario = function(){
   ).join(' ');
   document.getElementById('desglose-prev').innerHTML = desglose;
 
-  // Actualizar número preview
   document.getElementById('op-numero-preview').textContent = '→ ' + generarNumOp();
 };
-
-// Init cálculo
-recalcularFormulario();
 
 // ── GUARDAR ──
 window.guardarOperacion = async function(){
@@ -1064,14 +1055,12 @@ window.guardarOperacion = async function(){
   }
 };
 
-// ── ELIMINAR ──
 window.eliminarOp = async function(id){
   if(!confirm('¿Eliminar esta operación?')) return;
   await deleteDoc(doc(db,'corresponsales_ops',id));
   toast('Operación eliminada');
 };
 
-// ── LIMPIAR FORM ──
 window.limpiarFormulario = function(){
   document.getElementById('op_destinacion').value = '';
   document.getElementById('op_cliente').value = '';
@@ -1108,13 +1097,9 @@ window.eliminarCliente = async function(id){
   toast('Despachante eliminado');
 };
 
-// ── RENDERS ──
-// renderSelectDespachantes reemplazado por autocomplete
-
 window.onCambiarDespachante = function(){
   const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
 
-  // Kotinya: detectar automáticamente por nombre
   if(nombre.includes('KOTINYA')){
     document.getElementById('tipo_desp_global').value = 'kotinya';
     recalcularFormulario();
@@ -1138,7 +1123,7 @@ function renderTabla(){
 
   const tbody = document.getElementById('tbody-ops');
   if(!ops.length){
-    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones cargadas</td></tr>';
     document.getElementById('tfoot-ops').innerHTML = '';
     return;
   }
@@ -1164,7 +1149,6 @@ function renderTabla(){
     </tr>
   `).join('');
 
-  // TOTALES
   const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
   const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
@@ -1185,8 +1169,6 @@ function renderFiltros(){
   const mesSel   = document.getElementById('filtro_mes');
   const corrSelD = document.getElementById('dash_despachante');
   const mesSelD  = document.getElementById('dash_mes');
-  const corrSelL = corrSel ? corrSel.value : '';
-  const mesSelL  = mesSel ? mesSel.value : '';
 
   const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
   const meses   = [...new Set(operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
@@ -1241,14 +1223,12 @@ window.renderDashboard = function(){
     </div>
   `;
 
-  // Por despachante
   const byCorr = {};
   ops.forEach(o => {
     if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
     byCorr[o.despachante].ops++;
     byCorr[o.despachante].bruto += o.bruto||0;
   });
-  // Por mes
   const byMes = {};
   ops.forEach(o => {
     const m = o.fecha?.slice(0,7) || 'S/F';
@@ -1329,7 +1309,6 @@ window.exportarExcel = function(){
   URL.revokeObjectURL(url);
 };
 
-// ── UTILS ──
 function fmt(n){ return Math.round(n).toLocaleString('es-AR'); }
 window.fmt = fmt;
 
@@ -1341,7 +1320,6 @@ function toast(msg){
 }
 window.toast = toast;
 
-// ── TOGGLE TARIFAS ──
 window.toggleTarifas = function(){
   const body = document.getElementById('tarifas-body');
   const icon = document.getElementById('tarifas-toggle-icon');
@@ -1350,18 +1328,20 @@ window.toggleTarifas = function(){
   icon.textContent = open ? '🔓' : '🔒';
 };
 
-// Init recalc
 recalcularFormulario();
 
 // ── MUDANZAS ──
 let mudanzas = [];
 
-// Fecha default mudanza
 document.getElementById('mud_fecha').value = new Date().toISOString().split('T')[0];
 
-onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
-  mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
+onSnapshot(collection(db,'corresponsales_mudanzas'), snap => {
+  mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
   renderMudanzas();
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Ramiro')) renderRamiro();
+}, err => {
+  console.error("Error al cargar mudanzas:", err);
 });
 
 window.recalcMudanza = function(){
@@ -1405,20 +1385,11 @@ window.guardarMudanza = async function(){
 
   const vals = recalcMudanza();
   const mud = {
-    fecha,
-    cliente,
-    tc: vals.tc,
-    valorUsd: vals.usd,
-    honorNeto: vals.honorNeto,
-    iva: vals.iva,
-    bruto: vals.bruto,
-    precinto: vals.precinto,
-    fiscal: vals.fiscal,
-    ramiroUsd: vals.ramiroUsd,
-    gastoRamiro: vals.gastoRamiro,
-    otros: vals.otros,
-    totalGastos: vals.totalGastos,
-    netoFinal: vals.netofinal,
+    fecha, cliente,
+    tc: vals.tc, valorUsd: vals.usd, honorNeto: vals.honorNeto,
+    iva: vals.iva, bruto: vals.bruto, precinto: vals.precinto,
+    fiscal: vals.fiscal, ramiroUsd: vals.ramiroUsd, gastoRamiro: vals.gastoRamiro,
+    otros: vals.otros, totalGastos: vals.totalGastos, netoFinal: vals.netofinal,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
     obs: document.getElementById('mud_obs').value.trim(),
     cargadoPor: user.username,
@@ -1501,44 +1472,33 @@ window.renderRamiro = function(){
   const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
   const tc = parseFloat(document.getElementById('tc_global').value) || 1440;
 
-  // Juntar ops Kotinya + mudanzas
   const items = [];
 
   operaciones.filter(o => o.esKotinya).forEach(o => {
     items.push({
-      tipo: 'Kotinya',
-      fecha: o.fecha,
-      cliente: o.cliente || '',
-      detalle: o.destinacion || '',
-      ramiroUsd: o.ramiroDeuda || 30,
-      pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
-      estado: o.ramiroOPagado || 'no',
-      id: o.id,
-      col: 'ops'
+      tipo: 'Kotinya', fecha: o.fecha, cliente: o.cliente || '',
+      detalle: o.destinacion || '', ramiroUsd: o.ramiroDeuda || 30,
+      pesos: (o.ramiroDeuda || 30) * (o.tc || tc), estado: o.ramiroOPagado || 'no',
+      id: o.id, col: 'ops'
     });
   });
 
   mudanzas.forEach(m => {
     items.push({
-      tipo: 'Mudanza',
-      fecha: m.fecha,
-      cliente: m.cliente || '',
-      detalle: m.obs || '',
-      ramiroUsd: m.ramiroUsd || 190,
-      pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
-      estado: m.ramiroPagado || 'no',
-      id: m.id,
-      col: 'mudanzas'
+      tipo: 'Mudanza', fecha: m.fecha, cliente: m.cliente || '',
+      detalle: m.obs || '', ramiroUsd: m.ramiroUsd || 190,
+      pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc), estado: m.ramiroPagado || 'no',
+      id: m.id, col: 'mudanzas'
     });
   });
 
-  items.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
+  items.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
   const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
 
-  const totalUsd     = items.reduce((a,b) => a + b.ramiroUsd, 0);
-  const pendienteUsd = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.ramiroUsd, 0);
-  const pagadoUsd    = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.ramiroUsd, 0);
-  const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.pesos, 0);
+  const totalUsd     = items.reduce((a,b) => a + (b.ramiroUsd||0), 0);
+  const pendienteUsd = items.filter(i => i.estado === 'no').reduce((a,b) => a + (b.ramiroUsd||0), 0);
+  const pagadoUsd    = items.filter(i => i.estado === 'si').reduce((a,b) => a + (b.ramiroUsd||0), 0);
+  const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + (b.pesos||0), 0);
 
   document.getElementById('ramiro-kpis').innerHTML = `
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
