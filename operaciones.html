@@ -301,7 +301,7 @@ td.mono{font-family:monospace;font-size:12px;}
           <select id="op_canal" onchange="recalcularFormulario()">
             <option value="V">Verde (V)</option>
             <option value="N">Naranja (N)</option>
-            <option value="R" >Rojo (R)</option>
+            <option value="R">Rojo (R)</option>
           </select>
         </div>
         <div class="form-group">
@@ -390,8 +390,6 @@ td.mono{font-family:monospace;font-size:12px;}
           <input type="checkbox" id="chk_finsem" onchange="recalcularFormulario()">
           <label for="chk_finsem">Fin de semana</label>
         </label>
-
-
 
         <label class="chk-item" id="chk-movad-wrap">
           <input type="checkbox" id="chk_mov_ad" onchange="recalcularFormulario()">
@@ -482,7 +480,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-ops">
-            <tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones cargadas</td></tr>
+            <tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones cargadas</td></tr>
           </tbody>
           <tfoot id="tfoot-ops"></tfoot>
         </table>
@@ -543,7 +541,6 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Nombre</th>
               <th>Tipo tarifa</th>
               <th>Facturación</th>
-              <th>Factura</th>
               <th>CUIT</th>
               <th>Ops</th>
               <th></th>
@@ -845,19 +842,26 @@ onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
 
 // ── CÁLCULO ──
 function getTarifas(){
-  const canal  = document.getElementById('op_canal').value;
-  const tipo   = document.getElementById('tipo_desp_global').value;
-  const tipoOp = document.getElementById('op_tipo').value;
-  const esMIC  = tipoOp === 'MIC';
-  const tc     = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
+  const canal     = document.getElementById('op_canal').value;
+  const tipo      = document.getElementById('tipo_desp_global').value;
+  const tipoOp    = document.getElementById('op_tipo').value;
+  const esMIC     = tipoOp === 'MIC';
+  const tc        = parseFloat(document.getElementById('op_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
   const esPremium = tipo === 'desp_externo';
+  const esApoderado = tipo === 'apoderado';
+  const esKotinya = tipo === 'kotinya';
 
   const items = [];
   const usd = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
   const pesos = (p, label) => { items.push({label, usd: 0, pesos: p}); };
 
-  // ── Honorarios de destinación: SOLO si NO es MIC ──
-  if(!esMIC){
+  // Apoderado: tarifa fija
+  if(esApoderado){
+    usd(parseFloat(document.getElementById('t_apoderado').value), 'Apoderado');
+  }
+
+  // Honorarios de destinación: SOLO si NO es MIC y NO es apoderado
+  if(!esMIC && !esApoderado){
     let hon_usd;
     if(esPremium){
       hon_usd = canal === 'R'
@@ -871,7 +875,7 @@ function getTarifas(){
     usd(hon_usd, `Honorarios canal ${canal}`);
   }
 
-  if(document.getElementById('chk_sobre').checked)
+  if(document.getElementById('chk_sobre').checked && !esMIC)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
 
   if(document.getElementById('chk_cam').checked){
@@ -920,11 +924,14 @@ function getTarifas(){
   if(document.getElementById('chk_finsem').checked)
     usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
 
-
-
   if(document.getElementById('chk_mov_ad').checked){
     const movVal = parseFloat(document.getElementById('t_mov_ad').value) || 0;
     if(movVal > 0) usd(movVal, 'MOV AD');
+  }
+
+  // Kotinya: agregar pago a Ramiro
+  if(esKotinya){
+    usd(parseFloat(document.getElementById('t_ramiro_op').value), 'Ramiro / Kotinya');
   }
 
   // Adicionales en pesos (directos, sin conversión)
@@ -940,10 +947,11 @@ function getTarifas(){
 }
 
 window.onTipoChange = function(){
-  const tipoOp     = document.getElementById('op_tipo').value;
-  const esMIC      = tipoOp === 'MIC';
-  const tipo       = document.getElementById('tipo_desp_global').value;
+  const tipoOp      = document.getElementById('op_tipo').value;
+  const esMIC       = tipoOp === 'MIC';
+  const tipo        = document.getElementById('tipo_desp_global').value;
   const esApoderado = tipo === 'apoderado';
+  const esKotinya   = tipo === 'kotinya';
 
   // Si es MIC: tildar MIC, ocultar canal y adicionales irrelevantes
   if(esMIC){
@@ -970,17 +978,20 @@ window.onTipoChange = function(){
 
 window.recalcularFormulario = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
-  document.getElementById('premium-badge').style.display = ['desp_externo','apoderado','kotinya'].includes(tipo) ? 'inline-block' : 'none';
+  document.getElementById('premium-badge').style.display =
+    ['desp_externo','apoderado','kotinya'].includes(tipo) ? 'inline-block' : 'none';
   const tApod = document.getElementById('t_apoderado')?.value || 100;
   const tRam  = document.getElementById('t_ramiro_op')?.value || 30;
-  document.getElementById('premium-badge').textContent = tipo === 'apoderado' ? `APODERADO USD ${tApod}` : tipo === 'kotinya' ? `KOTINYA · RAMIRO USD ${tRam}` : '+20% PREMIUM';
+  document.getElementById('premium-badge').textContent =
+    tipo === 'apoderado' ? `APODERADO USD ${tApod}`
+    : tipo === 'kotinya' ? `KOTINYA · RAMIRO USD ${tRam}`
+    : '+20% PREMIUM';
 
   const { items, totalNeto, iva, bruto, totalUsd } = getTarifas();
 
   document.getElementById('prev_neto').textContent  = '$ ' + fmt(totalNeto);
-  document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
+  document.getElementById('prev_iva').textContent   = '$ ' + fmt(iva);
   document.getElementById('prev_bruto').textContent = '$ ' + fmt(bruto);
-  document.getElementById('prev_iva').style.color   = tieneFactura ? '' : '#dc2626';
 
   const desglose = items.map(i =>
     `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt(i.pesos)}</span>`
@@ -1083,7 +1094,6 @@ window.guardarCliente = async function(){
     nombre,
     tipo: document.getElementById('cli_tipo').value,
     factura: document.getElementById('cli_factura').value,
-    tieneFactura: document.getElementById('cli_tiene_factura').value,
     cuit: document.getElementById('cli_cuit').value.trim()
   };
   await setDoc(doc(db,'corresponsales_clientes', nombre.replace(/\s+/g,'_')), cli);
