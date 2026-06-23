@@ -877,8 +877,8 @@ function generarNumOp(){
 // ── FIRESTORE listeners ──
 onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  actualizarClientesNombres();
   renderFiltros();
-  // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Listado'))   renderTabla();
   if(tabActivo.includes('Dashboard')) renderDashboard();
@@ -894,13 +894,22 @@ onSnapshot(collection(db,'corresponsales_clientes'), snap => {
 });
 
 onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
-  const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
+  const fromDB  = snap.docs.map(d => d.data().nombre).filter(Boolean);
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
-  clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
+  const fromMud = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))];
+  clientesNombres = [...new Set([...fromDB, ...fromOps, ...fromMud])].sort();
 });
+
+// También actualizar clientesNombres cuando llegan operaciones o mudanzas (si el listener de finales ya corrió)
+function actualizarClientesNombres(){
+  const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
+  const fromMud = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))];
+  clientesNombres = [...new Set([...clientesNombres, ...fromOps, ...fromMud])].sort();
+}
 
 onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  actualizarClientesNombres();
   renderMudanzas();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Ramiro')) renderRamiro();
@@ -967,25 +976,58 @@ window.onCambiarDespachante = function(){
   // Auto-detectar Kotinya por nombre
   if(nombre.includes('KOTINYA')){
     document.getElementById('tipo_desp_global').value = 'kotinya';
-    esKotinya   = true;
-    esApoderado = false;
+    esKotinya    = true;
+    esApoderado  = false;
     tieneFactura = true;
+    // Mostrar indicador en form
+    mostrarInfoDespachante(null, true);
     onTipoDespachoChange();
     return;
   }
 
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
-    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
+    // Tipo tarifa
+    const tipoVal = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
+    document.getElementById('tipo_desp_global').value = tipoVal;
+    // Período facturación
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
+    // Tiene factura
     tieneFactura = cli.tieneFactura !== 'no';
+    mostrarInfoDespachante(cli, false);
   } else {
     tieneFactura = true;
+    mostrarInfoDespachante(null, false);
   }
 
   esKotinya   = false;
   esApoderado = document.getElementById('tipo_desp_global').value === 'apoderado';
   onTipoDespachoChange();
+};
+
+// Muestra chip informativo debajo del campo despachante
+function mostrarInfoDespachante(cli, esKot){
+  let info = document.getElementById('desp-info-chip');
+  if(!info){
+    info = document.createElement('div');
+    info.id = 'desp-info-chip';
+    info.style.cssText = 'font-size:11px;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;';
+    document.getElementById('op_despachante').parentNode.appendChild(info);
+  }
+  if(esKot){
+    info.innerHTML = '<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya · Tarifa Ramiro</span>';
+    return;
+  }
+  if(!cli){ info.innerHTML = ''; return; }
+  const chips = [];
+  if(cli.tipo === 'desp_externo') chips.push('<span class="tag" style="background:#fef3c7;color:#92400e;">⭐ Premium</span>');
+  else chips.push('<span class="tag">Tarifa estándar</span>');
+  chips.push(`<span class="tag">${cli.factura === 'mensual' ? '📅 Mensual' : cli.factura === 'semanal' ? '📅 Semanal' : '📅 Por op'}</span>`);
+  chips.push(cli.tieneFactura !== 'no'
+    ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Con factura</span>'
+    : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Sin factura</span>');
+  if(cli.cuit) chips.push(`<span class="tag">CUIT: ${cli.cuit}</span>`);
+  info.innerHTML = chips.join('');
 };
 
 // ── CÁLCULO ──
@@ -1298,11 +1340,19 @@ window.renderDashboard = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
-  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
   const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
   const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
+
+  // Bruto real: con factura = neto+iva, sin factura = neto (no se cobra IVA)
+  const totBruto = ops.reduce((a,b) => {
+    if(b.tieneFactura === false || b.tieneFactura === 'no') return a + (b.neto||0);
+    return a + (b.bruto||0);
+  }, 0);
+  const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
+  const opsConFact = ops.filter(o => o.tieneFactura !== false && o.tieneFactura !== 'no').length;
+  const opsSinFact = ops.length - opsConFact;
 
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
@@ -1311,13 +1361,14 @@ window.renderDashboard = function(){
       <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total bruto facturado</div>
+      <div class="kpi-label">Total a cobrar</div>
       <div class="kpi-val">$${fmt(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt(totNeto)}</div>
+      <div class="kpi-sub">Neto: $${fmt(totNeto)} · IVA: $${fmt(totIva)}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total USD facturado</div>
+      <div class="kpi-label">Total USD</div>
       <div class="kpi-val">USD ${fmt(totUsd)}</div>
+      <div class="kpi-sub">Con fact: ${opsConFact} · Sin fact: ${opsSinFact}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Promedio por operación</div>
@@ -1325,18 +1376,22 @@ window.renderDashboard = function(){
     </div>
   `;
 
+  // Helper: bruto real de una op (sin IVA si no tiene factura)
+  const brutoReal = o => (o.tieneFactura === false || o.tieneFactura === 'no') ? (o.neto||0) : (o.bruto||0);
+
   const byCorr = {};
   ops.forEach(o => {
-    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
+    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0, sinFact:0};
     byCorr[o.despachante].ops++;
-    byCorr[o.despachante].bruto += o.bruto||0;
+    byCorr[o.despachante].bruto += brutoReal(o);
+    if(o.tieneFactura === false || o.tieneFactura === 'no') byCorr[o.despachante].sinFact++;
   });
   const byMes = {};
   ops.forEach(o => {
     const m = o.fecha?.slice(0,7) || 'S/F';
     if(!byMes[m]) byMes[m] = {ops:0, bruto:0};
     byMes[m].ops++;
-    byMes[m].bruto += o.bruto||0;
+    byMes[m].bruto += brutoReal(o);
   });
 
   document.getElementById('dash-detalle').innerHTML = `
@@ -1346,7 +1401,12 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
+            `<tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:7px;">${k}${v.sinFact>0?` <span class="tag" style="background:#fee2e2;color:#991b1b;">Sin fact: ${v.sinFact}</span>`:''}
+              </td>
+              <td style="padding:7px;text-align:right;">${v.ops}</td>
+              <td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td>
+            </tr>`
           ).join('')}
         </tbody>
       </table>
