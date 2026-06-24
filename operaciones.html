@@ -527,6 +527,8 @@ td.mono{font-family:monospace;font-size:12px;}
           <select id="cli_tipo">
             <option value="despachante">Despachante interno</option>
             <option value="desp_externo">Despachante externo (premium)</option>
+            <option value="apoderado">Apoderado</option>
+            <option value="kotinya">Kotinya / Ramiro</option>
           </select>
         </div>
         <div class="form-group">
@@ -995,7 +997,7 @@ window.onCambiarDespachante = function(){
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
     // Tipo tarifa
-    const tipoVal = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
+    const tipoVal = ['desp_externo','apoderado','kotinya'].includes(cli.tipo) ? cli.tipo : 'despachante';
     document.getElementById('tipo_desp_global').value = tipoVal;
     // Período facturación
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
@@ -1029,7 +1031,9 @@ function mostrarInfoDespachante(cli, esKot){
   }
   if(!cli){ info.innerHTML = ''; return; }
   const chips = [];
-  if(cli.tipo === 'desp_externo') chips.push('<span class="tag" style="background:#fef3c7;color:#92400e;">⭐ Premium</span>');
+  if(cli.tipo === 'desp_externo')  chips.push('<span class="tag" style="background:#fef3c7;color:#92400e;">⭐ Premium</span>');
+  else if(cli.tipo === 'apoderado') chips.push('<span class="tag" style="background:#ede9fe;color:#5b21b6;">⚖️ Apoderado</span>');
+  else if(cli.tipo === 'kotinya')   chips.push('<span class="tag" style="background:#fef9c3;color:#92400e;">🏷️ Kotinya/Ramiro</span>');
   else chips.push('<span class="tag">Tarifa estándar</span>');
   chips.push(`<span class="tag">${cli.factura === 'mensual' ? '📅 Mensual' : cli.factura === 'semanal' ? '📅 Semanal' : '📅 Por op'}</span>`);
   chips.push(cli.tieneFactura !== 'no'
@@ -1445,7 +1449,12 @@ function renderTablaClientes(){
     const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
     return `<tr>
       <td><strong>${c.nombre}</strong></td>
-      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Despachante'}</span></td>
+      <td>${
+        c.tipo === 'desp_externo' ? '<span class="tag" style="background:#fef3c7;color:#92400e;">Externo ⭐</span>' :
+        c.tipo === 'apoderado'    ? '<span class="tag" style="background:#ede9fe;color:#5b21b6;">Apoderado ⚖️</span>' :
+        c.tipo === 'kotinya'      ? '<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya 🏷️</span>' :
+        '<span class="tag">Despachante</span>'
+      }</td>
       <td>${c.factura||'-'}</td>
       <td>${c.tieneFactura === 'no' ? '❌ No' : '✅ Sí'}</td>
       <td class="mono">${c.cuit||'-'}</td>
