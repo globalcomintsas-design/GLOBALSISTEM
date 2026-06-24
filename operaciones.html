@@ -224,7 +224,11 @@ td.mono{font-family:monospace;font-size:12px;}
             <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
-            <span class="tarifa-label">Ramiro / Kotinya</span>
+            <span class="tarifa-label">Kotinya (cobramos)</span>
+            <span class="tarifa-val"><input type="number" id="t_kotinya_hon" value="85" step="1"> USD</span>
+          </div>
+          <div class="tarifa-item">
+            <span class="tarifa-label">Ramiro (le pagamos)</span>
             <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
@@ -288,14 +292,14 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group ac-wrap">
           <label>Despachante</label>
           <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off"
-            oninput="filtrarAC('op_despachante','ac_despachante',despachantesNombres,true)"
+            oninput="filtrarAC('op_despachante','ac_despachante',null,true)"
             onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
           <div id="ac_despachante" class="ac-list"></div>
         </div>
         <div class="form-group ac-wrap">
           <label>Cliente final</label>
           <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME..." autocomplete="off"
-            oninput="filtrarAC('op_cliente','ac_cliente',clientesNombres,false)"
+            oninput="filtrarAC('op_cliente','ac_cliente',null,false)"
             onblur="setTimeout(()=>cerrarAC('ac_cliente'),180)">
           <div id="ac_cliente" class="ac-list"></div>
         </div>
@@ -582,7 +586,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group ac-wrap">
           <label>Cliente</label>
           <input type="text" id="mud_cliente" placeholder="Nombre del cliente..." autocomplete="off"
-            oninput="filtrarAC('mud_cliente','ac_mud_cliente',clientesNombres,false)"
+            oninput="filtrarAC('mud_cliente','ac_mud_cliente',null,false)"
             onblur="setTimeout(()=>cerrarAC('ac_mud_cliente'),180)">
           <div id="ac_mud_cliente" class="ac-list"></div>
         </div>
@@ -812,11 +816,13 @@ window.switchTab = function(tab){
 
 // ── AUTOCOMPLETE ──
 window.filtrarAC = function(inputId, listId, fuente, esDespachante){
+  // Si fuente es null, usar las listas internas del módulo
+  const lista = fuente || (esDespachante ? despachantesNombres : clientesNombres);
   const val = document.getElementById(inputId).value.trim().toUpperCase();
   const list = document.getElementById(listId);
   if(!val){ list.style.display='none'; return; }
-  const matches = fuente.filter(n => n.toUpperCase().includes(val)).slice(0,8);
-  const existe  = fuente.map(n=>n.toUpperCase()).includes(val);
+  const matches = lista.filter(n => n.toUpperCase().includes(val)).slice(0,8);
+  const existe  = lista.map(n=>n.toUpperCase()).includes(val);
   let html = matches.map(n =>
     `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n.replace(/'/g,"\\'")}',${esDespachante})">${n}</div>`
   ).join('');
@@ -923,12 +929,13 @@ window.onTipoDespachoChange = function(){
 
   const badge = document.getElementById('premium-badge');
   const tApod = parseFloat(document.getElementById('t_apoderado').value) || 100;
+  const tKot  = parseFloat(document.getElementById('t_kotinya_hon').value) || 85;
   const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
 
   if(['desp_externo','apoderado','kotinya'].includes(tipo)){
     badge.style.display = 'inline-block';
     if(tipo === 'apoderado')    badge.textContent = `APODERADO USD ${tApod}`;
-    else if(tipo === 'kotinya') badge.textContent = `KOTINYA · RAMIRO USD ${tRam}`;
+    else if(tipo === 'kotinya') badge.textContent = `KOTINYA: cobramos USD ${tKot} · Ramiro USD ${tRam}`;
     else                        badge.textContent = '+20% PREMIUM';
   } else {
     badge.style.display = 'none';
@@ -1015,7 +1022,9 @@ function mostrarInfoDespachante(cli, esKot){
     document.getElementById('op_despachante').parentNode.appendChild(info);
   }
   if(esKot){
-    info.innerHTML = '<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya · Tarifa Ramiro</span>';
+    const _tKot = parseFloat(document.getElementById('t_kotinya_hon').value) || 85;
+    const _tRam = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
+    info.innerHTML = `<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya: cobramos USD ${_tKot}</span><span class="tag" style="background:#fee2e2;color:#991b1b;">Pagamos Ramiro: USD ${_tRam}</span>`;
     return;
   }
   if(!cli){ info.innerHTML = ''; return; }
@@ -1050,7 +1059,7 @@ function getTarifas(){
   if(_esApoderado){
     usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
   } else if(_esKotinya){
-    usd(parseFloat(document.getElementById('t_ramiro_op').value) || 30, 'Kotinya/Ramiro');
+    usd(parseFloat(document.getElementById('t_kotinya_hon').value) || 85, 'Honorarios Kotinya');
   } else if(!esMIC){
     let hon_usd;
     if(esPremium){
