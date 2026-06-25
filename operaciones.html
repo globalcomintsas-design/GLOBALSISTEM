@@ -224,11 +224,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
-            <span class="tarifa-label">Kotinya (cobramos)</span>
-            <span class="tarifa-val"><input type="number" id="t_kotinya_hon" value="85" step="1"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Ramiro (le pagamos)</span>
+            <span class="tarifa-label">Ramiro / Kotinya</span>
             <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
@@ -292,14 +288,14 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group ac-wrap">
           <label>Despachante</label>
           <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off"
-            oninput="filtrarAC('op_despachante','ac_despachante',null,true)"
+            oninput="filtrarAC('op_despachante','ac_despachante',despachantesNombres,true)"
             onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
           <div id="ac_despachante" class="ac-list"></div>
         </div>
         <div class="form-group ac-wrap">
           <label>Cliente final</label>
           <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME..." autocomplete="off"
-            oninput="filtrarAC('op_cliente','ac_cliente',null,false)"
+            oninput="filtrarAC('op_cliente','ac_cliente',clientesNombres,false)"
             onblur="setTimeout(()=>cerrarAC('ac_cliente'),180)">
           <div id="ac_cliente" class="ac-list"></div>
         </div>
@@ -527,8 +523,6 @@ td.mono{font-family:monospace;font-size:12px;}
           <select id="cli_tipo">
             <option value="despachante">Despachante interno</option>
             <option value="desp_externo">Despachante externo (premium)</option>
-            <option value="apoderado">Apoderado</option>
-            <option value="kotinya">Kotinya / Ramiro</option>
           </select>
         </div>
         <div class="form-group">
@@ -579,7 +573,7 @@ td.mono{font-family:monospace;font-size:12px;}
   <div id="tab-mudanzas" style="display:none;">
 
     <div class="section-card">
-      <h3>📦 Nueva mudanza</h3>
+      <h3 id="mud-form-titulo">📦 Nueva mudanza</h3>
       <div class="form-row">
         <div class="form-group">
           <label>Fecha</label>
@@ -588,7 +582,7 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group ac-wrap">
           <label>Cliente</label>
           <input type="text" id="mud_cliente" placeholder="Nombre del cliente..." autocomplete="off"
-            oninput="filtrarAC('mud_cliente','ac_mud_cliente',null,false)"
+            oninput="filtrarAC('mud_cliente','ac_mud_cliente',clientesNombres,false)"
             onblur="setTimeout(()=>cerrarAC('ac_mud_cliente'),180)">
           <div id="ac_mud_cliente" class="ac-list"></div>
         </div>
@@ -667,7 +661,9 @@ td.mono{font-family:monospace;font-size:12px;}
       </div>
 
       <div class="btn-row">
-        <button class="btn-primary" onclick="guardarMudanza()">💾 Guardar mudanza</button>
+        <button id="mud-btn-guardar"    class="btn-primary" onclick="guardarMudanza()" style="display:inline-flex;">💾 Guardar mudanza</button>
+        <button id="mud-btn-actualizar" class="btn-success" onclick="actualizarMudanza()" style="display:none;">💾 Actualizar mudanza</button>
+        <button id="mud-btn-cancelar"   class="btn-outline" onclick="cancelarEdicionMudanza()" style="display:none;">✕ Cancelar edición</button>
         <button class="btn-outline" onclick="limpiarMudanza()">🗑 Limpiar</button>
       </div>
     </div>
@@ -693,7 +689,7 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Nos queda</th>
               <th>Ramiro</th>
               <th>Obs</th>
-              <th></th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-mudanzas">
@@ -818,13 +814,11 @@ window.switchTab = function(tab){
 
 // ── AUTOCOMPLETE ──
 window.filtrarAC = function(inputId, listId, fuente, esDespachante){
-  // Si fuente es null, usar las listas internas del módulo
-  const lista = fuente || (esDespachante ? despachantesNombres : clientesNombres);
   const val = document.getElementById(inputId).value.trim().toUpperCase();
   const list = document.getElementById(listId);
   if(!val){ list.style.display='none'; return; }
-  const matches = lista.filter(n => n.toUpperCase().includes(val)).slice(0,8);
-  const existe  = lista.map(n=>n.toUpperCase()).includes(val);
+  const matches = fuente.filter(n => n.toUpperCase().includes(val)).slice(0,8);
+  const existe  = fuente.map(n=>n.toUpperCase()).includes(val);
   let html = matches.map(n =>
     `<div class="ac-item" onmousedown="elegirAC('${inputId}','${listId}','${n.replace(/'/g,"\\'")}',${esDespachante})">${n}</div>`
   ).join('');
@@ -885,8 +879,8 @@ function generarNumOp(){
 // ── FIRESTORE listeners ──
 onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  actualizarClientesNombres();
   renderFiltros();
+  // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Listado'))   renderTabla();
   if(tabActivo.includes('Dashboard')) renderDashboard();
@@ -902,22 +896,13 @@ onSnapshot(collection(db,'corresponsales_clientes'), snap => {
 });
 
 onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
-  const fromDB  = snap.docs.map(d => d.data().nombre).filter(Boolean);
+  const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
-  const fromMud = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))];
-  clientesNombres = [...new Set([...fromDB, ...fromOps, ...fromMud])].sort();
+  clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
 });
-
-// También actualizar clientesNombres cuando llegan operaciones o mudanzas (si el listener de finales ya corrió)
-function actualizarClientesNombres(){
-  const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
-  const fromMud = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))];
-  clientesNombres = [...new Set([...clientesNombres, ...fromOps, ...fromMud])].sort();
-}
 
 onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  actualizarClientesNombres();
   renderMudanzas();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Ramiro')) renderRamiro();
@@ -931,13 +916,12 @@ window.onTipoDespachoChange = function(){
 
   const badge = document.getElementById('premium-badge');
   const tApod = parseFloat(document.getElementById('t_apoderado').value) || 100;
-  const tKot  = parseFloat(document.getElementById('t_kotinya_hon').value) || 85;
   const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
 
   if(['desp_externo','apoderado','kotinya'].includes(tipo)){
     badge.style.display = 'inline-block';
     if(tipo === 'apoderado')    badge.textContent = `APODERADO USD ${tApod}`;
-    else if(tipo === 'kotinya') badge.textContent = `KOTINYA: cobramos USD ${tKot} · Ramiro USD ${tRam}`;
+    else if(tipo === 'kotinya') badge.textContent = `KOTINYA · RAMIRO USD ${tRam}`;
     else                        badge.textContent = '+20% PREMIUM';
   } else {
     badge.style.display = 'none';
@@ -985,62 +969,25 @@ window.onCambiarDespachante = function(){
   // Auto-detectar Kotinya por nombre
   if(nombre.includes('KOTINYA')){
     document.getElementById('tipo_desp_global').value = 'kotinya';
-    esKotinya    = true;
-    esApoderado  = false;
+    esKotinya   = true;
+    esApoderado = false;
     tieneFactura = true;
-    // Mostrar indicador en form
-    mostrarInfoDespachante(null, true);
     onTipoDespachoChange();
     return;
   }
 
   const cli = clientes.find(c => c.nombre === nombre);
   if(cli){
-    // Tipo tarifa
-    const tipoVal = ['desp_externo','apoderado','kotinya'].includes(cli.tipo) ? cli.tipo : 'despachante';
-    document.getElementById('tipo_desp_global').value = tipoVal;
-    // Período facturación
+    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
-    // Tiene factura
     tieneFactura = cli.tieneFactura !== 'no';
-    mostrarInfoDespachante(cli, false);
   } else {
     tieneFactura = true;
-    mostrarInfoDespachante(null, false);
   }
 
   esKotinya   = false;
   esApoderado = document.getElementById('tipo_desp_global').value === 'apoderado';
   onTipoDespachoChange();
-};
-
-// Muestra chip informativo debajo del campo despachante
-function mostrarInfoDespachante(cli, esKot){
-  let info = document.getElementById('desp-info-chip');
-  if(!info){
-    info = document.createElement('div');
-    info.id = 'desp-info-chip';
-    info.style.cssText = 'font-size:11px;margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;';
-    document.getElementById('op_despachante').parentNode.appendChild(info);
-  }
-  if(esKot){
-    const _tKot = parseFloat(document.getElementById('t_kotinya_hon').value) || 85;
-    const _tRam = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
-    info.innerHTML = `<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya: cobramos USD ${_tKot}</span><span class="tag" style="background:#fee2e2;color:#991b1b;">Pagamos Ramiro: USD ${_tRam}</span>`;
-    return;
-  }
-  if(!cli){ info.innerHTML = ''; return; }
-  const chips = [];
-  if(cli.tipo === 'desp_externo')  chips.push('<span class="tag" style="background:#fef3c7;color:#92400e;">⭐ Premium</span>');
-  else if(cli.tipo === 'apoderado') chips.push('<span class="tag" style="background:#ede9fe;color:#5b21b6;">⚖️ Apoderado</span>');
-  else if(cli.tipo === 'kotinya')   chips.push('<span class="tag" style="background:#fef9c3;color:#92400e;">🏷️ Kotinya/Ramiro</span>');
-  else chips.push('<span class="tag">Tarifa estándar</span>');
-  chips.push(`<span class="tag">${cli.factura === 'mensual' ? '📅 Mensual' : cli.factura === 'semanal' ? '📅 Semanal' : '📅 Por op'}</span>`);
-  chips.push(cli.tieneFactura !== 'no'
-    ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Con factura</span>'
-    : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Sin factura</span>');
-  if(cli.cuit) chips.push(`<span class="tag">CUIT: ${cli.cuit}</span>`);
-  info.innerHTML = chips.join('');
 };
 
 // ── CÁLCULO ──
@@ -1063,7 +1010,7 @@ function getTarifas(){
   if(_esApoderado){
     usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
   } else if(_esKotinya){
-    usd(parseFloat(document.getElementById('t_kotinya_hon').value) || 85, 'Honorarios Kotinya');
+    usd(parseFloat(document.getElementById('t_ramiro_op').value) || 30, 'Kotinya/Ramiro');
   } else if(!esMIC){
     let hon_usd;
     if(esPremium){
@@ -1353,19 +1300,11 @@ window.renderDashboard = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
+  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
   const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
   const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
-
-  // Bruto real: con factura = neto+iva, sin factura = neto (no se cobra IVA)
-  const totBruto = ops.reduce((a,b) => {
-    if(b.tieneFactura === false || b.tieneFactura === 'no') return a + (b.neto||0);
-    return a + (b.bruto||0);
-  }, 0);
-  const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
-  const opsConFact = ops.filter(o => o.tieneFactura !== false && o.tieneFactura !== 'no').length;
-  const opsSinFact = ops.length - opsConFact;
 
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
@@ -1374,14 +1313,13 @@ window.renderDashboard = function(){
       <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total a cobrar</div>
+      <div class="kpi-label">Total bruto facturado</div>
       <div class="kpi-val">$${fmt(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt(totNeto)} · IVA: $${fmt(totIva)}</div>
+      <div class="kpi-sub">Neto: $${fmt(totNeto)}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total USD</div>
+      <div class="kpi-label">Total USD facturado</div>
       <div class="kpi-val">USD ${fmt(totUsd)}</div>
-      <div class="kpi-sub">Con fact: ${opsConFact} · Sin fact: ${opsSinFact}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Promedio por operación</div>
@@ -1389,22 +1327,18 @@ window.renderDashboard = function(){
     </div>
   `;
 
-  // Helper: bruto real de una op (sin IVA si no tiene factura)
-  const brutoReal = o => (o.tieneFactura === false || o.tieneFactura === 'no') ? (o.neto||0) : (o.bruto||0);
-
   const byCorr = {};
   ops.forEach(o => {
-    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0, sinFact:0};
+    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
     byCorr[o.despachante].ops++;
-    byCorr[o.despachante].bruto += brutoReal(o);
-    if(o.tieneFactura === false || o.tieneFactura === 'no') byCorr[o.despachante].sinFact++;
+    byCorr[o.despachante].bruto += o.bruto||0;
   });
   const byMes = {};
   ops.forEach(o => {
     const m = o.fecha?.slice(0,7) || 'S/F';
     if(!byMes[m]) byMes[m] = {ops:0, bruto:0};
     byMes[m].ops++;
-    byMes[m].bruto += brutoReal(o);
+    byMes[m].bruto += o.bruto||0;
   });
 
   document.getElementById('dash-detalle').innerHTML = `
@@ -1414,12 +1348,7 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;">
-              <td style="padding:7px;">${k}${v.sinFact>0?` <span class="tag" style="background:#fee2e2;color:#991b1b;">Sin fact: ${v.sinFact}</span>`:''}
-              </td>
-              <td style="padding:7px;text-align:right;">${v.ops}</td>
-              <td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td>
-            </tr>`
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
           ).join('')}
         </tbody>
       </table>
@@ -1449,12 +1378,7 @@ function renderTablaClientes(){
     const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
     return `<tr>
       <td><strong>${c.nombre}</strong></td>
-      <td>${
-        c.tipo === 'desp_externo' ? '<span class="tag" style="background:#fef3c7;color:#92400e;">Externo ⭐</span>' :
-        c.tipo === 'apoderado'    ? '<span class="tag" style="background:#ede9fe;color:#5b21b6;">Apoderado ⚖️</span>' :
-        c.tipo === 'kotinya'      ? '<span class="tag" style="background:#fef9c3;color:#92400e;">Kotinya 🏷️</span>' :
-        '<span class="tag">Despachante</span>'
-      }</td>
+      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Despachante'}</span></td>
       <td>${c.factura||'-'}</td>
       <td>${c.tieneFactura === 'no' ? '❌ No' : '✅ Sí'}</td>
       <td class="mono">${c.cuit||'-'}</td>
@@ -1580,6 +1504,83 @@ window.eliminarMudanza = async function(id){
   toast('Mudanza eliminada');
 };
 
+// ── EDITAR MUDANZA ──
+let mudanzaEditandoId = null;
+
+window.editarMudanza = function(id){
+  const m = mudanzas.find(x => x.id === id);
+  if(!m) return;
+  mudanzaEditandoId = id;
+
+  document.getElementById('mud_fecha').value       = m.fecha || '';
+  document.getElementById('mud_cliente').value     = m.cliente || '';
+  document.getElementById('mud_tc').value          = m.tc || '';
+  document.getElementById('mud_valor_usd').value   = m.valorUsd || '';
+  document.getElementById('mud_precinto').value    = m.precinto || 0;
+  document.getElementById('mud_fiscal').value      = m.fiscal || 0;
+  document.getElementById('mud_ramiro').value      = m.ramiroUsd || 190;
+  document.getElementById('mud_otros').value       = m.otros || 0;
+  document.getElementById('mud_obs').value         = m.obs || '';
+  document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
+
+  // Cambiar título y botones del formulario
+  document.getElementById('mud-form-titulo').textContent = '✏️ Editando mudanza: ' + m.cliente;
+  document.getElementById('mud-btn-guardar').style.display  = 'none';
+  document.getElementById('mud-btn-actualizar').style.display = 'inline-flex';
+  document.getElementById('mud-btn-cancelar').style.display   = 'inline-flex';
+
+  // Scroll al formulario
+  document.getElementById('tab-mudanzas').scrollIntoView({behavior:'smooth'});
+  recalcMudanza();
+  toast('✏️ Mudanza cargada para editar');
+};
+
+window.actualizarMudanza = async function(){
+  if(!mudanzaEditandoId) return;
+  const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const fecha   = document.getElementById('mud_fecha').value;
+  if(!cliente){ toast('Ingresá el cliente'); return; }
+  if(!fecha)  { toast('Ingresá la fecha');   return; }
+
+  const vals = recalcMudanza();
+  const datos = {
+    fecha, cliente,
+    tc: vals.tc,
+    valorUsd: vals.usd,
+    honorNeto: vals.honorNeto,
+    iva: vals.iva,
+    bruto: vals.bruto,
+    precinto: vals.precinto,
+    fiscal: vals.fiscal,
+    ramiroUsd: vals.ramiroUsd,
+    gastoRamiro: vals.gastoRamiro,
+    otros: vals.otros,
+    totalGastos: vals.totalGastos,
+    netoFinal: vals.netofinal,
+    ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    obs: document.getElementById('mud_obs').value.trim(),
+    modificadoPor: user.username,
+    tsEdit: Date.now()
+  };
+
+  try {
+    await updateDoc(doc(db,'corresponsales_mudanzas', mudanzaEditandoId), datos);
+    toast('✅ Mudanza actualizada');
+    cancelarEdicionMudanza();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  }
+};
+
+window.cancelarEdicionMudanza = function(){
+  mudanzaEditandoId = null;
+  document.getElementById('mud-form-titulo').textContent = '📦 Nueva mudanza';
+  document.getElementById('mud-btn-guardar').style.display    = 'inline-flex';
+  document.getElementById('mud-btn-actualizar').style.display = 'none';
+  document.getElementById('mud-btn-cancelar').style.display   = 'none';
+  limpiarMudanza();
+};
+
 function renderMudanzas(){
   const tbody = document.getElementById('tbody-mudanzas');
   if(!mudanzas.length){
@@ -1601,7 +1602,10 @@ function renderMudanzas(){
         ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
         : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
       <td style="font-size:11px;color:#64748b;">${m.obs||''}</td>
-      <td><button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button></td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarMudanza('${m.id}')">✏️ Editar</button>
+        <button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button>
+      </td>
     </tr>
   `).join('');
 }
