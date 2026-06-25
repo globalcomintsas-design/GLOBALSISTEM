@@ -746,7 +746,7 @@ td.mono{font-family:monospace;font-size:12px;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc }
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc, where }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -877,7 +877,11 @@ function generarNumOp(){
 }
 
 // ── FIRESTORE listeners ──
-onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), snap => {
+// Ops: tiempo real pero solo año en curso (fecha es string YYYY-MM-DD)
+const _anioActual = new Date().getFullYear();
+const _fechaDesde = _anioActual + '-01-01';
+
+onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDesde), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderFiltros();
   // re-render tab activo si corresponde
@@ -888,6 +892,7 @@ onSnapshot(query(collection(db,'corresponsales_ops'), orderBy('fecha','asc')), s
   recalcularFormulario();
 });
 
+// Clientes: colección chica y estática, sin filtro
 onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
   despachantesNombres = clientes.map(c => c.nombre).sort();
@@ -901,7 +906,8 @@ onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
   clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
 });
 
-onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
+// Mudanzas: tiempo real, solo año en curso
+onSnapshot(query(collection(db,'corresponsales_mudanzas'), where('fecha','>=',_fechaDesde), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderMudanzas();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
@@ -1161,7 +1167,7 @@ window.guardarOperacion = async function(){
   };
 
   try {
-    await addDoc(collection(db,'corresponsales_ops'), op);
+    await addDoc(collection(db,'despachantees_ops'), op);
     toast('✅ Operación guardada: #' + op.numOp);
     limpiarFormulario();
   } catch(e){
@@ -1172,7 +1178,7 @@ window.guardarOperacion = async function(){
 // ── ELIMINAR ──
 window.eliminarOp = async function(id){
   if(!confirm('¿Eliminar esta operación?')) return;
-  await deleteDoc(doc(db,'corresponsales_ops',id));
+  await deleteDoc(doc(db,'despachantees_ops',id));
   toast('Operación eliminada');
 };
 
@@ -1716,7 +1722,7 @@ window.renderRamiro = function(){
 };
 
 window.pagarRamiroItem = async function(id, col){
-  const colName = col === 'ops' ? 'corresponsales_ops' : 'corresponsales_mudanzas';
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
   const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
   await updateDoc(doc(db, colName, id), { [campo]: 'si' });
   toast('✅ Marcado como pagado');
@@ -1725,7 +1731,7 @@ window.pagarRamiroItem = async function(id, col){
 window.marcarTodoPagadoRamiro = async function(){
   if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro?')) return;
   const pending = [
-    ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'corresponsales_ops', campo:'ramiroOPagado'})),
+    ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
     ...mudanzas.filter(m => m.ramiroPagado !== 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
   ];
   for(const p of pending){
