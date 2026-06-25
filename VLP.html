@@ -134,6 +134,7 @@ tr:hover td{background:#fafbff;}
     </div>
     <div class="header-right">
       <a href="index.html" class="volver-btn">← Sistema principal</a>
+      <button class="volver-btn" onclick="recargarTodo()" style="cursor:pointer">🔄 Actualizar</button>
       <div class="user-badge" id="userBadge">Usuario</div>
       <button class="logout-btn" onclick="cerrarSesion()">Salir</button>
     </div>
@@ -634,33 +635,67 @@ window.showTab=function(name,el) {
   if(name==='log')renderLog();
 };
 
-// ---- LISTENERS FIRESTORE ----
+// ---- CARGA FIRESTORE (sin onSnapshot — evita lecturas masivas en tiempo real) ----
+async function cargarOperaciones() {
+  // Estrategia de carga optimizada:
+  // - Pendientes (pagada==false): TODAS, sin importar año (ej: Peñaflor atrasado)
+  // - Pagadas: solo año en curso
+  const anioActual = new Date().getFullYear();
+  const primerDiaAnio = new Date(anioActual, 0, 1);
+
+  const [snapPendientes, snapPagadas] = await Promise.all([
+    getDocs(query(collection(db,'operaciones_vlp'), where('pagada','==',false))),
+    getDocs(query(collection(db,'operaciones_vlp'), where('pagada','==',true), where('fecha_pago','>=',primerDiaAnio)))
+  ]);
+
+  const mapaOps = {};
+  snapPendientes.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
+  snapPagadas.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
+  allOps = Object.values(mapaOps);
+
+  renderDashboard();
+  renderPendientes();
+  renderPagadas();
+  renderCepas();
+  actualizarSelectVLP();
+}
+
+async function cargarHistorial() {
+  const [snapDUX, snapVLP] = await Promise.all([
+    getDocs(query(collection(db,'importaciones_dux'),orderBy('fecha_importacion','desc'))),
+    getDocs(query(collection(db,'vlp_importados'),orderBy('fecha_importacion','desc')))
+  ]);
+  allHistDUX = snapDUX.docs.map(d=>({id:d.id,...d.data()}));
+  allHistVLP = snapVLP.docs.map(d=>({id:d.id,...d.data()}));
+  renderHistorial();
+}
+
+async function cargarLog() {
+  const snap = await getDocs(query(collection(db,'log_conciliaciones'),orderBy('fecha_evento','desc'),limit(200)));
+  allLog = snap.docs.map(d=>({id:d.id,...d.data()}));
+  renderLog();
+}
+
+async function cargarViajes() {
+  const snap = await getDocs(query(collection(db,'viajes_cepas'),orderBy('fecha_viaje','desc')));
+  allViajes = snap.docs.map(d=>({id:d.id,...d.data()}));
+  renderViajes();
+  actualizarCardViajesPend();
+}
+
+// Recarga completa manual (botón Actualizar)
+window.recargarTodo = async function() {
+  toast('Actualizando datos...','');
+  await Promise.all([cargarOperaciones(), cargarHistorial(), cargarLog(), cargarViajes()]);
+  toast('Datos actualizados ✓','success');
+};
+
 function initListeners() {
-  onSnapshot(collection(db,'operaciones_vlp'), snap=>{
-    allOps=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderDashboard();
-    renderPendientes();
-    renderPagadas();
-    renderCepas();
-    actualizarSelectVLP();
-  });
-  onSnapshot(query(collection(db,'importaciones_dux'),orderBy('fecha_importacion','desc')), snap=>{
-    allHistDUX=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderHistorial();
-  });
-  onSnapshot(query(collection(db,'vlp_importados'),orderBy('fecha_importacion','desc')), snap=>{
-    allHistVLP=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderHistorial();
-  });
-  onSnapshot(query(collection(db,'log_conciliaciones'),orderBy('fecha_evento','desc'),limit(200)), snap=>{
-    allLog=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderLog();
-  });
-  onSnapshot(query(collection(db,'viajes_cepas'),orderBy('fecha_viaje','desc')), snap=>{
-    allViajes=snap.docs.map(d=>({id:d.id,...d.data()}));
-    renderViajes();
-    actualizarCardViajesPend();
-  });
+  // Carga inicial de todos los módulos
+  cargarOperaciones();
+  cargarHistorial();
+  cargarLog();
+  cargarViajes();
 }
 
 // ---- LOG HELPER ----
@@ -765,11 +800,10 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
 
   setBar(10,`Total filas: ${datos.length} · Aduana 038: ${total038.length}`);
 
-  // 1. TRAER TODOS LOS DOCS EXISTENTES DE UNA SOLA VEZ
-  setBar(15,'Consultando operaciones existentes...');
-  const snapAll=await getDocs(collection(db,'operaciones_vlp'));
+  // 1. USAR allOps EN MEMORIA (evita lectura masiva a Firestore)
+  setBar(15,'Preparando datos...');
   const existentes={};
-  snapAll.forEach(d=>{existentes[d.id]=d.data();});
+  allOps.forEach(o=>{existentes[o.id]=o;});
 
   setBar(25,'Preparando datos...');
 
@@ -868,6 +902,8 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       <div class="resultado-row"><span>Reconciliadas auto (VLP previo)</span><span style="color:#7c3aed">${reconciliadas}</span></div>
       <div class="resultado-row"><span>Descartadas (otras aduanas)</span><span style="color:#888">${descartadas}</span></div>
     </div>`;
+  await cargarOperaciones();
+  await cargarHistorial();
   toast(`DUX importado ✓ — ${nuevas} nuevas, ${reconciliadas} reconciliadas`,'success');
 }
 
@@ -900,11 +936,10 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   const datos=raw.slice(3).filter(r=>r&&r[COL_OP]&&String(r[COL_OP]).trim()!=='');
   setBar(10,`${datos.length} registros encontrados`);
 
-  // 1. TRAER TODOS LOS DOCS DE UNA SOLA VEZ
-  setBar(15,'Consultando operaciones existentes...');
-  const snapAll=await getDocs(collection(db,'operaciones_vlp'));
+  // 1. USAR allOps EN MEMORIA (evita lectura masiva a Firestore)
+  setBar(15,'Preparando datos...');
   const existentes={};
-  snapAll.forEach(d=>{existentes[d.id]=d.data();});
+  allOps.forEach(o=>{existentes[o.id]=o;});
 
   setBar(25,'Preparando datos...');
   const ahora=new Date();
@@ -920,8 +955,7 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     if(isNaN(fechaPago))fechaPago=ahora;
     const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
       numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
-      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora,
-      mes_pago:calcMes(fechaPago)};
+      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora};
     operaciones.push({opNorm,vlpData,imp:r[COL_IMP]});
   }
 
@@ -984,6 +1018,8 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
       <div class="resultado-row"><span>Operaciones conciliadas</span><span style="color:#16a34a">${conciliadas}</span></div>
       <div class="resultado-row"><span>Sin DUX (creadas como SOLO_VLP)</span><span style="color:#d97706">${sinDux}</span></div>
     </div>`;
+  await cargarOperaciones();
+  await cargarHistorial();
   toast(`VLP importado ✓ — ${conciliadas} conciliadas, ${sinDux} sin DUX`,'success');
 }
 
@@ -1033,12 +1069,12 @@ window.pagarMasivo=async function() {
       batch.update(doc(db,'operaciones_vlp',id),{
         pagada:true, fecha_pago:fechaPago, vlp_pago:vlp,
         origen_pago:'VLP', origen:op.origen==='SOLO_DUX'?'COMPLETO':op.origen,
-        mes_pago:calcMes(fechaPago),
         ts_actualizacion:ahora
       });
     }
     await batch.commit();
   }
+  await cargarOperaciones();
   toast(`${ids.length} operaciones marcadas como pagadas ✓`,'success');
   deseleccionarTodo();
 };
@@ -1258,7 +1294,7 @@ window.renderPagadas=function() {
 
   let fil=allOps.filter(o=>o.pagada&&!o.archivada);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
-  if(filtMes)fil=fil.filter(o=>(o.mes_pago||o.mes_operativo)===filtMes);
+  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
   if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
   if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
   if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
@@ -1508,7 +1544,6 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${fofic?fofic.toLocaleDateString('es-AR'):'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${fo?fo.toLocaleDateString('es-AR'):'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Mes Operativo</div><div class="ficha-val">${o.mes_operativo||'-'}</div></div>
-    ${o.mes_pago?`<div class="ficha-item"><div class="ficha-label">Mes Pago VLP</div><div class="ficha-val" style="color:#059669;font-weight:700">${o.mes_pago}</div></div>`:''}
     <div class="ficha-item"><div class="ficha-label">Estado Pago</div><div class="ficha-val">${o.pagada?'<span class="badge badge-pagado">✓ PAGADA</span>':'<span class="badge badge-pendiente">PENDIENTE</span>'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Origen Pago</div><div class="ficha-val">${esFactura?'<span class="badge badge-factura">💵 Factura Propia</span>':(o.pagada?'<span class="badge badge-pagado">VLP</span>':'-')}</div></div>
     <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${fp?fp.toLocaleDateString('es-AR'):'-'}</div></div>
@@ -1626,7 +1661,7 @@ window.exportarPagadasExcel=function(){
     const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
     const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
     const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',o.mes_pago||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:L1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
   XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
