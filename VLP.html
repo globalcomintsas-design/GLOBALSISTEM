@@ -920,7 +920,8 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     if(isNaN(fechaPago))fechaPago=ahora;
     const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
       numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
-      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora};
+      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora,
+      mes_pago:calcMes(fechaPago)};
     operaciones.push({opNorm,vlpData,imp:r[COL_IMP]});
   }
 
@@ -1032,6 +1033,7 @@ window.pagarMasivo=async function() {
       batch.update(doc(db,'operaciones_vlp',id),{
         pagada:true, fecha_pago:fechaPago, vlp_pago:vlp,
         origen_pago:'VLP', origen:op.origen==='SOLO_DUX'?'COMPLETO':op.origen,
+        mes_pago:calcMes(fechaPago),
         ts_actualizacion:ahora
       });
     }
@@ -1256,7 +1258,7 @@ window.renderPagadas=function() {
 
   let fil=allOps.filter(o=>o.pagada&&!o.archivada);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
-  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtMes)fil=fil.filter(o=>(o.mes_pago||o.mes_operativo)===filtMes);
   if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
   if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
   if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
@@ -1506,6 +1508,7 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${fofic?fofic.toLocaleDateString('es-AR'):'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${fo?fo.toLocaleDateString('es-AR'):'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Mes Operativo</div><div class="ficha-val">${o.mes_operativo||'-'}</div></div>
+    ${o.mes_pago?`<div class="ficha-item"><div class="ficha-label">Mes Pago VLP</div><div class="ficha-val" style="color:#059669;font-weight:700">${o.mes_pago}</div></div>`:''}
     <div class="ficha-item"><div class="ficha-label">Estado Pago</div><div class="ficha-val">${o.pagada?'<span class="badge badge-pagado">✓ PAGADA</span>':'<span class="badge badge-pendiente">PENDIENTE</span>'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Origen Pago</div><div class="ficha-val">${esFactura?'<span class="badge badge-factura">💵 Factura Propia</span>':(o.pagada?'<span class="badge badge-pagado">VLP</span>':'-')}</div></div>
     <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${fp?fp.toLocaleDateString('es-AR'):'-'}</div></div>
@@ -1623,7 +1626,7 @@ window.exportarPagadasExcel=function(){
     const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
     const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
     const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',o.mes_pago||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:L1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
   XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
