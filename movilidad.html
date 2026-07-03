@@ -270,7 +270,7 @@ tr:hover td{background:#fafbff;}
       </div>
 
       <div class="section">
-        <div class="section-title">Resumen por Empleado</div>
+        <div class="section-title">Resumen por Empleado (mes actual)</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Empleado</th><th>Viajes</th><th>Km totales</th><th>Total cobrado</th></tr></thead>
@@ -350,7 +350,7 @@ tr:hover td{background:#fafbff;}
       </div>
 
       <div class="section">
-        <div class="section-title">Resumen por Empleado</div>
+        <div class="section-title">Resumen por Empleado (mes actual)</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Empleado</th><th>Cantidad de días</th><th>Total cobrado</th></tr></thead>
@@ -626,9 +626,10 @@ window.renderMovilidad=function(){
       sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
     }
   }
+  // Resumen por empleado: SOLO mes actual (para histórico completo está la vista "Histórico" arriba)
   const mapa={};
-  allMovilidad.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={viajes:0,km:0,total:0};mapa[r.empleado].viajes++;mapa[r.empleado].km+=Number(r.km||0);mapa[r.empleado].total+=Number(r.total||0);});
-  document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos</td></tr>';
+  delMes.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={viajes:0,km:0,total:0};mapa[r.empleado].viajes++;mapa[r.empleado].km+=Number(r.km||0);mapa[r.empleado].total+=Number(r.total||0);});
+  document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
 window.eliminarMov=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
@@ -706,9 +707,10 @@ window.renderFS=function(){
       sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
     }
   }
+  // Resumen por empleado: SOLO mes actual
   const mapa={};
-  allFS.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={cant:0,total:0};mapa[r.empleado].cant++;mapa[r.empleado].total+=Number(r.monto||0);});
-  document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
+  delMes.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={cant:0,total:0};mapa[r.empleado].cant++;mapa[r.empleado].total+=Number(r.monto||0);});
+  document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
 window.eliminarFS=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
