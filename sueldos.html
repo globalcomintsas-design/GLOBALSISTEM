@@ -293,6 +293,7 @@ let allMov = [], allFS = [];   // caches en memoria para movilidad y fines de se
 let tablaLista = false;        // flag: la tabla ya fue construida
 let dividendoPorSocio = 0, periodoDividendo = '';
 let saving = false;
+let empleadosAnterior = {};   // liquidación del mes anterior (para precargar bruto/autónomo por defecto)
 
 function fmt(v){ return '$ '+Math.round(v||0).toLocaleString('es-AR'); }
 function periodoLabel(val){
@@ -476,6 +477,12 @@ window.cargarPeriodo = async function(){
     const liqDoc=await getDoc(doc(db,'sueldos',periodo));
     if(liqDoc.exists()){ guardada=liqDoc.data().empleados||{}; document.getElementById('badgeGuardado').style.display='inline-block'; }
   } catch(e){ console.warn('sueldos:',e); }
+  // Trae la liquidación del mes anterior, para precargar bruto/autónomo como sugerencia editable
+  empleadosAnterior={};
+  try {
+    const liqAnteriorDoc=await getDoc(doc(db,'sueldos',restarMeses(periodo,1)));
+    if(liqAnteriorDoc.exists()){ empleadosAnterior=liqAnteriorDoc.data().empleados||{}; }
+  } catch(e){ console.warn('sueldos anterior:',e); }
   calcDiv();
   buildTable(guardada);
   ocultarSpinner();
@@ -521,6 +528,10 @@ function buildTable(guardada){
   const periodo=periodoActual();
   EMPLEADOS.forEach((emp,i)=>{
     const g=guardada[emp.nombre]||{};
+    const gAnt=empleadosAnterior[emp.nombre]||{};
+    // Si no hay valor guardado para el período actual, se precarga el del mes anterior (editable, para permitir aumentos)
+    const brutoVal=('bruto' in g)?g.bruto:(gAnt.bruto||'');
+    const autoVal=('autonomo' in g)?g.autonomo:(gAnt.autonomo||'');
     const mov=movData[emp.nombre]||0;
     const fs=fsData[emp.nombre]||0;
     const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
@@ -528,8 +539,8 @@ function buildTable(guardada){
     const tr=document.createElement('tr');
     tr.innerHTML=`
       <td><div class="emp-cell"><div class="avatar ${emp.esSocio?'av-blue':'av-purple'}">${emp.iniciales}</div><div><div class="emp-name">${emp.nombre}</div><div class="emp-tipo">${emp.esSocio?'Socio':'Empleado'}</div></div></div></td>
-      <td><input type="number" id="bruto-${i}" placeholder="0" min="0" value="${g.bruto||''}" oninput="recalc()"></td>
-      <td>${emp.esSocio?`<input type="number" id="auto-${i}" placeholder="0" min="0" value="${g.autonomo||''}" oninput="recalc()">`:'<div class="dash-cell">—</div>'}</td>
+      <td><input type="number" id="bruto-${i}" placeholder="0" min="0" value="${brutoVal}" oninput="recalc()"></td>
+      <td>${emp.esSocio?`<input type="number" id="auto-${i}" placeholder="0" min="0" value="${autoVal}" oninput="recalc()">`:'<div class="dash-cell">—</div>'}</td>
       <td><div class="auto-val" id="mov-${i}">${fmt(mov)}</div></td>
       <td><div class="auto-val" id="fs-${i}">${fmt(fs)}</div></td>
       <td><div class="adel-val${desc===0?' cero':''}" id="adel-${i}">${fmt(desc)}</div></td>
