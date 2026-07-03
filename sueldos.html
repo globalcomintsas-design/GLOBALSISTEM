@@ -624,8 +624,8 @@ window.abrirModalAdel=function(){
 window.cerrarModalAdel=function(){document.getElementById('modalAdel').classList.remove('open');};
 window.toggleCuotas=function(){
   const tipo=document.getElementById('adelTipo').value;
-  document.getElementById('cuotasRow').style.display=tipo==='prestamo'?'':'none';
-  document.getElementById('cuotaPreview').style.display=tipo==='prestamo'?'':'none';
+  document.getElementById('cuotasRow').style.display=tipo==='prestamo'?'block':'none';
+  document.getElementById('cuotaPreview').style.display=tipo==='prestamo'?'block':'none';
   window.calcCuota();
 };
 window.calcCuota=function(){
@@ -645,6 +645,7 @@ window.guardarAdel=async function(){
   const inicio=document.getElementById('adelInicio').value;
   const obs=document.getElementById('adelObs').value.trim();
   if(!empleado||monto<=0||!inicio){toast('Completá empleado, monto y mes de inicio','error');return;}
+  if(tipo==='prestamo'&&(!cuotas||cuotas<1)){toast('Ingresá la cantidad de cuotas','error');return;}
   await addDoc(collection(db,'adelantos'),{empleado,tipo,monto,cuotas:tipo==='prestamo'?cuotas:1,inicio,obs,estado:'activo',creadoPor:currentUser.nombre,creadoEn:new Date().toISOString()});
   window.cerrarModalAdel();
   toast('Registrado ✓','success');
