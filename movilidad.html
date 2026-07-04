@@ -199,7 +199,7 @@ tr:hover td{background:#fafbff;}
             </table>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-outline btn-sm" onclick="agregarDestino()">+ Agregar destino</button>
+            <button class="btn btn-outline btn-sm" id="btnAgregarDestino" onclick="agregarDestino()">+ Agregar destino</button>
             <button class="btn btn-success btn-sm" onclick="guardarDestinos()">💾 Guardar destinos y precio</button>
           </div>
         </div>
@@ -422,7 +422,13 @@ function mostrarSistema(user){
   const puedeCargar = user.rol==='admin'||user.rol==='cargador';
   document.getElementById('seccionRegistrarMov').style.display = puedeCargar?'':'none';
   document.getElementById('seccionRegistrarFS').style.display = puedeCargar?'':'none';
-  document.getElementById('seccionDestinos').style.display = user.rol==='admin'?'':'none';
+  // Destinos y Km: visible para todos los que pueden cargar (admin y cargador) para que cualquiera pueda ajustar los km
+  document.getElementById('seccionDestinos').style.display = puedeCargar?'':'none';
+  // Precio por Km y agregar destino: solo admin puede tocarlos, para no descontrolar el catálogo
+  const precioKmInput = document.getElementById('precioKmGlobal');
+  if(precioKmInput) precioKmInput.disabled = user.rol!=='admin';
+  const btnAgregarDestino = document.getElementById('btnAgregarDestino');
+  if(btnAgregarDestino) btnAgregarDestino.style.display = user.rol==='admin'?'':'none';
   initFirestore();
 }
 
@@ -486,6 +492,7 @@ window.renderDestinos=function(){
   const tbody=document.getElementById('destinosGrid');
   if(!tbody) return;
   const precioGlobal=parseFloat(document.getElementById('precioKmGlobal')?.value)||300;
+  const esAdmin=currentUser?.rol==='admin';
   tbody.innerHTML=destinos.map((d,i)=>{
     const total=(d.km||0)*precioGlobal;
     return `<tr>
@@ -493,7 +500,7 @@ window.renderDestinos=function(){
       <td><strong style="color:#1e3a8a">${d.nombre}</strong></td>
       <td><input type="number" value="${d.km||0}" placeholder="0" onchange="destinos[${i}].km=parseFloat(this.value)||0;renderDestinos();" style="width:80px;padding:6px 8px;border-radius:6px;border:1.5px solid #e2e8f0;font-family:'DM Sans',sans-serif;font-size:13px;outline:none;" onfocus="this.style.borderColor='#1e3a8a'" onblur="this.style.borderColor='#e2e8f0'" /></td>
       <td style="color:#16a34a;font-weight:600">${total>0?fmtMoney(total):'-'}</td>
-      <td><button onclick="eliminarDestino(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:2px 6px;line-height:1;">✕</button></td>
+      <td>${esAdmin?`<button onclick="eliminarDestino(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:2px 6px;line-height:1;">✕</button>`:''}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin destinos</td></tr>';
   // Resumen en el subtítulo de la card (visible sin abrir)
