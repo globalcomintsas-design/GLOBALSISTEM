@@ -430,6 +430,29 @@ tr:hover td{background:#fafbff;}
   </div>
 </div>
 
+<!-- MODAL EDITAR USUARIO -->
+<div class="modal-bg" id="modalEditarUsuario">
+  <div class="modal">
+    <div class="modal-title">Editar Usuario <button class="modal-close" onclick="cerrarModalUsuario()">✕</button></div>
+    <div class="form-grid">
+      <div class="field"><label>Usuario</label><input type="text" id="euUsuario" disabled /></div>
+      <div class="field"><label>Nombre completo</label><input type="text" id="euNombre" /></div>
+      <div class="field"><label>Contraseña</label><input type="text" id="euPassword" placeholder="Nueva contraseña" /></div>
+      <div class="field"><label>Rol</label>
+        <select id="euRol">
+          <option value="admin">Administrador (todo)</option>
+          <option value="cargador">Cargador (cargar y ver)</option>
+          <option value="viewer">Solo lectura</option>
+        </select>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="guardarEdicionUsuario()">💾 Guardar cambios</button>
+      <button class="btn btn-outline" onclick="cerrarModalUsuario()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <div class="notif" id="notif"></div>
 
 <script type="module">
@@ -460,6 +483,7 @@ let allMovimientos = [];
 let allVencimientos = [];
 let allUsuarios = {};
 let editandoId = null;
+let editandoUsuario = null;
 
 function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
@@ -801,9 +825,31 @@ window.guardarUsuario=async function(){
 };
 window.renderUsuarios=function(){
   const users=getUsers();
-  document.getElementById('tablaUsuarios').innerHTML=Object.entries(users).map(([u,d])=>`<tr><td><strong>${u}</strong></td><td>${d.nombre}</td><td><span class="badge ${d.rol==='admin'?'badge-ingreso':'badge-pendiente'}">${d.rol}</span></td><td>${u!=='Bcola'?`<button class="btn btn-danger btn-sm" onclick="eliminarUsuario('${u}')">🗑</button>`:'<span style="color:#888">Protegido</span>'}</td></tr>`).join('');
+  document.getElementById('tablaUsuarios').innerHTML=Object.entries(users).map(([u,d])=>`<tr><td><strong>${u}</strong></td><td>${d.nombre}</td><td><span class="badge ${d.rol==='admin'?'badge-ingreso':'badge-pendiente'}">${d.rol}</span></td><td><button class="btn btn-outline btn-sm" onclick="abrirEditarUsuario('${u}')">✏️</button> ${u!=='Bcola'?`<button class="btn btn-danger btn-sm" onclick="eliminarUsuario('${u}')">🗑</button>`:'<span style="color:#888">Protegido</span>'}</td></tr>`).join('');
 };
 window.eliminarUsuario=async function(u){if(!confirm('¿Eliminar usuario '+u+'?'))return;await deleteDoc(doc(db,'usuarios',u));toast('Usuario eliminado','error');};
+
+window.abrirEditarUsuario=function(u){
+  const users=getUsers();
+  const d=users[u];if(!d)return;
+  editandoUsuario=u;
+  document.getElementById('euUsuario').value=u;
+  document.getElementById('euNombre').value=d.nombre||'';
+  document.getElementById('euPassword').value=d.password||'';
+  document.getElementById('euRol').value=d.rol||'cargador';
+  document.getElementById('modalEditarUsuario').classList.add('open');
+};
+window.cerrarModalUsuario=function(){document.getElementById('modalEditarUsuario').classList.remove('open');editandoUsuario=null;};
+window.guardarEdicionUsuario=async function(){
+  if(!editandoUsuario)return;
+  const nombre=document.getElementById('euNombre').value.trim();
+  const password=document.getElementById('euPassword').value;
+  const rol=document.getElementById('euRol').value;
+  if(!nombre||!password){toast('Completá nombre y contraseña','error');return;}
+  await setDoc(doc(db,'usuarios',editandoUsuario),{nombre,password,rol},{merge:true});
+  cerrarModalUsuario();
+  toast('Usuario actualizado ✓','success');
+};
 
 </script>
 </body>
