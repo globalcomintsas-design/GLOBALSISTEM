@@ -444,6 +444,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
 // SESION CENTRALIZADA
 window.cerrarSesion=function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
 document.addEventListener('DOMContentLoaded', function(){
+  if(currentUser){ return; } // Ya se logueó por URL (ej. Daniel via ?user=dnievas), no pisar esa sesión
   const _gcSesion = localStorage.getItem('gc_user');
   if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); return; }
   mostrarSistema(JSON.parse(_gcSesion));
