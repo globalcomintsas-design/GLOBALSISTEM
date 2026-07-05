@@ -611,7 +611,9 @@ window.renderMovilidad=function(){
   document.getElementById('movKmMes').textContent=delMes.reduce((s,r)=>s+Number(r.km||0),0)+' km';
   document.getElementById('movTotalGral').textContent=fmtMoney(allMovilidad.reduce((s,r)=>s+Number(r.total||0),0));
   const esAdmin=currentUser?.rol==='admin';
-  document.getElementById('tablaMov').innerHTML=fil.map(r=>`<tr>
+  document.getElementById('tablaMov').innerHTML=fil.map(r=>{
+    const puedeEliminar = esAdmin || (r.creadoPor===currentUser?.nombre);
+    return `<tr>
     <td><strong>${r.empleado}</strong></td>
     <td>${r.fecha?r.fecha.split('-').reverse().join('/'):'-'}</td>
     <td>${r.destino||'-'}</td>
@@ -619,8 +621,9 @@ window.renderMovilidad=function(){
     <td>${fmtMoney(r.precioKm||0)}</td>
     <td style="color:#16a34a"><strong>${fmtMoney(r.total||0)}</strong></td>
     <td>${r.obs||'-'}</td>
-    <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarMov('${r.id}')">🗑</button>`:''}</td>
-  </tr>`).join('')||'<tr><td colspan="8" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
+    <td>${puedeEliminar?`<button class="btn btn-danger btn-sm" onclick="eliminarMov('${r.id}')">🗑</button>`:''}</td>
+  </tr>`;
+  }).join('')||'<tr><td colspan="8" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
   const totKm=fil.reduce((s,r)=>s+Number(r.km||0),0);
   const totMonto=fil.reduce((s,r)=>s+Number(r.total||0),0);
   document.getElementById('resumenMov').innerHTML=`<span>📄 ${fil.length} viajes</span><span style="color:#d97706">Km: ${totKm}</span><span style="color:#16a34a">Total: ${fmtMoney(totMonto)}</span>`;
@@ -640,7 +643,11 @@ window.renderMovilidad=function(){
   document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
-window.eliminarMov=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
+window.eliminarMov=async function(id){
+  const reg=allMovilidad.find(r=>r.id===id);
+  const esAdmin=currentUser?.rol==='admin';
+  if(reg && !esAdmin && reg.creadoPor!==currentUser?.nombre){ toast('Solo podés eliminar tus propios registros','error'); return; }
+  if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
 window.limpiarFiltrosMov=function(){['filtroMovEmpleado','filtroMovDestino','filtroMovDesde','filtroMovHasta'].forEach(id=>document.getElementById(id).value='');renderMovilidad();};
 window.exportarMovExcel=function(ev){
   if(ev){ ev.stopPropagation(); }
@@ -695,14 +702,17 @@ window.renderFS=function(){
   document.getElementById('fsTotalMes').textContent=fmtMoney(delMes.reduce((s,r)=>s+Number(r.monto||0),0));
   document.getElementById('fsTotalGral').textContent=fmtMoney(allFS.reduce((s,r)=>s+Number(r.monto||0),0));
   const esAdmin=currentUser?.rol==='admin';
-  document.getElementById('tablaFS').innerHTML=fil.map(r=>`<tr>
+  document.getElementById('tablaFS').innerHTML=fil.map(r=>{
+    const puedeEliminar = esAdmin || (r.creadoPor===currentUser?.nombre);
+    return `<tr>
     <td><strong>${r.empleado}</strong></td>
     <td>${r.fecha?r.fecha.split('-').reverse().join('/'):'-'}</td>
     <td>${fmtMoney(r.monto)}</td>
     <td>${r.obs||'-'}</td>
     <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
-    <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarFS('${r.id}')">🗑</button>`:''}</td>
-  </tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
+    <td>${puedeEliminar?`<button class="btn btn-danger btn-sm" onclick="eliminarFS('${r.id}')">🗑</button>`:''}</td>
+  </tr>`;
+  }).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
   const tot=fil.reduce((s,r)=>s+Number(r.monto||0),0);
   document.getElementById('resumenFS').innerHTML=`<span>📄 ${fil.length} registros</span><span style="color:#16a34a">Total: ${fmtMoney(tot)}</span>`;
   // Subtítulo dinámico de la card (visible sin abrir)
@@ -721,7 +731,11 @@ window.renderFS=function(){
   document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
-window.eliminarFS=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
+window.eliminarFS=async function(id){
+  const reg=allFS.find(r=>r.id===id);
+  const esAdmin=currentUser?.rol==='admin';
+  if(reg && !esAdmin && reg.creadoPor!==currentUser?.nombre){ toast('Solo podés eliminar tus propios registros','error'); return; }
+  if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
 window.limpiarFiltrosFS=function(){['filtroFSEmpleado','filtroFSDesde','filtroFSHasta'].forEach(id=>document.getElementById(id).value='');renderFS();};
 window.exportarFSExcel=function(ev){
   if(ev){ ev.stopPropagation(); }
