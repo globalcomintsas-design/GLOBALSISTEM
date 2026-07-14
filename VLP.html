@@ -609,6 +609,16 @@ function toast(msg,type='') {
 function now() { return new Date(); }
 function todayISO() { return now().toISOString().split('T')[0]; }
 
+// Valida que una fecha sea razonable para guardar en Firestore (evita
+// FirebaseError: Timestamp seconds out of range cuando el Excel trae
+// un valor de fecha corrupto/fuera de rango).
+function fechaValidaODefault(fecha, fallback) {
+  if(!(fecha instanceof Date) || isNaN(fecha)) return fallback;
+  const anio = fecha.getFullYear();
+  if(anio < 1990 || anio > 2100) return fallback;
+  return fecha;
+}
+
 // SESION CENTRALIZADA
 function autoLogin() {
   const _gcSesion = localStorage.getItem('gc_user');
@@ -824,6 +834,11 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     let fechaOfic=xlsxDateToDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
     let fechaBordo=xlsxDateToDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
     let fechaPlaza=xlsxDateToDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
+    // Validación de rango: evita FirebaseError "Timestamp seconds out of range"
+    fechaOp=fechaValidaODefault(fechaOp,null);
+    fechaOfic=fechaValidaODefault(fechaOfic,null);
+    fechaBordo=fechaValidaODefault(fechaBordo,null);
+    fechaPlaza=fechaValidaODefault(fechaPlaza,null);
     const nuevosDatos={
       operacion:opNorm,operacion_raw:r[COL_OP],cliente:String(r[COL_CLI]||''),
       destinacion:dest,aduana:String(r[COL_ADUANA]||''),codigo_regimen:codigoReg,
@@ -865,7 +880,15 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
         actualizadas++;
       }
     }
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch(err) {
+      console.error('Error en batch DUX:', err, chunk);
+      toast('Error al guardar un lote DUX. Revisá la consola.', 'error');
+      setBar(0,'Error al guardar. Ver consola.');
+      document.getElementById('progresoDUX').style.display='none';
+      return;
+    }
     setBar(35+Math.round(((i+chunk.length)/operaciones.length)*45),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
   }
 
@@ -952,7 +975,10 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     const opNorm=normOp(r[COL_OP]);
     if(!opNorm)continue;
     let fechaPago=r[COL_FECHA]?new Date(r[COL_FECHA]):ahora;
-    if(isNaN(fechaPago))fechaPago=ahora;
+    // Validación de rango: si la fecha viene corrupta o disparatada
+    // (ej: columna corrida o serial mal interpretado), usamos "ahora"
+    // en vez de dejar pasar un Timestamp inválido que traba el batch.
+    fechaPago=fechaValidaODefault(fechaPago,ahora);
     const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
       numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
       importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora};
@@ -984,7 +1010,15 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
         sinDux++;
       }
     }
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch(err) {
+      console.error('Error en batch VLP:', err, chunk);
+      toast('Error al guardar un lote VLP. Revisá la consola.', 'error');
+      setBar(0,'Error al guardar. Ver consola.');
+      document.getElementById('progresoVLP').style.display='none';
+      return;
+    }
     setBar(35+Math.round(((i+chunk.length)/operaciones.length)*50),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
   }
 
