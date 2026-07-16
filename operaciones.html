@@ -438,8 +438,11 @@ td.mono{font-family:monospace;font-size:12px;}
           <div class="res-val green" id="prev_bruto">$ 0</div>
         </div>
       </div>
+      <div id="op-edit-badge" style="display:none;background:#fef9c3;color:#92400e;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px;"></div>
       <div class="btn-row">
-        <button class="btn-primary" onclick="guardarOperacion()">💾 Guardar operación</button>
+        <button id="op-btn-guardar" class="btn-primary" onclick="guardarOperacion()" style="display:inline-flex;">💾 Guardar operación</button>
+        <button id="op-btn-actualizar" class="btn-success" onclick="actualizarOperacion()" style="display:none;">💾 Actualizar operación</button>
+        <button id="op-btn-cancelar" class="btn-outline" onclick="cancelarEdicionOperacion()" style="display:none;">✕ Cancelar edición</button>
         <button class="btn-outline" onclick="limpiarFormulario()">🗑 Limpiar</button>
         <span id="op-numero-preview" style="font-size:12px;color:#94a3b8;margin-left:8px;"></span>
       </div>
@@ -777,6 +780,7 @@ let clientesNombres = [];
 let tieneFactura = true;
 let esApoderado  = false;
 let esKotinya    = false;
+let opEditandoId = null;
 
 // ── UTILS ──
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
@@ -1114,13 +1118,8 @@ window.recalcularFormulario = function(){
   }
 };
 
-// ── GUARDAR OPERACIÓN ──
-window.guardarOperacion = async function(){
-  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
-  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
-  if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
-
+// ── CONSTRUIR DATOS DEL FORMULARIO (compartido entre crear y actualizar) ──
+function construirDatosOperacion(){
   const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC } = getTarifas();
   const tipo = document.getElementById('tipo_desp_global').value;
 
@@ -1136,12 +1135,11 @@ window.guardarOperacion = async function(){
   if(document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
   if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
 
-  const op = {
-    numOp: generarNumOp(),
+  return {
     fecha: document.getElementById('op_fecha').value,
-    despachante,
+    despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
-    destinacion,
+    destinacion: document.getElementById('op_destinacion').value.trim().toUpperCase(),
     canal: document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
     tipo: document.getElementById('op_tipo').value,
@@ -1160,8 +1158,41 @@ window.guardarOperacion = async function(){
     esKotinya:    tipo === 'kotinya',
     esApoderado:  tipo === 'apoderado',
     ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
-    ramiroOPagado: 'no',
     esMIC,
+    // Estado crudo del formulario (para poder reconstruirlo exacto al editar)
+    tipoDespGlobal: tipo,
+    opTcInput: document.getElementById('op_tc').value,
+    adicionalesPesos: parseFloat(document.getElementById('op_adicionales_pesos').value) || 0,
+    chk_sobre: document.getElementById('chk_sobre').checked,
+    chk_cam: document.getElementById('chk_cam').checked,
+    n_cam: document.getElementById('n_cam').value,
+    chk_senasa_p: document.getElementById('chk_senasa_p').checked,
+    n_senasa_p: document.getElementById('n_senasa_p').value,
+    chk_senasa_prod: document.getElementById('chk_senasa_prod').checked,
+    chk_hojas: document.getElementById('chk_hojas').checked,
+    n_hojas: document.getElementById('n_hojas').value,
+    chk_mic_check: document.getElementById('chk_mic').checked,
+    n_mic_num: document.getElementById('n_mic_num').value,
+    chk_mic_fojas: document.getElementById('chk_mic_fojas').checked,
+    n_mic_fojas: document.getElementById('n_mic_fojas').value,
+    chk_multinota: document.getElementById('chk_multinota').checked,
+    chk_finsem: document.getElementById('chk_finsem').checked,
+    chk_mov_ad: document.getElementById('chk_mov_ad').checked
+  };
+}
+
+// ── GUARDAR OPERACIÓN (nueva) ──
+window.guardarOperacion = async function(){
+  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
+  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
+
+  const datos = construirDatosOperacion();
+  const op = {
+    numOp: generarNumOp(),
+    ...datos,
+    ramiroOPagado: 'no',
     cargadoPor: user.username,
     ts: Date.now()
   };
@@ -1175,6 +1206,100 @@ window.guardarOperacion = async function(){
   }
 };
 
+// ── ACTUALIZAR OPERACIÓN (edición) ──
+window.actualizarOperacion = async function(){
+  if(!opEditandoId) return;
+  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
+  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
+
+  const datos = construirDatosOperacion();
+
+  try {
+    await updateDoc(doc(db,'despachantees_ops', opEditandoId), {
+      ...datos,
+      modificadoPor: user.username,
+      tsEdit: Date.now()
+    });
+    toast('✅ Operación actualizada');
+    cancelarEdicionOperacion();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  }
+};
+
+// ── EDITAR OPERACIÓN: carga los datos en el formulario ──
+window.editarOperacion = function(id){
+  const o = operaciones.find(x => x.id === id);
+  if(!o) return;
+  opEditandoId = id;
+
+  document.getElementById('op_fecha').value        = o.fecha || '';
+  document.getElementById('op_despachante').value  = o.despachante || '';
+  document.getElementById('op_cliente').value      = o.cliente || '';
+  document.getElementById('op_destinacion').value  = o.destinacion || '';
+  document.getElementById('op_zpa').value          = o.zpa || '';
+  document.getElementById('op_mic').value          = o.mic || '';
+  document.getElementById('op_toma').value         = o.toma || '';
+  document.getElementById('op_obs').value          = o.obs || '';
+  document.getElementById('op_periodo_factura').value = o.periodoFactura || 'diario';
+  document.getElementById('op_canal').value        = o.canal || 'V';
+  document.getElementById('op_tipo').value         = o.tipo || 'EXPO';
+  document.getElementById('op_adicionales_pesos').value = o.adicionalesPesos || 0;
+  document.getElementById('op_tc').value           = o.opTcInput || '';
+
+  tieneFactura = o.tieneFactura !== false;
+
+  // Tipo de operación (EXPO/IMPO/TRAN/MIC) -> ajusta visibilidad de checks
+  onTipoChange();
+
+  // Tipo de despacho (despachante/premium/apoderado/kotinya)
+  document.getElementById('tipo_desp_global').value =
+    o.tipoDespGlobal || (o.esApoderado ? 'apoderado' : o.esKotinya ? 'kotinya' : o.esPremium ? 'desp_externo' : 'despachante');
+  onTipoDespachoChange();
+
+  // Restaurar checkboxes/cantidades (por si onTipoChange los reseteó)
+  document.getElementById('chk_sobre').checked       = !!o.chk_sobre;
+  document.getElementById('chk_cam').checked         = !!o.chk_cam;
+  document.getElementById('n_cam').value             = o.n_cam || 1;
+  document.getElementById('chk_senasa_p').checked    = !!o.chk_senasa_p;
+  document.getElementById('n_senasa_p').value        = o.n_senasa_p || 1;
+  document.getElementById('chk_senasa_prod').checked = !!o.chk_senasa_prod;
+  document.getElementById('chk_hojas').checked       = !!o.chk_hojas;
+  document.getElementById('n_hojas').value           = o.n_hojas || 1;
+  document.getElementById('chk_mic').checked         = o.chk_mic_check !== undefined ? !!o.chk_mic_check : (o.tipo === 'MIC');
+  document.getElementById('n_mic_num').value         = o.n_mic_num || '';
+  document.getElementById('chk_mic_fojas').checked   = !!o.chk_mic_fojas;
+  document.getElementById('n_mic_fojas').value       = o.n_mic_fojas || 1;
+  document.getElementById('chk_multinota').checked   = !!o.chk_multinota;
+  document.getElementById('chk_finsem').checked      = !!o.chk_finsem;
+  document.getElementById('chk_mov_ad').checked      = !!o.chk_mov_ad;
+
+  recalcularFormulario();
+
+  const badge = document.getElementById('op-edit-badge');
+  badge.style.display = 'block';
+  badge.textContent = `✏️ Editando operación #${o.numOp || ''} — ${o.despachante || ''}`;
+  document.getElementById('op-btn-guardar').style.display    = 'none';
+  document.getElementById('op-btn-actualizar').style.display = 'inline-flex';
+  document.getElementById('op-btn-cancelar').style.display   = 'inline-flex';
+
+  switchTab('cargar');
+  document.getElementById('tab-cargar').scrollIntoView({behavior:'smooth'});
+  toast('✏️ Operación cargada para editar');
+};
+
+// ── CANCELAR EDICIÓN ──
+window.cancelarEdicionOperacion = function(){
+  opEditandoId = null;
+  document.getElementById('op-edit-badge').style.display = 'none';
+  document.getElementById('op-btn-guardar').style.display    = 'inline-flex';
+  document.getElementById('op-btn-actualizar').style.display = 'none';
+  document.getElementById('op-btn-cancelar').style.display   = 'none';
+  limpiarFormulario();
+};
+
 // ── ELIMINAR ──
 window.eliminarOp = async function(id){
   if(!confirm('¿Eliminar esta operación?')) return;
@@ -1184,6 +1309,7 @@ window.eliminarOp = async function(id){
 
 // ── LIMPIAR FORM ──
 window.limpiarFormulario = function(){
+  document.getElementById('op_despachante').value = '';
   document.getElementById('op_destinacion').value = '';
   document.getElementById('op_cliente').value = '';
   document.getElementById('op_obs').value = '';
@@ -1191,9 +1317,17 @@ window.limpiarFormulario = function(){
   document.getElementById('op_toma').value = '';
   document.getElementById('op_adicionales_pesos').value = '0';
   document.getElementById('op_tc').value = '';
+  document.getElementById('op_canal').value = 'V';
+  document.getElementById('op_tipo').value = 'EXPO';
+  document.getElementById('tipo_desp_global').value = 'despachante';
   document.querySelectorAll('.chk-item input[type=checkbox]').forEach(c => c.checked = false);
   cerrarAC('ac_despachante');
   cerrarAC('ac_cliente');
+  esApoderado = false;
+  esKotinya   = false;
+  tieneFactura = true;
+  onTipoChange();
+  onTipoDespachoChange();
   recalcularFormulario();
 };
 
@@ -1253,7 +1387,10 @@ function renderTabla(){
       <td style="color:#059669;font-weight:700;">$${fmt(o.bruto)}</td>
       <td>${o.adicionales ? o.adicionales.split(',').map(a=>`<span class="tag">${a.trim()}</span>`).join('') : '-'}</td>
       <td style="color:#64748b;font-size:11px;">${o.obs||''}</td>
-      <td><button class="btn-danger" onclick="eliminarOp('${o.id}')">✕</button></td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarOperacion('${o.id}')">✏️ Editar</button>
+        <button class="btn-danger" onclick="eliminarOp('${o.id}')">✕</button>
+      </td>
     </tr>
   `).join('');
 
@@ -1413,35 +1550,44 @@ window.exportarExcel = function(){
     return `${d}/${m}/${y}`;
   };
 
-  const header = ['FECHA','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
 
-  const rows = ops.map(o => [
-    fmtFechaAR(o.fecha),
-    o.cliente || '',
-    o.destinacion || '',
-    o.canal || '',
-    o.zpa || '',
-    Math.round(o.neto || 0),
-    Math.round(o.iva || 0),
-    Math.round(o.bruto || 0),
-    o.tc || '',
-    o.totalUsd || '',
-    o.obs || ''
-  ]);
+  const rows = ops.map(o => {
+    // Observaciones = lo que escribiste a mano + los adicionales tildados (Sobre, Camión, SENASA, etc.)
+    const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+    return [
+      fmtFechaAR(o.fecha),
+      o.despachante || '',
+      o.cliente || '',
+      o.destinacion || '',
+      o.canal || '',
+      o.zpa || '',
+      Math.round(o.neto || 0),
+      Math.round(o.iva || 0),
+      Math.round(o.bruto || 0),
+      o.tc || '',
+      o.totalUsd || '',
+      obsCompleto
+    ];
+  });
 
   const totNeto  = ops.reduce((a,b) => a + (b.neto||0), 0);
   const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
 
-  const totalRow = ['TOTAL','','','','', Math.round(totNeto), Math.round(totIva), Math.round(totBruto), '', '', ''];
+  const totalRow = ['TOTAL','','','','','', Math.round(totNeto), Math.round(totIva), Math.round(totBruto), '', '', ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
-    {wch:11},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:22}
+    {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
+    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:30}
   ];
+
+  // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  ws['!autofilter'] = { ref: `A1:${lastCol}1` };
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
