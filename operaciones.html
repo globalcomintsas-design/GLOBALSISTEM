@@ -1402,23 +1402,54 @@ window.exportarExcel = function(){
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
 
-  const header = ['N° Op','Fecha','Despachante','Cliente','Destinación','MIC','Toma Cont.','Canal','ZPA','TC','USD','Neto $','IVA $','Total $','Adicionales','Obs','Período'];
+  if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
+
+  // Orden cronológico, como en la planilla de referencia
+  ops = ops.slice().sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const fmtFechaAR = (iso) => {
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const header = ['FECHA','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
+
   const rows = ops.map(o => [
-    o.numOp, o.fecha, o.despachante, o.cliente, o.destinacion,
-    o.mic||'', o.toma||'',
-    o.canal, o.zpa, o.tc, o.totalUsd,
-    Math.round(o.neto), Math.round(o.iva), Math.round(o.bruto),
-    o.adicionales, o.obs, o.periodoFactura
+    fmtFechaAR(o.fecha),
+    o.cliente || '',
+    o.destinacion || '',
+    o.canal || '',
+    o.zpa || '',
+    Math.round(o.neto || 0),
+    Math.round(o.iva || 0),
+    Math.round(o.bruto || 0),
+    o.tc || '',
+    o.totalUsd || '',
+    o.obs || ''
   ]);
 
-  let csv = [header, ...rows].map(r => r.map(v => `"${v??''}"`).join(',')).join('\n');
-  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `operaciones_${filtMes||'todos'}_${filtCorr||'todos'}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const totNeto  = ops.reduce((a,b) => a + (b.neto||0), 0);
+  const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
+  const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+
+  const totalRow = ['TOTAL','','','','', Math.round(totNeto), Math.round(totIva), Math.round(totBruto), '', '', ''];
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:22},{wch:20},{wch:7},{wch:7},
+    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:22}
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
+
+  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${filtMes||'todos'}.xlsx`
+    .replace(/\s+/g,'_');
+
+  XLSX.writeFile(wb, nombreArchivo);
 };
 
 // ── MUDANZAS ──
