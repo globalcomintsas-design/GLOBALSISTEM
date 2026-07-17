@@ -129,7 +129,7 @@ td.mono{font-family:monospace;font-size:12px;}
   .resumen-box{grid-template-columns:1fr;}
 }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 </head>
 <body>
 
@@ -1124,7 +1124,7 @@ function construirDatosOperacion(){
   const tipo = document.getElementById('tipo_desp_global').value;
 
   const adicTags = [];
-  if(document.getElementById('chk_sobre').checked)      adicTags.push('Sobre');
+  if(document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
   if(document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
   if(document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-P×${document.getElementById('n_senasa_p').value}`);
   if(document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
@@ -1588,6 +1588,44 @@ window.exportarExcel = function(){
   // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   ws['!autofilter'] = { ref: `A1:${lastCol}1` };
+
+  // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const colsNumericas = [6,7,8,9,10]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+  const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R = range.s.r; R <= range.e.r; R++){
+    for(let C = range.s.c; C <= range.e.c; C++){
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      if(R === 0){
+        // Encabezado: negrita, más grande, fondo azul, letra blanca
+        ws[addr].s = {
+          font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1E3A8A' } },
+          border: bordeTodo,
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      } else if(R === totalRowIdx){
+        // Fila TOTAL: negrita y destacada
+        ws[addr].s = {
+          font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' }
+        };
+      } else {
+        // Filas de datos
+        ws[addr].s = {
+          font: { sz: 10 },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' }
+        };
+      }
+    }
+  }
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
