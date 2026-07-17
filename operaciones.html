@@ -192,7 +192,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <span class="tarifa-val"><input type="number" id="t_cam_r" value="6" step="0.5"> USD/u</span>
           </div>
           <div class="tarifa-item">
-            <span class="tarifa-label">SENASA pallets</span>
+            <span class="tarifa-label">SENASA embalaje</span>
             <span class="tarifa-val"><input type="number" id="t_senasa_p" value="2" step="0.5"> USD/u</span>
           </div>
           <div class="tarifa-item">
@@ -361,7 +361,7 @@ td.mono{font-family:monospace;font-size:12px;}
 
         <label class="chk-item" id="chk-senasa-p-wrap">
           <input type="checkbox" id="chk_senasa_p" onchange="recalcularFormulario()">
-          <label for="chk_senasa_p">SENASA pallets</label>
+          <label for="chk_senasa_p">SENASA embalaje</label>
           <input type="number" class="chk-extra" id="n_senasa_p" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
         </label>
 
@@ -465,6 +465,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </select>
           </div>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
+          <button class="btn-outline" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
         </div>
       </div>
       <div class="tabla-wrap">
@@ -775,6 +776,8 @@ let clientes = [];
 let mudanzas = [];
 let despachantesNombres = [];
 let clientesNombres = [];
+window.despachantesNombres = despachantesNombres;
+window.clientesNombres = clientesNombres;
 
 // Variables de estado del formulario (accesibles en todo el módulo)
 let tieneFactura = true;
@@ -859,6 +862,7 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
     const id = val.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
     await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
     clientesNombres = [...new Set([...clientesNombres, val])].sort();
+    window.clientesNombres = clientesNombres;
     toast('✅ Cliente guardado: ' + val);
   }
 };
@@ -900,6 +904,7 @@ onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDe
 onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
   despachantesNombres = clientes.map(c => c.nombre).sort();
+  window.despachantesNombres = despachantesNombres;
   renderTablaClientes();
   renderFiltros();
 });
@@ -908,6 +913,7 @@ onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
   const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
   clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
+  window.clientesNombres = clientesNombres;
 });
 
 // Mudanzas: tiempo real, solo año en curso
@@ -1057,7 +1063,7 @@ function getTarifas(){
 
   if(document.getElementById('chk_senasa_p').checked){
     const n = parseInt(document.getElementById('n_senasa_p').value)||1;
-    usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA pallets ×${n}`);
+    usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA embalaje ×${n}`);
   }
 
   if(document.getElementById('chk_senasa_prod').checked)
@@ -1126,7 +1132,7 @@ function construirDatosOperacion(){
   const adicTags = [];
   if(document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
   if(document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
-  if(document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-P×${document.getElementById('n_senasa_p').value}`);
+  if(document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
   if(document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
   if(document.getElementById('chk_hojas').checked)      adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
   if(document.getElementById('chk_mic').checked)        adicTags.push(`MIC:${document.getElementById('n_mic_num').value||'s/n'}`);
@@ -1508,6 +1514,24 @@ window.renderDashboard = function(){
       </table>
     </div>
   `;
+};
+
+// ── CORREGIR ETIQUETAS VIEJAS (Sobre→Armado, SENASA-P→SENASA-Embalaje) ──
+window.migrarEtiquetasAdicionales = async function(){
+  if(!confirm('Esto va a corregir el texto de "Sobre" → "Armado" y "SENASA-P" → "SENASA-Embalaje" en las operaciones ya guardadas. ¿Continuar?')) return;
+
+  let corregidas = 0;
+  for(const o of operaciones){
+    if(!o.adicionales) continue;
+    const nuevo = o.adicionales
+      .replace(/\bSobre\b/g, 'Armado')
+      .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
+    if(nuevo !== o.adicionales){
+      await updateDoc(doc(db,'despachantees_ops', o.id), { adicionales: nuevo });
+      corregidas++;
+    }
+  }
+  toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones con etiquetas viejas');
 };
 
 // ── RENDER TABLA CLIENTES ──
