@@ -122,6 +122,16 @@ td.mono{font-family:monospace;font-size:12px;}
 .ac-item:hover{background:#eff6ff;color:#1e3a8a;font-weight:600;}
 .ac-new{color:#059669;font-style:italic;}
 
+/* SPINNER */
+.spinner{
+  display:inline-block;width:14px;height:14px;
+  border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;
+  border-radius:50%;animation:spin .7s linear infinite;
+  vertical-align:middle;margin-right:6px;
+}
+.spinner.dark{border-color:rgba(30,58,138,0.2);border-top-color:#1e3a8a;}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
 /* RESPONSIVE */
 @media(max-width:600px){
   .main{padding:12px;}
@@ -262,10 +272,7 @@ td.mono{font-family:monospace;font-size:12px;}
           </div>
         </div>
         <div class="tc-row">
-          <label>TC Oficialización:</label>
-          <input type="number" id="tc_global" value="1440" step="0.5" oninput="recalcularFormulario()">
-          <span style="font-size:12px;color:#94a3b8;">$/USD</span>
-          <span style="margin-left:16px;font-size:12px;color:#64748b;">Tipo de despacho:</span>
+          <span style="font-size:12px;color:#64748b;">Tipo de despacho:</span>
           <select id="tipo_desp_global" onchange="onTipoDespachoChange()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
             <option value="despachante">Despachante (tarifa estándar)</option>
             <option value="desp_externo">Desp. externo (tarifa premium)</option>
@@ -322,6 +329,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <option value="IMPO">Importación (IC)</option>
             <option value="TRAN">Tránsito (IT)</option>
             <option value="MIC">MIC (solo manifiesto)</option>
+            <option value="MULTINOTA">Multinota</option>
           </select>
         </div>
         <div class="form-group">
@@ -339,6 +347,10 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group">
           <label>Toma de contenedor / detalle</label>
           <input type="text" id="op_toma" placeholder="Ej: 13/5 AL 5/6  237-48-51...">
+        </div>
+        <div class="form-group">
+          <label>TC Oficialización ⚠️ obligatorio</label>
+          <input type="number" id="op_tc" placeholder="Ingresá el TC" step="0.5" required oninput="recalcularFormulario()">
         </div>
       </div>
     </div>
@@ -388,11 +400,6 @@ td.mono{font-family:monospace;font-size:12px;}
           <input type="number" class="chk-extra" id="n_mic_fojas" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
         </label>
 
-        <label class="chk-item" id="chk-multinota-wrap">
-          <input type="checkbox" id="chk_multinota" onchange="recalcularFormulario()">
-          <label for="chk_multinota">Multinota</label>
-        </label>
-
         <label class="chk-item" id="chk-finsem-wrap">
           <input type="checkbox" id="chk_finsem" onchange="recalcularFormulario()">
           <label for="chk_finsem">Fin de semana</label>
@@ -412,10 +419,6 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group" style="min-width:240px;">
           <label>Observaciones</label>
           <input type="text" id="op_obs" placeholder="Notas, referencia...">
-        </div>
-        <div class="form-group" style="min-width:140px;">
-          <label>TC de la operación</label>
-          <input type="number" id="op_tc" placeholder="Usar TC global" oninput="recalcularFormulario()">
         </div>
       </div>
     </div>
@@ -465,7 +468,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </select>
           </div>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
-          <button class="btn-outline" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
+          <button class="btn-outline" id="btn-corregir-etiquetas" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
         </div>
       </div>
       <div class="tabla-wrap">
@@ -491,7 +494,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-ops">
-            <tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones cargadas</td></tr>
+            <tr><td colspan="16" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>
           </tbody>
           <tfoot id="tfoot-ops"></tfoot>
         </table>
@@ -591,8 +594,8 @@ td.mono{font-family:monospace;font-size:12px;}
           <div id="ac_mud_cliente" class="ac-list"></div>
         </div>
         <div class="form-group">
-          <label>TC Oficialización</label>
-          <input type="number" id="mud_tc" placeholder="1440" oninput="recalcMudanza()">
+          <label>TC Oficialización ⚠️ obligatorio</label>
+          <input type="number" id="mud_tc" placeholder="Ingresá el TC" required oninput="recalcMudanza()">
         </div>
         <div class="form-group">
           <label>Valor honorarios (USD)</label>
@@ -784,6 +787,7 @@ let tieneFactura = true;
 let esApoderado  = false;
 let esKotinya    = false;
 let opEditandoId = null;
+let datosCargados = false;
 
 // ── UTILS ──
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
@@ -891,6 +895,7 @@ const _fechaDesde = _anioActual + '-01-01';
 
 onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDesde), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  datosCargados = true;
   renderFiltros();
   // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
@@ -944,8 +949,10 @@ window.onTipoDespachoChange = function(){
   }
 
   // Ocultar/mostrar canal según tipo
+  const tipoOpActual = document.getElementById('op_tipo').value;
+  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA';
   const canalGroup = document.getElementById('op_canal').closest('.form-group');
-  const sinCanal = esApoderado || esKotinya;
+  const sinCanal = esApoderado || esKotinya || esMICoMultinota;
   canalGroup.style.opacity = sinCanal ? '0.4' : '';
   canalGroup.style.pointerEvents = sinCanal ? 'none' : '';
 
@@ -955,10 +962,16 @@ window.onTipoDespachoChange = function(){
 // ── CAMBIO TIPO OPERACIÓN ──
 window.onTipoChange = function(){
   const tipoOp  = document.getElementById('op_tipo').value;
-  const esMIC   = tipoOp === 'MIC';
+  const esMIC       = tipoOp === 'MIC';
+  const esMultinota = tipoOp === 'MULTINOTA';
 
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
+  } else {
+    document.getElementById('chk_mic').checked = false;
+  }
+
+  if(esMIC || esMultinota){
     document.getElementById('op_canal').closest('.form-group').style.opacity = '0.3';
     document.getElementById('op_canal').closest('.form-group').style.pointerEvents = 'none';
     document.getElementById('chk-sobre-wrap').style.display = 'none';
@@ -966,7 +979,6 @@ window.onTipoChange = function(){
     document.getElementById('chk-senasa-p-wrap').style.display = 'none';
     document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
   } else {
-    document.getElementById('chk_mic').checked = false;
     const sinCanal = esApoderado || esKotinya;
     document.getElementById('op_canal').closest('.form-group').style.opacity = sinCanal ? '0.4' : '';
     document.getElementById('op_canal').closest('.form-group').style.pointerEvents = sinCanal ? 'none' : '';
@@ -1012,11 +1024,13 @@ function getTarifas(){
   const tipo        = document.getElementById('tipo_desp_global').value;
   const tipoOp      = document.getElementById('op_tipo').value;
   const esMIC       = tipoOp === 'MIC';
+  const esMultinota = tipoOp === 'MULTINOTA';
   const esPremium   = tipo === 'desp_externo';
   const _esApoderado = tipo === 'apoderado';
   const _esKotinya   = tipo === 'kotinya';
-  const tc = parseFloat(document.getElementById('op_tc').value) ||
-             parseFloat(document.getElementById('tc_global').value) || 1440;
+  const tcInput = document.getElementById('op_tc').value;
+  const tcFalta = tcInput === '' || isNaN(parseFloat(tcInput)) || parseFloat(tcInput) <= 0;
+  const tc = tcFalta ? 0 : parseFloat(tcInput);
 
   const items = [];
   const usd   = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
@@ -1027,6 +1041,8 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
   } else if(_esKotinya){
     usd(parseFloat(document.getElementById('t_ramiro_op').value) || 30, 'Kotinya/Ramiro');
+  } else if(esMultinota){
+    usd(parseFloat(document.getElementById('t_multinota').value) || 2, 'Multinota');
   } else if(!esMIC){
     let hon_usd;
     if(esPremium){
@@ -1041,10 +1057,10 @@ function getTarifas(){
     usd(hon_usd, `Honorarios canal ${canal}`);
   }
 
-  if(document.getElementById('chk_sobre').checked)
+  if(!esMultinota && document.getElementById('chk_sobre').checked)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
 
-  if(document.getElementById('chk_cam').checked){
+  if(!esMultinota && document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
     let t;
     if(_esApoderado){
@@ -1061,12 +1077,12 @@ function getTarifas(){
     usd(t*n, `Camión AD ×${n}`);
   }
 
-  if(document.getElementById('chk_senasa_p').checked){
+  if(!esMultinota && document.getElementById('chk_senasa_p').checked){
     const n = parseInt(document.getElementById('n_senasa_p').value)||1;
     usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA embalaje ×${n}`);
   }
 
-  if(document.getElementById('chk_senasa_prod').checked)
+  if(!esMultinota && document.getElementById('chk_senasa_prod').checked)
     usd(parseFloat(document.getElementById('t_senasa_prod').value), 'SENASA producto');
 
   if(document.getElementById('chk_hojas').checked){
@@ -1081,9 +1097,6 @@ function getTarifas(){
     const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
     usd(parseFloat(document.getElementById('t_mic_foja').value)*n, `Fojas adicionales MIC ×${n}`);
   }
-
-  if(document.getElementById('chk_multinota').checked)
-    usd(parseFloat(document.getElementById('t_multinota').value), 'Multinota');
 
   if(document.getElementById('chk_finsem').checked)
     usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
@@ -1102,16 +1115,36 @@ function getTarifas(){
   const bruto     = totalNeto + iva;
   const totalUsd  = items.reduce((a,b) => a + b.usd, 0);
 
-  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC };
+  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, tcFalta };
 }
 
 window.recalcularFormulario = function(){
   try {
-    const { items, totalNeto, iva, bruto } = getTarifas();
+    const { items, totalNeto, iva, bruto, tcFalta } = getTarifas();
+    const tcInputEl = document.getElementById('op_tc');
+
+    if(tcFalta){
+      tcInputEl.style.borderColor = '#dc2626';
+      tcInputEl.style.background  = '#fef2f2';
+      document.getElementById('prev_neto').textContent  = '⚠️ Falta TC';
+      document.getElementById('prev_iva').textContent   = '⚠️ Falta TC';
+      document.getElementById('prev_bruto').textContent = '⚠️ Falta TC';
+      document.getElementById('prev_neto').style.color  = '#dc2626';
+      document.getElementById('prev_bruto').style.color = '#dc2626';
+      document.getElementById('prev_iva').style.color   = '#dc2626';
+      document.getElementById('desglose-prev').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
+      document.getElementById('op-numero-preview').textContent = '→ Op #' + generarNumOp();
+      return;
+    }
+
+    tcInputEl.style.borderColor = '';
+    tcInputEl.style.background  = '';
 
     document.getElementById('prev_neto').textContent  = '$ ' + fmt(totalNeto);
     document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
     document.getElementById('prev_bruto').textContent = '$ ' + fmt(bruto);
+    document.getElementById('prev_neto').style.color  = '';
+    document.getElementById('prev_bruto').style.color = '';
     document.getElementById('prev_iva').style.color   = tieneFactura ? '' : '#dc2626';
 
     const desglose = items.map(i =>
@@ -1126,18 +1159,21 @@ window.recalcularFormulario = function(){
 
 // ── CONSTRUIR DATOS DEL FORMULARIO (compartido entre crear y actualizar) ──
 function construirDatosOperacion(){
-  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC } = getTarifas();
+  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota } = getTarifas();
   const tipo = document.getElementById('tipo_desp_global').value;
 
   const adicTags = [];
-  if(document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
-  if(document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
-  if(document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
-  if(document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
+  if(!esMultinota && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
+  if(!esMultinota && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
+  if(!esMultinota && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
+  if(!esMultinota && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
   if(document.getElementById('chk_hojas').checked)      adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
-  if(document.getElementById('chk_mic').checked)        adicTags.push(`MIC:${document.getElementById('n_mic_num').value||'s/n'}`);
+  if(document.getElementById('chk_mic').checked){
+    const numMic = document.getElementById('n_mic_num').value.trim() || document.getElementById('op_mic').value.trim() || 's/n';
+    adicTags.push(`MIC:${numMic}`);
+  }
+  if(esMultinota) adicTags.push('Multinota');
   if(document.getElementById('chk_mic_fojas').checked)  adicTags.push(`FojaMIC×${document.getElementById('n_mic_fojas').value}`);
-  if(document.getElementById('chk_multinota').checked)  adicTags.push('Multinota');
   if(document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
   if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
 
@@ -1165,6 +1201,7 @@ function construirDatosOperacion(){
     esApoderado:  tipo === 'apoderado',
     ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
     esMIC,
+    esMultinota,
     // Estado crudo del formulario (para poder reconstruirlo exacto al editar)
     tipoDespGlobal: tipo,
     opTcInput: document.getElementById('op_tc').value,
@@ -1181,7 +1218,6 @@ function construirDatosOperacion(){
     n_mic_num: document.getElementById('n_mic_num').value,
     chk_mic_fojas: document.getElementById('chk_mic_fojas').checked,
     n_mic_fojas: document.getElementById('n_mic_fojas').value,
-    chk_multinota: document.getElementById('chk_multinota').checked,
     chk_finsem: document.getElementById('chk_finsem').checked,
     chk_mov_ad: document.getElementById('chk_mov_ad').checked
   };
@@ -1191,6 +1227,12 @@ function construirDatosOperacion(){
 window.guardarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const tcVal = parseFloat(document.getElementById('op_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
+    document.getElementById('op_tc').focus();
+    return;
+  }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
   if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
@@ -1217,6 +1259,12 @@ window.actualizarOperacion = async function(){
   if(!opEditandoId) return;
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const tcVal = parseFloat(document.getElementById('op_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
+    document.getElementById('op_tc').focus();
+    return;
+  }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
   if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
@@ -1253,11 +1301,11 @@ window.editarOperacion = function(id){
   document.getElementById('op_canal').value        = o.canal || 'V';
   document.getElementById('op_tipo').value         = o.tipo || 'EXPO';
   document.getElementById('op_adicionales_pesos').value = o.adicionalesPesos || 0;
-  document.getElementById('op_tc').value           = o.opTcInput || '';
+  document.getElementById('op_tc').value           = o.opTcInput || o.tc || 1440;
 
   tieneFactura = o.tieneFactura !== false;
 
-  // Tipo de operación (EXPO/IMPO/TRAN/MIC) -> ajusta visibilidad de checks
+  // Tipo de operación (EXPO/IMPO/TRAN/MIC/MULTINOTA) -> ajusta visibilidad de checks
   onTipoChange();
 
   // Tipo de despacho (despachante/premium/apoderado/kotinya)
@@ -1278,7 +1326,6 @@ window.editarOperacion = function(id){
   document.getElementById('n_mic_num').value         = o.n_mic_num || '';
   document.getElementById('chk_mic_fojas').checked   = !!o.chk_mic_fojas;
   document.getElementById('n_mic_fojas').value       = o.n_mic_fojas || 1;
-  document.getElementById('chk_multinota').checked   = !!o.chk_multinota;
   document.getElementById('chk_finsem').checked      = !!o.chk_finsem;
   document.getElementById('chk_mov_ad').checked      = !!o.chk_mov_ad;
 
@@ -1363,6 +1410,12 @@ window.eliminarCliente = async function(id){
 
 // ── RENDER TABLA OPERACIONES ──
 function renderTabla(){
+  const tbody = document.getElementById('tbody-ops');
+  if(!datosCargados){
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>';
+    document.getElementById('tfoot-ops').innerHTML = '';
+    return;
+  }
   const filtCorr = document.getElementById('filtro_despachante')?.value || '';
   const filtMes  = document.getElementById('filtro_mes')?.value || '';
   let ops = [...operaciones];
@@ -1414,6 +1467,7 @@ function renderTabla(){
       <td colspan="3"></td>
     </tr>`;
 }
+window.renderTabla = renderTabla;
 
 // ── RENDER FILTROS ──
 function renderFiltros(){
@@ -1520,18 +1574,28 @@ window.renderDashboard = function(){
 window.migrarEtiquetasAdicionales = async function(){
   if(!confirm('Esto va a corregir el texto de "Sobre" → "Armado" y "SENASA-P" → "SENASA-Embalaje" en las operaciones ya guardadas. ¿Continuar?')) return;
 
-  let corregidas = 0;
-  for(const o of operaciones){
-    if(!o.adicionales) continue;
-    const nuevo = o.adicionales
-      .replace(/\bSobre\b/g, 'Armado')
-      .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
-    if(nuevo !== o.adicionales){
-      await updateDoc(doc(db,'despachantees_ops', o.id), { adicionales: nuevo });
-      corregidas++;
+  const btn = document.getElementById('btn-corregir-etiquetas');
+  const textoOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner dark"></span> Corrigiendo...';
+
+  try {
+    let corregidas = 0;
+    for(const o of operaciones){
+      if(!o.adicionales) continue;
+      const nuevo = o.adicionales
+        .replace(/\bSobre\b/g, 'Armado')
+        .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
+      if(nuevo !== o.adicionales){
+        await updateDoc(doc(db,'despachantees_ops', o.id), { adicionales: nuevo });
+        corregidas++;
+      }
     }
+    toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones con etiquetas viejas');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
   }
-  toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones con etiquetas viejas');
 };
 
 // ── RENDER TABLA CLIENTES ──
@@ -1574,6 +1638,9 @@ window.exportarExcel = function(){
     return `${d}/${m}/${y}`;
   };
 
+  // Redondeo a 2 decimales (sin perder los centavos), no a entero
+  const dec2 = (n) => Math.round((n || 0) * 100) / 100;
+
   const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
 
   const rows = ops.map(o => {
@@ -1586,9 +1653,9 @@ window.exportarExcel = function(){
       o.destinacion || '',
       o.canal || '',
       o.zpa || '',
-      Math.round(o.neto || 0),
-      Math.round(o.iva || 0),
-      Math.round(o.bruto || 0),
+      dec2(o.neto),
+      dec2(o.iva),
+      dec2(o.bruto),
       o.tc || '',
       o.totalUsd || '',
       obsCompleto
@@ -1599,7 +1666,7 @@ window.exportarExcel = function(){
   const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
 
-  const totalRow = ['TOTAL','','','','','', Math.round(totNeto), Math.round(totIva), Math.round(totBruto), '', '', ''];
+  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
@@ -1617,6 +1684,7 @@ window.exportarExcel = function(){
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const colsNumericas = [6,7,8,9,10]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+  const formatoDecimal = '#,##0.00';
   const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
 
   const range = XLSX.utils.decode_range(ws['!ref']);
@@ -1624,6 +1692,11 @@ window.exportarExcel = function(){
     for(let C = range.s.c; C <= range.e.c; C++){
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      // VALOR, IVA y SUB TOTAL (columnas 6,7,8) siempre con 2 decimales
+      if(R > 0 && [6,7,8].includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].z = formatoDecimal;
+      }
 
       if(R === 0){
         // Encabezado: negrita, más grande, fondo azul, letra blanca
@@ -1638,14 +1711,16 @@ window.exportarExcel = function(){
         ws[addr].s = {
           font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
           border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' }
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: [6,7,8].includes(C) ? formatoDecimal : undefined
         };
       } else {
         // Filas de datos
         ws[addr].s = {
           font: { sz: 10 },
           border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' }
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: [6,7,8].includes(C) ? formatoDecimal : undefined
         };
       }
     }
@@ -1662,7 +1737,10 @@ window.exportarExcel = function(){
 
 // ── MUDANZAS ──
 window.recalcMudanza = function(){
-  const tc        = parseFloat(document.getElementById('mud_tc').value) || parseFloat(document.getElementById('tc_global').value) || 1440;
+  const tcInputEl = document.getElementById('mud_tc');
+  const tcInput   = tcInputEl.value;
+  const tcFalta   = tcInput === '' || isNaN(parseFloat(tcInput)) || parseFloat(tcInput) <= 0;
+  const tc        = tcFalta ? 0 : parseFloat(tcInput);
   const usd       = parseFloat(document.getElementById('mud_valor_usd').value) || 0;
   const ramiroUsd = parseFloat(document.getElementById('mud_ramiro').value) || 190;
   const precinto  = parseFloat(document.getElementById('mud_precinto').value) || 0;
@@ -1675,6 +1753,21 @@ window.recalcMudanza = function(){
   const gastoRamiro = ramiroUsd * tc;
   const totalGastos = precinto + fiscal + gastoRamiro + otros;
   const netofinal   = honorNeto - totalGastos;
+
+  if(tcFalta){
+    tcInputEl.style.borderColor = '#dc2626';
+    tcInputEl.style.background  = '#fef2f2';
+    document.getElementById('mud_neto').textContent        = '⚠️ Falta TC';
+    document.getElementById('mud_iva').textContent         = '⚠️ Falta TC';
+    document.getElementById('mud_bruto').textContent       = '⚠️ Falta TC';
+    document.getElementById('mud_gastos_total').textContent = '⚠️ Falta TC';
+    document.getElementById('mud_neto_final').textContent  = '⚠️ Falta TC';
+    document.getElementById('mud_desglose').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
+    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd, tcFalta };
+  }
+
+  tcInputEl.style.borderColor = '';
+  tcInputEl.style.background  = '';
 
   document.getElementById('mud_neto').textContent        = '$ ' + fmt(honorNeto);
   document.getElementById('mud_iva').textContent         = '$ ' + fmt(iva);
@@ -1691,12 +1784,18 @@ window.recalcMudanza = function(){
   ].filter(Boolean);
   document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
 
-  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd };
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd, tcFalta };
 };
 
 window.guardarMudanza = async function(){
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
+  const tcVal   = parseFloat(document.getElementById('mud_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la mudanza — es obligatorio para guardar');
+    document.getElementById('mud_tc').focus();
+    return;
+  }
   if(!cliente){ toast('Ingresá el cliente'); return; }
   if(!fecha)  { toast('Ingresá la fecha'); return; }
 
@@ -1759,8 +1858,8 @@ window.editarMudanza = function(id){
 
   document.getElementById('mud_fecha').value       = m.fecha || '';
   document.getElementById('mud_cliente').value     = m.cliente || '';
-  document.getElementById('mud_tc').value          = m.tc || '';
-  document.getElementById('mud_valor_usd').value   = m.valorUsd || '';
+  document.getElementById('mud_tc').value          = m.tc || 1440;
+  document.getElementById('mud_valor_usd').value    = m.valorUsd || '';
   document.getElementById('mud_precinto').value    = m.precinto || 0;
   document.getElementById('mud_fiscal').value      = m.fiscal || 0;
   document.getElementById('mud_ramiro').value      = m.ramiroUsd || 190;
@@ -1784,6 +1883,12 @@ window.actualizarMudanza = async function(){
   if(!mudanzaEditandoId) return;
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
+  const tcVal   = parseFloat(document.getElementById('mud_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la mudanza — es obligatorio para guardar');
+    document.getElementById('mud_tc').focus();
+    return;
+  }
   if(!cliente){ toast('Ingresá el cliente'); return; }
   if(!fecha)  { toast('Ingresá la fecha');   return; }
 
@@ -1875,7 +1980,7 @@ window.exportarMudanzas = function(){
 // ── CUENTA RAMIRO ──
 window.renderRamiro = function(){
   const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
-  const tc = parseFloat(document.getElementById('tc_global').value) || 1440;
+  const tc = 1440;
 
   const items = [];
 
