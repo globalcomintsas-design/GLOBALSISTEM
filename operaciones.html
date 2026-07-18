@@ -1422,7 +1422,6 @@ function renderTabla(){
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
 
-  const tbody = document.getElementById('tbody-ops');
   if(!ops.length){
     tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
     document.getElementById('tfoot-ops').innerHTML = '';
