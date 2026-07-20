@@ -804,7 +804,12 @@ td.mono{font-family:monospace;font-size:12px;}
     <div class="section-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
         <h3 style="margin:0;">📋 Detalle completo</h3>
-        <div style="display:flex;gap:8px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="ramiro_filtro_mes" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
+            <option value="">Todos los meses</option>
+          </select>
+          <input type="date" id="ramiro_filtro_fecha" onchange="renderRamiro()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
+          <button class="btn-outline" onclick="document.getElementById('ramiro_filtro_fecha').value='';renderRamiro()">✕ Día</button>
           <select id="ramiro_filtro_estado" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
             <option value="">Todos</option>
             <option value="no">Solo pendientes</option>
@@ -2269,12 +2274,14 @@ window.exportarMudanzas = function(){
 // ── CUENTA RAMIRO ──
 window.renderRamiro = function(){
   const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
+  const filtMes     = document.getElementById('ramiro_filtro_mes')?.value || '';
+  const filtFecha   = document.getElementById('ramiro_filtro_fecha')?.value || '';
   const tc = 1440;
 
-  const items = [];
+  const itemsTodos = [];
 
   operaciones.filter(o => o.esKotinya).forEach(o => {
-    items.push({
+    itemsTodos.push({
       tipo: 'Kotinya',
       fecha: o.fecha,
       cliente: o.cliente || '',
@@ -2288,7 +2295,7 @@ window.renderRamiro = function(){
   });
 
   mudanzas.forEach(m => {
-    items.push({
+    itemsTodos.push({
       tipo: 'Mudanza',
       fecha: m.fecha,
       cliente: m.cliente || '',
@@ -2301,32 +2308,51 @@ window.renderRamiro = function(){
     });
   });
 
-  items.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
+  itemsTodos.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
+
+  // Poblar el selector de meses en base a todos los registros
+  const selMes = document.getElementById('ramiro_filtro_mes');
+  if(selMes){
+    const vActual = selMes.value;
+    const meses = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+    selMes.innerHTML = '<option value="">Todos los meses</option>' +
+      meses.map(m => `<option value="${m}">${m}</option>`).join('');
+    selMes.value = vActual;
+  }
+
+  let items = [...itemsTodos];
+  if(filtMes)   items = items.filter(i => i.fecha && i.fecha.startsWith(filtMes));
+  if(filtFecha) items = items.filter(i => i.fecha === filtFecha);
+
   const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
 
   const totalUsd      = items.reduce((a,b) => a + b.ramiroUsd, 0);
+  const totalPesos    = items.reduce((a,b) => a + b.pesos, 0);
   const pendienteUsd  = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.ramiroUsd, 0);
   const pagadoUsd     = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.ramiroUsd, 0);
+  const pagadoPesos   = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.pesos, 0);
   const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.pesos, 0);
 
   document.getElementById('ramiro-kpis').innerHTML = `
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">Total a pagar (histórico)</div>
       <div class="kpi-val" style="color:#dc2626;">USD ${fmt(totalUsd)}</div>
+      <div class="kpi-sub">≈ $${fmt(totalPesos)}</div>
     </div>
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">⚠️ Pendiente de pago</div>
       <div class="kpi-val" style="color:#dc2626;">USD ${fmt(pendienteUsd)}</div>
-      <div class="kpi-sub">≈ $${fmt(pendientePesos)} al TC ${tc}</div>
+      <div class="kpi-sub">≈ $${fmt(pendientePesos)}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">✅ Ya pagado</div>
       <div class="kpi-val" style="color:#059669;">USD ${fmt(pagadoUsd)}</div>
+      <div class="kpi-sub">≈ $${fmt(pagadoPesos)}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Operaciones Kotinya</div>
-      <div class="kpi-val">${items.filter(i=>i.tipo==='Kotinya').length}</div>
-      <div class="kpi-sub">Mudanzas: ${items.filter(i=>i.tipo==='Mudanza').length}</div>
+      <div class="kpi-label">Mudanzas</div>
+      <div class="kpi-val">${items.filter(i=>i.tipo==='Mudanza').length}</div>
+      <div class="kpi-sub">Kotinya: ${items.filter(i=>i.tipo==='Kotinya').length}</div>
     </div>
   `;
 
