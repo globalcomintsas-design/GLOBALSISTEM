@@ -866,6 +866,12 @@ let datosCargados = false;
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
 window.fmt = fmt;
 
+// Formato exacto (2 decimales, sin redondear a entero) - se usa en Pagos/Saldos y Dashboard
+function fmt2(n){
+  return (n||0).toLocaleString('es-AR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+window.fmt2 = fmt2;
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1601,6 +1607,11 @@ window.renderDashboard = function(){
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
+  // Pagado / Saldo pendiente de los despachantes presentes en el filtro actual (valores exactos)
+  const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
+  const totPagadoDash = despFiltrados.reduce((a,n) => a + calcularSaldoDespachante(n).pagado, 0);
+  const totSaldoDash  = despFiltrados.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
+
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
       <div class="kpi-label">Operaciones</div>
@@ -1619,6 +1630,14 @@ window.renderDashboard = function(){
     <div class="kpi">
       <div class="kpi-label">Promedio por operación</div>
       <div class="kpi-val">$${ops.length ? fmt(totBruto/ops.length) : 0}</div>
+    </div>
+    <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
+      <div class="kpi-label">💰 Total pagado</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt2(totPagadoDash)}</div>
+    </div>
+    <div class="kpi" style="border-color:${totSaldoDash>0.005?'#fca5a5':'#86efac'};background:${totSaldoDash>0.005?'#fef2f2':'#f0fdf4'};">
+      <div class="kpi-label">⚖️ Saldo pendiente</div>
+      <div class="kpi-val" style="color:${totSaldoDash>0.005?'#dc2626':'#059669'};">$${fmt2(totSaldoDash)}</div>
     </div>
   `;
 
@@ -1640,11 +1659,13 @@ window.renderDashboard = function(){
     <div class="section-card" style="margin:0;">
       <h3>Por despachante</h3>
       <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th><th style="padding:7px;text-align:right;">Pagado $</th><th style="padding:7px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
-          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
-          ).join('')}
+          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
+            const { pagado, saldo } = calcularSaldoDespachante(k);
+            const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
+            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td><td style="padding:7px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:7px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>
@@ -1750,13 +1771,13 @@ function renderSaldos(){
     } else {
       tbodySaldos.innerHTML = nombresConOps.map(n => {
         const { facturado, pagado, saldo } = calcularSaldoDespachante(n);
-        const colorSaldo = saldo > 0.5 ? '#dc2626' : (saldo < -0.5 ? '#059669' : '#64748b');
-        const etiqueta    = saldo > 0.5 ? '⚠️ Debe' : (saldo < -0.5 ? '✅ A favor' : '✔ Al día');
+        const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
+        const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
         return `<tr>
           <td><strong>${n}</strong></td>
-          <td>$${fmt(facturado)}</td>
-          <td style="color:#059669;">$${fmt(pagado)}</td>
-          <td style="font-weight:700;color:${colorSaldo};">$${fmt(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span></td>
+          <td>$${fmt2(facturado)}</td>
+          <td style="color:#059669;">$${fmt2(pagado)}</td>
+          <td style="font-weight:700;color:${colorSaldo};">$${fmt2(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span></td>
         </tr>`;
       }).join('');
     }
@@ -1773,7 +1794,7 @@ function renderSaldos(){
         <tr>
           <td>${p.fecha||''}</td>
           <td><strong>${p.despachante||''}</strong></td>
-          <td style="color:#059669;font-weight:700;">$${fmt(p.monto)}</td>
+          <td style="color:#059669;font-weight:700;">$${fmt2(p.monto)}</td>
           <td style="font-size:11px;color:#64748b;">${p.obs||''}</td>
           <td><button class="btn-danger" onclick="eliminarPago('${p.id}')">✕</button></td>
         </tr>
@@ -1814,8 +1835,10 @@ window.exportarExcel = function(){
 
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
 
-  // Orden cronológico, como en la planilla de referencia
-  ops = ops.slice().sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+  // Pagos que corresponden a los mismos filtros (mismo despachante / mismo mes de pago)
+  let pagosFiltrados = [...pagos];
+  if(filtCorr) pagosFiltrados = pagosFiltrados.filter(p => p.despachante === filtCorr);
+  if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
 
   const fmtFechaAR = (iso) => {
     if(!iso) return '';
@@ -1823,51 +1846,74 @@ window.exportarExcel = function(){
     return `${d}/${m}/${y}`;
   };
 
-  // Redondeo a 2 decimales (sin perder los centavos), no a entero
-  const dec2 = (n) => Math.round((n || 0) * 100) / 100;
+  // Sin redondeo a entero: solo se recorta a 2 decimales (centavos exactos), nada de Math.round a pesos
+  const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','TOTAL PAGADO','SALDO PENDIENTE','OBSERVAC'];
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','PAGO','OBSERVAC'];
 
-  const rows = ops.map(o => {
-    // Observaciones = lo que escribiste a mano + los adicionales tildados (Sobre, Camión, SENASA, etc.)
-    const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
-    const { pagado, saldo } = calcularSaldoDespachante(o.despachante);
-    return [
-      fmtFechaAR(o.fecha),
-      o.despachante || '',
-      o.cliente || '',
-      o.destinacion || '',
-      o.canal || '',
-      o.zpa || '',
-      dec2(o.neto),
-      dec2(o.iva),
-      dec2(o.bruto),
-      o.tc || '',
-      o.totalUsd || '',
-      dec2(pagado),
-      dec2(saldo),
-      obsCompleto
-    ];
+  // Armamos una lista combinada: operaciones + pagos, ordenada cronológicamente.
+  // Los pagos NO son operaciones (no suman a "Ops"), pero sí ocupan su propia línea.
+  const combinados = [
+    ...ops.map(o => ({ tipo:'op', fecha:o.fecha, data:o })),
+    ...pagosFiltrados.map(p => ({ tipo:'pago', fecha:p.fecha, data:p }))
+  ].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  // Saldo corriente por despachante: Total facturado acumulado − Total pagado acumulado
+  const saldoCorriente = {};
+
+  const rows = combinados.map(item => {
+    if(item.tipo === 'op'){
+      const o = item.data;
+      const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+      saldoCorriente[o.despachante] = (saldoCorriente[o.despachante] || 0) + (o.bruto || 0);
+      return [
+        fmtFechaAR(o.fecha),
+        o.despachante || '',
+        o.cliente || '',
+        o.destinacion || '',
+        o.canal || '',
+        o.zpa || '',
+        dec2(o.neto),
+        dec2(o.iva),
+        dec2(o.bruto),
+        o.tc || '',
+        o.totalUsd || '',
+        '',
+        obsCompleto
+      ];
+    } else {
+      const p = item.data;
+      saldoCorriente[p.despachante] = (saldoCorriente[p.despachante] || 0) - (p.monto || 0);
+      const obsPago = ['PAGO RECIBIDO', p.obs].filter(Boolean).join(' - ');
+      return [
+        fmtFechaAR(p.fecha),
+        p.despachante || '',
+        '', '', '', '',
+        '', '',
+        dec2(saldoCorriente[p.despachante] || 0), // el "bruto" de esta línea = total acumulado menos el pago
+        '', '',
+        dec2(p.monto),
+        obsPago
+      ];
+    }
   });
+
+  const filaPagoIdx = combinados.map((item,i) => item.tipo === 'pago' ? i+1 : null).filter(i => i !== null);
 
   const totNeto  = ops.reduce((a,b) => a + (b.neto||0), 0);
   const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
+  const totSaldo  = totBruto - totPagado;
 
-  // Pagado/saldo sumados una sola vez por cada despachante presente en el export
-  // (no hay que sumarlo por cada operación, sino por despachante)
-  const despUnicos = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
-  const totPagado = despUnicos.reduce((a,n) => a + calcularSaldoDespachante(n).pagado, 0);
-  const totSaldo  = despUnicos.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
-
-  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), dec2(totSaldo), ''];
+  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), 'Saldo: $' + dec2(totSaldo).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:14},{wch:14},{wch:30}
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:12},{wch:32}
   ];
 
   // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
@@ -1877,8 +1923,8 @@ window.exportarExcel = function(){
   // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
-  const colsNumericas = [6,7,8,9,10,11,12]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD, TOTAL PAGADO, SALDO PENDIENTE
-  const colsDecimal2  = [6,7,8,11,12]; // columnas que siempre llevan 2 decimales
+  const colsNumericas = [6,7,8,9,10,11]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGO
+  const colsDecimal2  = [6,7,8,11]; // columnas que siempre llevan 2 decimales exactos (sin redondeo a entero)
   const formatoDecimal = '#,##0.00';
   const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
 
@@ -1888,10 +1934,12 @@ window.exportarExcel = function(){
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if(!ws[addr]) ws[addr] = { t: 's', v: '' };
 
-      // VALOR, IVA, SUB TOTAL, TOTAL PAGADO y SALDO PENDIENTE siempre con 2 decimales
+      // VALOR, IVA, SUB TOTAL y PAGO siempre con 2 decimales exactos
       if(R > 0 && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].z = formatoDecimal;
       }
+
+      const esFilaPago = filaPagoIdx.includes(R);
 
       if(R === 0){
         // Encabezado: negrita, más grande, fondo azul, letra blanca
@@ -1909,8 +1957,17 @@ window.exportarExcel = function(){
           alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
           numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
+      } else if(esFilaPago){
+        // Fila de PAGO (no es operación): fondo verde claro para diferenciarla
+        ws[addr].s = {
+          font: { sz: 10, bold: true, color: { rgb: '166534' } },
+          fill: { fgColor: { rgb: 'DCFCE7' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
       } else {
-        // Filas de datos
+        // Filas de datos (operaciones)
         ws[addr].s = {
           font: { sz: 10 },
           border: bordeTodo,
