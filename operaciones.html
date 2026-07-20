@@ -173,6 +173,78 @@ td.mono{font-family:monospace;font-size:12px;}
   <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
   <div id="tab-cargar">
 
+    <!-- PAGOS Y SALDOS (colapsable) -->
+    <div class="tarifas-bar">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="togglePagos()">
+        <h3 style="margin:0;">💰 Pagos y saldos por despachante</h3>
+        <span id="pagos-toggle-icon" style="font-size:18px;color:#1e3a8a;">🔒</span>
+      </div>
+      <div id="pagos-body" style="display:none;margin-top:14px;">
+
+        <div class="form-row" style="margin-bottom:16px;">
+          <div class="form-group">
+            <label>Despachante</label>
+            <select id="pago_despachante">
+              <option value="">Seleccioná...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fecha del pago</label>
+            <input type="date" id="pago_fecha">
+          </div>
+          <div class="form-group">
+            <label>Monto pagado ($)</label>
+            <input type="number" id="pago_monto" placeholder="$ 0">
+          </div>
+          <div class="form-group">
+            <label>Observación</label>
+            <input type="text" id="pago_obs" placeholder="Transferencia, efectivo, a cuenta...">
+          </div>
+          <div class="form-group" style="align-self:end;">
+            <button class="btn-primary" onclick="guardarPago()">💾 Registrar pago</button>
+          </div>
+        </div>
+
+        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Saldo por despachante</div>
+        <div class="tabla-wrap" style="margin-bottom:18px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Despachante</th>
+                <th>Total facturado</th>
+                <th>Total pagado</th>
+                <th>Saldo pendiente</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-saldos">
+              <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;">Historial de pagos</div>
+        </div>
+        <div class="tabla-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Despachante</th>
+                <th>Monto</th>
+                <th>Obs</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tbody-pagos-hist">
+              <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
     <!-- TARIFAS CONFIGURABLES -->
     <div class="tarifas-bar">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleTarifas()">
@@ -777,6 +849,7 @@ document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 let operaciones = [];
 let clientes = [];
 let mudanzas = [];
+let pagos = [];
 let despachantesNombres = [];
 let clientesNombres = [];
 window.despachantesNombres = despachantesNombres;
@@ -818,9 +891,20 @@ window.switchTab = function(tab){
   document.querySelectorAll('.tab').forEach((btn,i) => {
     btn.classList.toggle('active', ['cargar','listado','dashboard','clientes','mudanzas','ramiro'][i]===tab);
   });
+  if(tab==='cargar')    renderSaldos();
   if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
   if(tab==='ramiro')    renderRamiro();
+};
+
+// ── TOGGLE PAGOS ──
+window.togglePagos = function(){
+  const body = document.getElementById('pagos-body');
+  const icon = document.getElementById('pagos-toggle-icon');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  icon.textContent = open ? '🔓' : '🔒';
+  if(open) renderSaldos();
 };
 
 // ── AUTOCOMPLETE ──
@@ -899,10 +983,18 @@ onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDe
   renderFiltros();
   // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Cargar Operación')) renderSaldos();
   if(tabActivo.includes('Listado'))   renderTabla();
   if(tabActivo.includes('Dashboard')) renderDashboard();
   if(tabActivo.includes('Ramiro'))    renderRamiro();
   recalcularFormulario();
+});
+
+// Pagos a despachantes: colección chica, sin filtro de año
+onSnapshot(collection(db,'despachantees_pagos'), snap => {
+  pagos = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  window.pagos = pagos;
+  renderSaldos();
 });
 
 // Clientes: colección chica y estática, sin filtro
@@ -912,6 +1004,7 @@ onSnapshot(collection(db,'corresponsales_clientes'), snap => {
   window.despachantesNombres = despachantesNombres;
   renderTablaClientes();
   renderFiltros();
+  renderSaldos();
 });
 
 onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
@@ -1597,6 +1690,99 @@ window.migrarEtiquetasAdicionales = async function(){
   }
 };
 
+// ── PAGOS Y SALDOS POR DESPACHANTE ──
+function calcularSaldoDespachante(nombre){
+  const facturado = operaciones.filter(o => o.despachante === nombre).reduce((a,b) => a + (b.bruto||0), 0);
+  const pagado    = pagos.filter(p => p.despachante === nombre).reduce((a,b) => a + (b.monto||0), 0);
+  return { facturado, pagado, saldo: facturado - pagado };
+}
+window.calcularSaldoDespachante = calcularSaldoDespachante;
+
+window.guardarPago = async function(){
+  const despachante = document.getElementById('pago_despachante').value;
+  const fecha       = document.getElementById('pago_fecha').value;
+  const monto       = parseFloat(document.getElementById('pago_monto').value);
+  const obs         = document.getElementById('pago_obs').value.trim();
+
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!fecha){ toast('Ingresá la fecha del pago'); return; }
+  if(!monto || monto <= 0){ toast('Ingresá un monto de pago válido'); return; }
+
+  try {
+    await addDoc(collection(db,'despachantees_pagos'), {
+      despachante, fecha, monto, obs,
+      cargadoPor: user.username,
+      ts: Date.now()
+    });
+    toast('✅ Pago registrado: $' + fmt(monto) + ' — ' + despachante);
+    document.getElementById('pago_monto').value = '';
+    document.getElementById('pago_obs').value = '';
+  } catch(e){
+    toast('❌ Error al registrar el pago: ' + e.message);
+  }
+};
+
+window.eliminarPago = async function(id){
+  if(!confirm('¿Eliminar este pago?')) return;
+  await deleteDoc(doc(db,'despachantees_pagos', id));
+  toast('Pago eliminado');
+};
+
+function renderSaldos(){
+  // Select de despachantes
+  const sel = document.getElementById('pago_despachante');
+  if(sel){
+    const v = sel.value;
+    const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+    sel.innerHTML = '<option value="">Seleccioná...</option>' +
+      nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.value = v;
+  }
+  const fechaEl = document.getElementById('pago_fecha');
+  if(fechaEl && !fechaEl.value) fechaEl.value = new Date().toISOString().split('T')[0];
+
+  // Tabla de saldos por despachante
+  const tbodySaldos = document.getElementById('tbody-saldos');
+  if(tbodySaldos){
+    const nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
+    if(!nombresConOps.length){
+      tbodySaldos.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin operaciones cargadas</td></tr>';
+    } else {
+      tbodySaldos.innerHTML = nombresConOps.map(n => {
+        const { facturado, pagado, saldo } = calcularSaldoDespachante(n);
+        const colorSaldo = saldo > 0.5 ? '#dc2626' : (saldo < -0.5 ? '#059669' : '#64748b');
+        const etiqueta    = saldo > 0.5 ? '⚠️ Debe' : (saldo < -0.5 ? '✅ A favor' : '✔ Al día');
+        return `<tr>
+          <td><strong>${n}</strong></td>
+          <td>$${fmt(facturado)}</td>
+          <td style="color:#059669;">$${fmt(pagado)}</td>
+          <td style="font-weight:700;color:${colorSaldo};">$${fmt(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span></td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  // Historial de pagos
+  const tbodyHist = document.getElementById('tbody-pagos-hist');
+  if(tbodyHist){
+    if(!pagos.length){
+      tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>';
+    } else {
+      const ordenados = [...pagos].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
+      tbodyHist.innerHTML = ordenados.map(p => `
+        <tr>
+          <td>${p.fecha||''}</td>
+          <td><strong>${p.despachante||''}</strong></td>
+          <td style="color:#059669;font-weight:700;">$${fmt(p.monto)}</td>
+          <td style="font-size:11px;color:#64748b;">${p.obs||''}</td>
+          <td><button class="btn-danger" onclick="eliminarPago('${p.id}')">✕</button></td>
+        </tr>
+      `).join('');
+    }
+  }
+}
+window.renderSaldos = renderSaldos;
+
 // ── RENDER TABLA CLIENTES ──
 function renderTablaClientes(){
   const tbody = document.getElementById('tbody-clientes');
@@ -1640,11 +1826,12 @@ window.exportarExcel = function(){
   // Redondeo a 2 decimales (sin perder los centavos), no a entero
   const dec2 = (n) => Math.round((n || 0) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','TOTAL PAGADO','SALDO PENDIENTE','OBSERVAC'];
 
   const rows = ops.map(o => {
     // Observaciones = lo que escribiste a mano + los adicionales tildados (Sobre, Camión, SENASA, etc.)
     const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+    const { pagado, saldo } = calcularSaldoDespachante(o.despachante);
     return [
       fmtFechaAR(o.fecha),
       o.despachante || '',
@@ -1657,6 +1844,8 @@ window.exportarExcel = function(){
       dec2(o.bruto),
       o.tc || '',
       o.totalUsd || '',
+      dec2(pagado),
+      dec2(saldo),
       obsCompleto
     ];
   });
@@ -1665,14 +1854,20 @@ window.exportarExcel = function(){
   const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
 
-  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', ''];
+  // Pagado/saldo sumados una sola vez por cada despachante presente en el export
+  // (no hay que sumarlo por cada operación, sino por despachante)
+  const despUnicos = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
+  const totPagado = despUnicos.reduce((a,n) => a + calcularSaldoDespachante(n).pagado, 0);
+  const totSaldo  = despUnicos.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
+
+  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), dec2(totSaldo), ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:30}
+    {wch:12},{wch:12},{wch:12},{wch:8},{wch:10},{wch:14},{wch:14},{wch:30}
   ];
 
   // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
@@ -1682,7 +1877,8 @@ window.exportarExcel = function(){
   // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
-  const colsNumericas = [6,7,8,9,10]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+  const colsNumericas = [6,7,8,9,10,11,12]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD, TOTAL PAGADO, SALDO PENDIENTE
+  const colsDecimal2  = [6,7,8,11,12]; // columnas que siempre llevan 2 decimales
   const formatoDecimal = '#,##0.00';
   const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
 
@@ -1692,8 +1888,8 @@ window.exportarExcel = function(){
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if(!ws[addr]) ws[addr] = { t: 's', v: '' };
 
-      // VALOR, IVA y SUB TOTAL (columnas 6,7,8) siempre con 2 decimales
-      if(R > 0 && [6,7,8].includes(C) && typeof ws[addr].v === 'number'){
+      // VALOR, IVA, SUB TOTAL, TOTAL PAGADO y SALDO PENDIENTE siempre con 2 decimales
+      if(R > 0 && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].z = formatoDecimal;
       }
 
@@ -1711,7 +1907,7 @@ window.exportarExcel = function(){
           font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
           border: bordeTodo,
           alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: [6,7,8].includes(C) ? formatoDecimal : undefined
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
       } else {
         // Filas de datos
@@ -1719,7 +1915,7 @@ window.exportarExcel = function(){
           font: { sz: 10 },
           border: bordeTodo,
           alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: [6,7,8].includes(C) ? formatoDecimal : undefined
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
       }
     }
