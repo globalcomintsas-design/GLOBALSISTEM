@@ -2336,18 +2336,18 @@ window.renderRamiro = function(){
   document.getElementById('ramiro-kpis').innerHTML = `
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">Total a pagar (histórico)</div>
-      <div class="kpi-val" style="color:#dc2626;">USD ${fmt(totalUsd)}</div>
-      <div class="kpi-sub">≈ $${fmt(totalPesos)}</div>
+      <div class="kpi-val" style="color:#dc2626;">$${fmt(totalPesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(totalUsd)}</div>
     </div>
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">⚠️ Pendiente de pago</div>
-      <div class="kpi-val" style="color:#dc2626;">USD ${fmt(pendienteUsd)}</div>
-      <div class="kpi-sub">≈ $${fmt(pendientePesos)}</div>
+      <div class="kpi-val" style="color:#dc2626;">$${fmt(pendientePesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(pendienteUsd)}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">✅ Ya pagado</div>
-      <div class="kpi-val" style="color:#059669;">USD ${fmt(pagadoUsd)}</div>
-      <div class="kpi-sub">≈ $${fmt(pagadoPesos)}</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt(pagadoPesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(pagadoUsd)}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Mudanzas</div>
