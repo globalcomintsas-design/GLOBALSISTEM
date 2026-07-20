@@ -26,7 +26,7 @@ body{font-family:'DM Sans',sans-serif;background:#f0f4f8;min-height:100vh;color:
 .page-sub{font-size:13px;color:#64748b;margin-top:4px;}
 
 /* TABS */
-.tabs{display:flex;gap:4px;background:#e2e8f0;padding:4px;border-radius:12px;width:fit-content;margin-bottom:24px;}
+.tabs{display:flex;gap:4px;background:#e2e8f0;padding:4px;border-radius:12px;width:fit-content;margin-bottom:24px;flex-wrap:wrap;}
 .tab{padding:8px 18px;border-radius:9px;border:none;background:transparent;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;color:#64748b;transition:all .15s;}
 .tab.active{background:#fff;color:#1e3a8a;box-shadow:0 1px 4px rgba(0,0,0,0.12);}
 
@@ -109,6 +109,7 @@ td.mono{font-family:monospace;font-size:12px;}
 .periodo-bar{display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
 .periodo-bar select{padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
 .periodo-bar select:focus{border-color:#1e3a8a;}
+.periodo-bar input[type=date]{padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;}
 
 /* TOAST */
 .toast{position:fixed;bottom:24px;right:24px;background:#1e3a8a;color:#fff;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,0.2);transform:translateY(80px);opacity:0;transition:all .3s;z-index:1000;}
@@ -131,6 +132,12 @@ td.mono{font-family:monospace;font-size:12px;}
 }
 .spinner.dark{border-color:rgba(30,58,138,0.2);border-top-color:#1e3a8a;}
 @keyframes spin{ to{ transform:rotate(360deg); } }
+
+/* PAGINACION */
+.pagin-bar{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid #f1f5f9;}
+.pagin-bar button{background:#eff6ff;color:#1e3a8a;border:1.5px solid #bfdbfe;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.pagin-bar button:disabled{opacity:.4;cursor:not-allowed;}
+.pagin-bar span{font-size:13px;font-weight:700;color:#1e3a8a;}
 
 /* RESPONSIVE */
 @media(max-width:600px){
@@ -165,6 +172,7 @@ td.mono{font-family:monospace;font-size:12px;}
     <button class="tab active" onclick="switchTab('cargar')">➕ Cargar Operación</button>
     <button class="tab" onclick="switchTab('listado')">📋 Listado</button>
     <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab" onclick="switchTab('saldos')">💰 Saldos</button>
     <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
     <button class="tab" onclick="switchTab('mudanzas')">📦 Mudanzas</button>
     <button class="tab" onclick="switchTab('ramiro')">👷 Cuenta Ramiro</button>
@@ -172,78 +180,6 @@ td.mono{font-family:monospace;font-size:12px;}
 
   <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
   <div id="tab-cargar">
-
-    <!-- PAGOS Y SALDOS (colapsable) -->
-    <div class="tarifas-bar">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="togglePagos()">
-        <h3 style="margin:0;">💰 Pagos y saldos por despachante</h3>
-        <span id="pagos-toggle-icon" style="font-size:18px;color:#1e3a8a;">🔒</span>
-      </div>
-      <div id="pagos-body" style="display:none;margin-top:14px;">
-
-        <div class="form-row" style="margin-bottom:16px;">
-          <div class="form-group">
-            <label>Despachante</label>
-            <select id="pago_despachante">
-              <option value="">Seleccioná...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Fecha del pago</label>
-            <input type="date" id="pago_fecha">
-          </div>
-          <div class="form-group">
-            <label>Monto pagado ($)</label>
-            <input type="number" id="pago_monto" placeholder="$ 0">
-          </div>
-          <div class="form-group">
-            <label>Observación</label>
-            <input type="text" id="pago_obs" placeholder="Transferencia, efectivo, a cuenta...">
-          </div>
-          <div class="form-group" style="align-self:end;">
-            <button class="btn-primary" onclick="guardarPago()">💾 Registrar pago</button>
-          </div>
-        </div>
-
-        <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:8px;">Saldo por despachante</div>
-        <div class="tabla-wrap" style="margin-bottom:18px;">
-          <table>
-            <thead>
-              <tr>
-                <th>Despachante</th>
-                <th>Total facturado</th>
-                <th>Total pagado</th>
-                <th>Saldo pendiente</th>
-              </tr>
-            </thead>
-            <tbody id="tbody-saldos">
-              <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin datos</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;">Historial de pagos</div>
-        </div>
-        <div class="tabla-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Despachante</th>
-                <th>Monto</th>
-                <th>Obs</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="tbody-pagos-hist">
-              <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-      </div>
-    </div>
 
     <!-- TARIFAS CONFIGURABLES -->
     <div class="tarifas-bar">
@@ -306,7 +242,11 @@ td.mono{font-family:monospace;font-size:12px;}
             <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
-            <span class="tarifa-label">Ramiro / Kotinya</span>
+            <span class="tarifa-label">Honorarios Kotinya</span>
+            <span class="tarifa-val"><input type="number" id="t_kotinya" value="85" step="1"> USD</span>
+          </div>
+          <div class="tarifa-item">
+            <span class="tarifa-label">Pago a Ramiro</span>
             <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
           </div>
           <div class="tarifa-item">
@@ -532,12 +472,14 @@ td.mono{font-family:monospace;font-size:12px;}
         <h3 style="margin:0;">📋 Operaciones registradas</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <div class="periodo-bar" style="margin:0;">
-            <select id="filtro_despachante" onchange="renderTabla()">
+            <select id="filtro_despachante" onchange="resetPaginaListado()">
               <option value="">Todos los despachantes</option>
             </select>
-            <select id="filtro_mes" onchange="renderTabla()">
+            <select id="filtro_mes" onchange="resetPaginaListado()">
               <option value="">Todos los meses</option>
             </select>
+            <input type="date" id="filtro_fecha" onchange="resetPaginaListado()">
+            <button class="btn-outline" onclick="document.getElementById('filtro_fecha').value='';resetPaginaListado()">✕ Día</button>
           </div>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
           <button class="btn-outline" id="btn-corregir-etiquetas" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
@@ -571,6 +513,7 @@ td.mono{font-family:monospace;font-size:12px;}
           <tfoot id="tfoot-ops"></tfoot>
         </table>
       </div>
+      <div id="listado-paginacion"></div>
     </div>
   </div>
 
@@ -586,6 +529,77 @@ td.mono{font-family:monospace;font-size:12px;}
     </div>
     <div class="kpis" id="kpis-wrap"></div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;" id="dash-detalle"></div>
+  </div>
+
+  <!-- ═══════════════ TAB: SALDOS ═══════════════ -->
+  <div id="tab-saldos" style="display:none;">
+
+    <div class="section-card">
+      <h3>💰 Registrar pago</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Despachante</label>
+          <select id="pago_despachante">
+            <option value="">Seleccioná...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha del pago</label>
+          <input type="date" id="pago_fecha">
+        </div>
+        <div class="form-group">
+          <label>Monto pagado ($)</label>
+          <input type="number" id="pago_monto" placeholder="$ 0">
+        </div>
+        <div class="form-group">
+          <label>Observación</label>
+          <input type="text" id="pago_obs" placeholder="Transferencia, efectivo, a cuenta...">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn-primary" onclick="guardarPago()">💾 Registrar pago</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h3>⚖️ Saldo por despachante</h3>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Despachante</th>
+              <th>Total facturado</th>
+              <th>Total pagado</th>
+              <th>Saldo pendiente</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-saldos">
+            <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin datos</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h3>🧾 Historial de pagos</h3>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Despachante</th>
+              <th>Monto</th>
+              <th>Obs</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-pagos-hist">
+            <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <!-- ═══════════════ TAB: CLIENTES ═══════════════ -->
@@ -862,6 +876,10 @@ let esKotinya    = false;
 let opEditandoId = null;
 let datosCargados = false;
 
+// Paginación del listado
+let listadoPage = 1;
+const LISTADO_PAGE_SIZE = 15;
+
 // ── UTILS ──
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
 window.fmt = fmt;
@@ -891,26 +909,16 @@ window.toggleTarifas = function(){
 
 // ── SWITCH TAB ──
 window.switchTab = function(tab){
-  ['cargar','listado','dashboard','clientes','mudanzas','ramiro'].forEach(t => {
+  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn,i) => {
-    btn.classList.toggle('active', ['cargar','listado','dashboard','clientes','mudanzas','ramiro'][i]===tab);
+    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro'][i]===tab);
   });
-  if(tab==='cargar')    renderSaldos();
   if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='saldos')    renderSaldos();
   if(tab==='ramiro')    renderRamiro();
-};
-
-// ── TOGGLE PAGOS ──
-window.togglePagos = function(){
-  const body = document.getElementById('pagos-body');
-  const icon = document.getElementById('pagos-toggle-icon');
-  const open = body.style.display === 'none';
-  body.style.display = open ? 'block' : 'none';
-  icon.textContent = open ? '🔓' : '🔒';
-  if(open) renderSaldos();
 };
 
 // ── AUTOCOMPLETE ──
@@ -989,9 +997,9 @@ onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDe
   renderFiltros();
   // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
-  if(tabActivo.includes('Cargar Operación')) renderSaldos();
   if(tabActivo.includes('Listado'))   renderTabla();
   if(tabActivo.includes('Dashboard')) renderDashboard();
+  if(tabActivo.includes('Saldos'))    renderSaldos();
   if(tabActivo.includes('Ramiro'))    renderRamiro();
   recalcularFormulario();
 });
@@ -1036,12 +1044,13 @@ window.onTipoDespachoChange = function(){
 
   const badge = document.getElementById('premium-badge');
   const tApod = parseFloat(document.getElementById('t_apoderado').value) || 100;
+  const tKot  = parseFloat(document.getElementById('t_kotinya').value) || 85;
   const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
 
   if(['desp_externo','apoderado','kotinya'].includes(tipo)){
     badge.style.display = 'inline-block';
     if(tipo === 'apoderado')    badge.textContent = `APODERADO USD ${tApod}`;
-    else if(tipo === 'kotinya') badge.textContent = `KOTINYA · RAMIRO USD ${tRam}`;
+    else if(tipo === 'kotinya') badge.textContent = `KOTINYA USD ${tKot} · PAGO RAMIRO USD ${tRam}`;
     else                        badge.textContent = '+20% PREMIUM';
   } else {
     badge.style.display = 'none';
@@ -1139,7 +1148,7 @@ function getTarifas(){
   if(_esApoderado){
     usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
   } else if(_esKotinya){
-    usd(parseFloat(document.getElementById('t_ramiro_op').value) || 30, 'Kotinya/Ramiro');
+    usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
   } else if(esMultinota){
     usd(parseFloat(document.getElementById('t_multinota').value) || 2, 'Multinota');
   } else if(!esMIC){
@@ -1515,19 +1524,28 @@ function renderTabla(){
     document.getElementById('tfoot-ops').innerHTML = '';
     return;
   }
-  const filtCorr = document.getElementById('filtro_despachante')?.value || '';
-  const filtMes  = document.getElementById('filtro_mes')?.value || '';
+  const filtCorr  = document.getElementById('filtro_despachante')?.value || '';
+  const filtMes   = document.getElementById('filtro_mes')?.value || '';
+  const filtFecha = document.getElementById('filtro_fecha')?.value || '';
   let ops = [...operaciones];
-  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
-  if(filtMes)  ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
+  if(filtCorr)  ops = ops.filter(o => o.despachante === filtCorr);
+  if(filtMes)   ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
+  if(filtFecha) ops = ops.filter(o => o.fecha === filtFecha);
 
   if(!ops.length){
     tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
     document.getElementById('tfoot-ops').innerHTML = '';
+    document.getElementById('listado-paginacion').innerHTML = '';
     return;
   }
 
-  tbody.innerHTML = ops.map(o => `
+  const totalPaginas = Math.max(1, Math.ceil(ops.length / LISTADO_PAGE_SIZE));
+  if(listadoPage > totalPaginas) listadoPage = totalPaginas;
+  if(listadoPage < 1) listadoPage = 1;
+  const inicio = (listadoPage - 1) * LISTADO_PAGE_SIZE;
+  const opsPagina = ops.slice(inicio, inicio + LISTADO_PAGE_SIZE);
+
+  tbody.innerHTML = opsPagina.map(o => `
     <tr>
       <td class="mono">${o.numOp||'-'}</td>
       <td>${o.fecha||''}</td>
@@ -1564,8 +1582,25 @@ function renderTabla(){
       <td style="color:#059669;">$${fmt(totBruto)}</td>
       <td colspan="3"></td>
     </tr>`;
+
+  document.getElementById('listado-paginacion').innerHTML = `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaListado(-1)" ${listadoPage<=1?'disabled':''}>‹ Anterior</button>
+      <span>${listadoPage}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaListado(1)" ${listadoPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
 }
 window.renderTabla = renderTabla;
+
+window.cambiarPaginaListado = function(delta){
+  listadoPage += delta;
+  renderTabla();
+};
+
+window.resetPaginaListado = function(){
+  listadoPage = 1;
+  renderTabla();
+};
 
 // ── RENDER FILTROS ──
 function renderFiltros(){
@@ -1620,8 +1655,8 @@ window.renderDashboard = function(){
     </div>
     <div class="kpi">
       <div class="kpi-label">Total bruto facturado</div>
-      <div class="kpi-val">$${fmt(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt(totNeto)}</div>
+      <div class="kpi-val">$${fmt2(totBruto)}</div>
+      <div class="kpi-sub">Neto: $${fmt2(totNeto)}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total USD facturado</div>
@@ -1629,7 +1664,7 @@ window.renderDashboard = function(){
     </div>
     <div class="kpi">
       <div class="kpi-label">Promedio por operación</div>
-      <div class="kpi-val">$${ops.length ? fmt(totBruto/ops.length) : 0}</div>
+      <div class="kpi-val">$${ops.length ? fmt2(totBruto/ops.length) : '0,00'}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">💰 Total pagado</div>
@@ -1664,7 +1699,7 @@ window.renderDashboard = function(){
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
             const { pagado, saldo } = calcularSaldoDespachante(k);
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
-            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td><td style="padding:7px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:7px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
+            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:7px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:7px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
           }).join('')}
         </tbody>
       </table>
@@ -1675,7 +1710,7 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Mes</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
           ).join('')}
         </tbody>
       </table>
@@ -1829,9 +1864,11 @@ function renderTablaClientes(){
 window.exportarExcel = function(){
   const filtCorr = document.getElementById('filtro_despachante').value;
   const filtMes  = document.getElementById('filtro_mes').value;
+  const filtFecha = document.getElementById('filtro_fecha')?.value || '';
   let ops = [...operaciones];
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
+  if(filtFecha) ops = ops.filter(o => o.fecha === filtFecha);
 
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
 
@@ -1839,6 +1876,7 @@ window.exportarExcel = function(){
   let pagosFiltrados = [...pagos];
   if(filtCorr) pagosFiltrados = pagosFiltrados.filter(p => p.despachante === filtCorr);
   if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
+  if(filtFecha) pagosFiltrados = pagosFiltrados.filter(p => p.fecha === filtFecha);
 
   const fmtFechaAR = (iso) => {
     if(!iso) return '';
