@@ -1659,7 +1659,7 @@ window.renderDashboard = function(){
     <div class="section-card" style="margin:0;">
       <h3>Por despachante</h3>
       <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th><th style="padding:7px;text-align:right;">Pagado $</th><th style="padding:7px;text-align:right;">Saldo $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th><th style="padding:7px;text-align:right;">Pagado $</th><th style="padding:7px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
             const { pagado, saldo } = calcularSaldoDespachante(k);
@@ -1672,7 +1672,7 @@ window.renderDashboard = function(){
     <div class="section-card" style="margin:0;">
       <h3>Por mes</h3>
       <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;"><th style="padding:7px;text-align:left;">Mes</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Mes</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
             `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt(v.bruto)}</td></tr>`
@@ -1904,9 +1904,8 @@ window.exportarExcel = function(){
   const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
-  const totSaldo  = totBruto - totPagado;
 
-  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), 'Saldo: $' + dec2(totSaldo).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2})];
+  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto - totPagado), '', '', dec2(totPagado), ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
