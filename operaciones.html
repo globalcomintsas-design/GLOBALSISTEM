@@ -1295,7 +1295,7 @@ function construirDatosOperacion(){
     despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
     destinacion: document.getElementById('op_destinacion').value.trim().toUpperCase(),
-    canal: document.getElementById('op_canal').value,
+    canal: (esMIC || esMultinota) ? '' : document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
     tipo: document.getElementById('op_tipo').value,
     mic: document.getElementById('op_mic').value.trim().toUpperCase(),
@@ -1559,7 +1559,7 @@ function renderTabla(){
       <td class="mono">${o.destinacion||''}</td>
       <td class="mono">${o.mic||'-'}</td>
       <td style="font-size:11px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${o.toma||''}">${o.toma||'-'}</td>
-      <td><span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span></td>
+      <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
       <td class="mono">${o.tc||''}</td>
       <td class="mono">${o.totalUsd||''}</td>
       <td style="color:#1e3a8a;font-weight:600;">$${fmt(o.neto)}</td>
@@ -1725,7 +1725,7 @@ window.renderDashboard = function(){
 
 // ── CORREGIR ETIQUETAS VIEJAS (Sobre→Armado, SENASA-P→SENASA-Embalaje) ──
 window.migrarEtiquetasAdicionales = async function(){
-  if(!confirm('Esto va a corregir el texto de "Sobre" → "Armado" y "SENASA-P" → "SENASA-Embalaje" en las operaciones ya guardadas. ¿Continuar?')) return;
+  if(!confirm('Esto va a corregir el texto de "Sobre" → "Armado", "SENASA-P" → "SENASA-Embalaje" y va a quitar el canal (V/N/R) de las operaciones MIC y Multinota ya guardadas. ¿Continuar?')) return;
 
   const btn = document.getElementById('btn-corregir-etiquetas');
   const textoOriginal = btn.innerHTML;
@@ -1735,16 +1735,25 @@ window.migrarEtiquetasAdicionales = async function(){
   try {
     let corregidas = 0;
     for(const o of operaciones){
-      if(!o.adicionales) continue;
-      const nuevo = o.adicionales
-        .replace(/\bSobre\b/g, 'Armado')
-        .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
-      if(nuevo !== o.adicionales){
-        await updateDoc(doc(db,'despachantees_ops', o.id), { adicionales: nuevo });
+      const cambios = {};
+
+      if(o.adicionales){
+        const nuevo = o.adicionales
+          .replace(/\bSobre\b/g, 'Armado')
+          .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
+        if(nuevo !== o.adicionales) cambios.adicionales = nuevo;
+      }
+
+      if((o.tipo === 'MIC' || o.tipo === 'MULTINOTA') && o.canal){
+        cambios.canal = '';
+      }
+
+      if(Object.keys(cambios).length){
+        await updateDoc(doc(db,'despachantees_ops', o.id), cambios);
         corregidas++;
       }
     }
-    toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones con etiquetas viejas');
+    toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones para corregir');
   } finally {
     btn.disabled = false;
     btn.innerHTML = textoOriginal;
