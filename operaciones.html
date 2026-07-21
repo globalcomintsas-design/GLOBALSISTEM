@@ -481,6 +481,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <input type="date" id="filtro_fecha" onchange="resetPaginaListado()">
             <button class="btn-outline" onclick="document.getElementById('filtro_fecha').value='';resetPaginaListado()">✕ Día</button>
           </div>
+          <button class="btn-outline" onclick="asignarFacturaMasiva()">🧾 Asignar factura (lote)</button>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
           <button class="btn-outline" id="btn-corregir-etiquetas" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
         </div>
@@ -502,13 +503,15 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Neto $</th>
               <th>IVA $</th>
               <th>Total $</th>
+              <th>N° Factura</th>
+              <th>Cobertura</th>
               <th>Adicionales</th>
               <th>Obs</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="tbody-ops">
-            <tr><td colspan="16" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>
+            <tr><td colspan="18" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>
           </tbody>
           <tfoot id="tfoot-ops"></tfoot>
         </table>
@@ -723,6 +726,13 @@ td.mono{font-family:monospace;font-size:12px;}
             <option value="si">✅ Pagado</option>
           </select>
         </div>
+        <div class="form-group">
+          <label>¿Cobrado?</label>
+          <select id="mud_cobrado">
+            <option value="no">❌ Pendiente de cobro</option>
+            <option value="si">✅ Cobrado</option>
+          </select>
+        </div>
       </div>
 
       <!-- RESUMEN MUDANZA -->
@@ -780,13 +790,14 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Bruto</th>
               <th>Gastos</th>
               <th>Nos queda</th>
+              <th>Cobrado</th>
               <th>Ramiro</th>
               <th>Obs</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-mudanzas">
-            <tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
+            <tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
           </tbody>
         </table>
       </div>
@@ -1521,11 +1532,51 @@ window.eliminarCliente = async function(id){
   toast('Despachante eliminado');
 };
 
+// ── CALCULAR COBERTURA FIFO (pagos sin factura asignada se aplican a las operaciones más viejas) ──
+function calcularCoberturaFIFO(nombre){
+  const { pagado } = calcularSaldoDespachante(nombre);
+  const ops = operaciones.filter(o => o.despachante === nombre).sort((a,b)=>(a.ts||0)-(b.ts||0));
+  let restante = pagado;
+  return ops.map(o => {
+    const cubierto = Math.min(o.bruto||0, Math.max(0, restante));
+    restante -= cubierto;
+    return { ...o, cubierto, pendiente: (o.bruto||0) - cubierto };
+  });
+}
+window.calcularCoberturaFIFO = calcularCoberturaFIFO;
+
+// ── ASIGNAR N° FACTURA A UNA OPERACIÓN ──
+window.asignarFactura = async function(id, numFactura){
+  const val = (numFactura||'').trim().toUpperCase();
+  try {
+    await updateDoc(doc(db,'despachantees_ops', id), { numFactura: val });
+    toast(val ? '🧾 Factura asignada: ' + val : 'Factura quitada');
+  } catch(e){
+    toast('❌ Error al asignar factura: ' + e.message);
+  }
+};
+
+// ── ASIGNAR N° FACTURA EN LOTE (para mensuales/semanales) ──
+window.asignarFacturaMasiva = async function(){
+  const despachante = document.getElementById('filtro_despachante').value;
+  const mes = document.getElementById('filtro_mes').value;
+  if(!despachante){ toast('⚠️ Elegí un despachante en el filtro para asignar en lote'); return; }
+  const numFactura = prompt('N° de factura a asignar a las operaciones filtradas de ' + despachante + (mes?(' ('+mes+')'):'') + ' que todavía no tengan factura:');
+  if(!numFactura) return;
+  const val = numFactura.trim().toUpperCase();
+  const ops = operaciones.filter(o => o.despachante === despachante && (!mes || o.fecha?.startsWith(mes)) && !o.numFactura);
+  if(!ops.length){ toast('No hay operaciones sin factura con esos filtros'); return; }
+  for(const o of ops){
+    await updateDoc(doc(db,'despachantees_ops', o.id), { numFactura: val });
+  }
+  toast(`✅ Factura ${val} asignada a ${ops.length} operaciones`);
+};
+
 // ── RENDER TABLA OPERACIONES ──
 function renderTabla(){
   const tbody = document.getElementById('tbody-ops');
   if(!datosCargados){
-    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>';
     document.getElementById('tfoot-ops').innerHTML = '';
     return;
   }
@@ -1538,11 +1589,17 @@ function renderTabla(){
   if(filtFecha) ops = ops.filter(o => o.fecha === filtFecha);
 
   if(!ops.length){
-    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="18" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
     document.getElementById('tfoot-ops').innerHTML = '';
     document.getElementById('listado-paginacion').innerHTML = '';
     return;
   }
+
+  // Cobertura FIFO por operación (solo relevante para pagos sin factura asignada)
+  const coberturaPorId = {};
+  [...new Set(ops.map(o=>o.despachante))].forEach(desp => {
+    calcularCoberturaFIFO(desp).forEach(o => coberturaPorId[o.id] = o.pendiente);
+  });
 
   const totalPaginas = Math.max(1, Math.ceil(ops.length / LISTADO_PAGE_SIZE));
   if(listadoPage > totalPaginas) listadoPage = totalPaginas;
@@ -1550,7 +1607,17 @@ function renderTabla(){
   const inicio = (listadoPage - 1) * LISTADO_PAGE_SIZE;
   const opsPagina = ops.slice(inicio, inicio + LISTADO_PAGE_SIZE);
 
-  tbody.innerHTML = opsPagina.map(o => `
+  tbody.innerHTML = opsPagina.map(o => {
+    const pendiente = coberturaPorId[o.id];
+    let coberturaHtml;
+    if(o.numFactura){
+      coberturaHtml = '<span class="tag" style="background:#dbeafe;color:#1e40af;">Por factura</span>';
+    } else if(pendiente > 0.5){
+      coberturaHtml = `<span class="tag" style="background:#fee2e2;color:#991b1b;">$${fmt(pendiente)} pend.</span>`;
+    } else {
+      coberturaHtml = '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Cubierta</span>';
+    }
+    return `
     <tr>
       <td class="mono">${o.numOp||'-'}</td>
       <td>${o.fecha||''}</td>
@@ -1565,6 +1632,12 @@ function renderTabla(){
       <td style="color:#1e3a8a;font-weight:600;">$${fmt(o.neto)}</td>
       <td>$${fmt(o.iva)}</td>
       <td style="color:#059669;font-weight:700;">$${fmt(o.bruto)}</td>
+      <td>
+        <input type="text" style="width:100px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:11px;font-family:monospace;"
+          value="${o.numFactura||''}" placeholder="s/fact"
+          onchange="asignarFactura('${o.id}', this.value)">
+      </td>
+      <td>${coberturaHtml}</td>
       <td>${o.adicionales ? o.adicionales.split(',').map(a=>`<span class="tag">${a.trim()}</span>`).join('') : '-'}</td>
       <td style="color:#64748b;font-size:11px;">${o.obs||''}</td>
       <td style="display:flex;gap:6px;">
@@ -1572,7 +1645,8 @@ function renderTabla(){
         <button class="btn-danger" onclick="eliminarOp('${o.id}')">✕</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
   const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
@@ -1585,7 +1659,7 @@ function renderTabla(){
       <td style="color:#1e3a8a;">$${fmt(totNeto)}</td>
       <td>$${fmt(totIva)}</td>
       <td style="color:#059669;">$${fmt(totBruto)}</td>
-      <td colspan="3"></td>
+      <td colspan="5"></td>
     </tr>`;
 
   document.getElementById('listado-paginacion').innerHTML = `
@@ -1842,7 +1916,7 @@ function renderSaldos(){
       tbodyHist.innerHTML = ordenados.map(p => `
         <tr>
           <td>${p.fecha||''}</td>
-          <td><strong>${p.despachante||''}</strong></td>
+          <td><strong>${p.despachante||''}</strong>${p.numFactura?` <span class="tag" style="background:#dbeafe;color:#1e40af;">Fact. ${p.numFactura}</span>`:(p.origenCaja?' <span class="tag" style="background:#dcfce7;color:#166534;">Auto Caja</span>':'')}</td>
           <td style="color:#059669;font-weight:700;">$${fmt2(p.monto)}</td>
           <td style="font-size:11px;color:#64748b;">${p.obs||''}</td>
           <td><button class="btn-danger" onclick="eliminarPago('${p.id}')">✕</button></td>
@@ -2118,6 +2192,7 @@ window.guardarMudanza = async function(){
     totalGastos: vals.totalGastos,
     netoFinal: vals.netofinal,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    cobrado: document.getElementById('mud_cobrado').value === 'si',
     obs: document.getElementById('mud_obs').value.trim(),
     cargadoPor: user.username,
     ts: Date.now()
@@ -2141,6 +2216,7 @@ window.limpiarMudanza = function(){
   document.getElementById('mud_otros').value = '0';
   document.getElementById('mud_obs').value = '';
   document.getElementById('mud_ramiro_pagado').value = 'no';
+  document.getElementById('mud_cobrado').value = 'no';
   document.getElementById('mud_tc').value = '';
   recalcMudanza();
 };
@@ -2169,6 +2245,7 @@ window.editarMudanza = function(id){
   document.getElementById('mud_otros').value       = m.otros || 0;
   document.getElementById('mud_obs').value         = m.obs || '';
   document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
+  document.getElementById('mud_cobrado').value     = m.cobrado ? 'si' : 'no';
 
   // Cambiar título y botones del formulario
   document.getElementById('mud-form-titulo').textContent = '✏️ Editando mudanza: ' + m.cliente;
@@ -2211,6 +2288,7 @@ window.actualizarMudanza = async function(){
     totalGastos: vals.totalGastos,
     netoFinal: vals.netofinal,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    cobrado: document.getElementById('mud_cobrado').value === 'si',
     obs: document.getElementById('mud_obs').value.trim(),
     modificadoPor: user.username,
     tsEdit: Date.now()
@@ -2237,7 +2315,7 @@ window.cancelarEdicionMudanza = function(){
 function renderMudanzas(){
   const tbody = document.getElementById('tbody-mudanzas');
   if(!mudanzas.length){
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
     return;
   }
   tbody.innerHTML = mudanzas.map(m => `
@@ -2251,6 +2329,9 @@ function renderMudanzas(){
       <td style="font-weight:700;">$${fmt(m.bruto)}</td>
       <td style="color:#dc2626;">$${fmt(m.totalGastos)}</td>
       <td style="color:#059669;font-weight:700;">$${fmt(m.netoFinal)}</td>
+      <td>${m.cobrado
+        ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Cobrado</span>'
+        : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Sin cobrar</span>'}</td>
       <td>${m.ramiroPagado === 'si'
         ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
         : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
@@ -2264,12 +2345,13 @@ function renderMudanzas(){
 }
 
 window.exportarMudanzas = function(){
-  const header = ['Fecha','Cliente','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Ramiro Pagado','Obs'];
+  const header = ['Fecha','Cliente','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Cobrado','Ramiro Pagado','Obs'];
   const rows = mudanzas.map(m => [
     m.fecha, m.cliente, m.tc, m.valorUsd,
     Math.round(m.honorNeto), Math.round(m.iva), Math.round(m.bruto),
     Math.round(m.precinto), Math.round(m.fiscal), m.ramiroUsd, Math.round(m.gastoRamiro),
     Math.round(m.otros), Math.round(m.totalGastos), Math.round(m.netoFinal),
+    m.cobrado ? 'SI' : 'NO',
     m.ramiroPagado === 'si' ? 'SI' : 'NO', m.obs
   ]);
   let csv = [header, ...rows].map(r => r.map(v => `"${v??''}"`).join(',')).join('\n');
@@ -2298,6 +2380,7 @@ window.renderRamiro = function(){
       ramiroUsd: o.ramiroDeuda || 30,
       pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
       estado: o.ramiroOPagado || 'no',
+      cobrado: true, // las operaciones normales no dependen de "cobrado", solo las mudanzas
       id: o.id,
       col: 'ops'
     });
@@ -2312,6 +2395,7 @@ window.renderRamiro = function(){
       ramiroUsd: m.ramiroUsd || 190,
       pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
       estado: m.ramiroPagado || 'no',
+      cobrado: !!m.cobrado,
       id: m.id,
       col: 'mudanzas'
     });
@@ -2381,7 +2465,9 @@ window.renderRamiro = function(){
         </td>
         <td>
           ${i.estado === 'no'
-            ? `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`
+            ? (i.col === 'mudanzas' && !i.cobrado
+                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar</span>'
+                : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
             : ''}
         </td>
       </tr>
@@ -2397,10 +2483,10 @@ window.pagarRamiroItem = async function(id, col){
 };
 
 window.marcarTodoPagadoRamiro = async function(){
-  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro?')) return;
+  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas ya cobradas)')) return;
   const pending = [
     ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
-    ...mudanzas.filter(m => m.ramiroPagado !== 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
+    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && m.cobrado).map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
   ];
   for(const p of pending){
     await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
