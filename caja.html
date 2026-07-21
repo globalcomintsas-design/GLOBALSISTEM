@@ -485,6 +485,11 @@ let allUsuarios = {};
 let editandoId = null;
 let editandoUsuario = null;
 
+// ── Vinculación con módulo Operaciones (corresponsales) ──
+let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html
+let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobrado")
+let opsPorFactura = {};       // { "0001-00000123": true } - facturas asignadas a operaciones
+
 function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
 function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -555,6 +560,21 @@ function initFirestore() {
     allVencimientos = snap.docs.map(d=>({id:d.id,...d.data()}));
     renderVencimientos();
   });
+
+  // ── Listeners del módulo Operaciones (solo lectura desde Caja) ──
+  onSnapshot(collection(db,'corresponsales_clientes'), snap => {
+    despachantesOp = snap.docs.map(d => (d.data().nombre||'').toUpperCase());
+  });
+  onSnapshot(collection(db,'corresponsales_mudanzas'), snap => {
+    mudanzasPend = snap.docs.map(d=>({id:d.id,...d.data()}));
+  });
+  onSnapshot(collection(db,'despachantees_ops'), snap => {
+    opsPorFactura = {};
+    snap.docs.forEach(d => {
+      const o = d.data();
+      if (o.numFactura) opsPorFactura[o.numFactura.trim().toUpperCase()] = true;
+    });
+  });
 }
 
 // CHEQUES VENCIMIENTOS
@@ -617,9 +637,61 @@ window.guardarMovimiento = async function() {
     if (!data.numeroCheque) { toast('Completá el número de cheque','error'); return; }
   }
   await addDoc(collection(db,'movimientos'), data);
+
+  // ── Vinculación automática con Operaciones (solo Ingresos) ──
+  if (tipo === 'Ingreso') {
+    try { await vincularIngresoConOperaciones({ cliente, factura, importe, detalle }); }
+    catch(e){ console.warn('Vinculación con Operaciones falló:', e); }
+  }
+
   limpiarForm();
   toast('Movimiento guardado ✓','success');
 };
+
+// ── Vincula un ingreso de Caja con el módulo Operaciones (despachantees_ops / mudanzas) ──
+async function vincularIngresoConOperaciones({ cliente, factura, importe, detalle }) {
+  const clienteUpper = (cliente||'').trim().toUpperCase();
+  const facturaKey = (factura||'').trim().toUpperCase();
+
+  // 1 - Si tiene N° de factura y esa factura está asignada a operaciones → pago exacto por factura
+  if (facturaKey && opsPorFactura[facturaKey]) {
+    await addDoc(collection(db,'despachantees_pagos'), {
+      despachante: clienteUpper,
+      fecha: today(),
+      monto: importe,
+      numFactura: facturaKey,
+      obs: 'Auto desde Caja - Factura ' + facturaKey,
+      cargadoPor: currentUser.nombre,
+      origenCaja: true,
+      ts: Date.now()
+    });
+    toast('🔗 Vinculado a Operaciones por factura ' + facturaKey, 'success');
+  }
+  // 2 - Si no vino con factura (o no matcheó) pero el cliente es un despachante conocido → pago genérico (se aplica FIFO en Operaciones)
+  else if (despachantesOp.includes(clienteUpper)) {
+    await addDoc(collection(db,'despachantees_pagos'), {
+      despachante: clienteUpper,
+      fecha: today(),
+      monto: importe,
+      obs: 'Auto desde Caja (sin factura): ' + (detalle||''),
+      cargadoPor: currentUser.nombre,
+      origenCaja: true,
+      ts: Date.now()
+    });
+    toast('🔗 Vinculado a Operaciones (saldo por despachante)', 'success');
+  }
+
+  // 3 - Marcar mudanza como cobrada si el cliente coincide con una mudanza pendiente de cobro
+  const mud = mudanzasPend.find(m => (m.cliente||'').toUpperCase() === clienteUpper && !m.cobrado);
+  if (mud) {
+    await updateDoc(doc(db,'corresponsales_mudanzas', mud.id), {
+      cobrado: true,
+      fechaCobro: today(),
+      montoCobrado: importe
+    });
+    toast('📦 Mudanza de ' + clienteUpper + ' marcada como cobrada', 'success');
+  }
+}
 
 window.limpiarForm = function() {
   ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
