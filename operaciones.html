@@ -481,11 +481,41 @@ td.mono{font-family:monospace;font-size:12px;}
             <input type="date" id="filtro_fecha" onchange="resetPaginaListado()">
             <button class="btn-outline" onclick="document.getElementById('filtro_fecha').value='';resetPaginaListado()">✕ Día</button>
           </div>
-          <button class="btn-outline" onclick="asignarFacturaMasiva()">🧾 Asignar factura (lote)</button>
+          <button class="btn-outline" onclick="toggleFacturaLotePanel()">🧾 Asignar factura (lote)</button>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
           <button class="btn-outline" id="btn-corregir-etiquetas" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
         </div>
       </div>
+
+      <div id="factura-lote-panel" class="section-card" style="display:none;border:2px solid #bfdbfe;margin-bottom:16px;">
+        <h3 style="margin:0 0 14px 0;">🧾 Asignar N° de factura en lote</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Despachante</label>
+            <select id="lote_despachante" onchange="actualizarPreviewLote()">
+              <option value="">Seleccioná...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Fecha desde</label>
+            <input type="date" id="lote_fecha_desde" onchange="actualizarPreviewLote()">
+          </div>
+          <div class="form-group">
+            <label>Fecha hasta</label>
+            <input type="date" id="lote_fecha_hasta" onchange="actualizarPreviewLote()">
+          </div>
+          <div class="form-group">
+            <label>N° de factura</label>
+            <input type="text" id="lote_num_factura" placeholder="Ej: A0001-00001234" style="text-transform:uppercase;">
+          </div>
+          <div class="form-group" style="align-self:end;display:flex;gap:8px;">
+            <button class="btn-primary" onclick="ejecutarAsignarFacturaMasiva()">✅ Asignar</button>
+            <button class="btn-outline" onclick="toggleFacturaLotePanel()">Cancelar</button>
+          </div>
+        </div>
+        <div id="lote-preview" style="font-size:12px;color:#64748b;margin-top:10px;font-weight:600;"></div>
+      </div>
+
       <div class="tabla-wrap">
         <table id="tabla-ops">
           <thead>
@@ -1658,20 +1688,58 @@ window.asignarFactura = async function(id, numFactura){
   }
 };
 
-// ── ASIGNAR N° FACTURA EN LOTE (para mensuales/semanales) ──
-window.asignarFacturaMasiva = async function(){
-  const despachante = document.getElementById('filtro_despachante').value;
-  const mes = document.getElementById('filtro_mes').value;
-  if(!despachante){ toast('⚠️ Elegí un despachante en el filtro para asignar en lote'); return; }
-  const numFactura = prompt('N° de factura a asignar a las operaciones filtradas de ' + despachante + (mes?(' ('+mes+')'):'') + ' que todavía no tengan factura:');
-  if(!numFactura) return;
-  const val = numFactura.trim().toUpperCase();
-  const ops = operaciones.filter(o => o.despachante === despachante && (!mes || o.fecha?.startsWith(mes)) && !o.numFactura);
+// ── ASIGNAR N° FACTURA EN LOTE (panel con rango de fechas) ──
+window.toggleFacturaLotePanel = function(){
+  const panel = document.getElementById('factura-lote-panel');
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  if(open){
+    document.getElementById('lote_despachante').value = document.getElementById('filtro_despachante').value || '';
+    document.getElementById('lote_fecha_desde').value = '';
+    document.getElementById('lote_fecha_hasta').value = '';
+    document.getElementById('lote_num_factura').value = '';
+    actualizarPreviewLote();
+  }
+};
+
+function opsParaLote(){
+  const despachante = document.getElementById('lote_despachante').value;
+  const desde = document.getElementById('lote_fecha_desde').value;
+  const hasta = document.getElementById('lote_fecha_hasta').value;
+  if(!despachante) return [];
+  return operaciones.filter(o => o.despachante === despachante
+    && (!desde || (o.fecha || '') >= desde)
+    && (!hasta || (o.fecha || '') <= hasta)
+    && !o.numFactura);
+}
+window.opsParaLote = opsParaLote;
+
+window.actualizarPreviewLote = function(){
+  const despachante = document.getElementById('lote_despachante').value;
+  const prev = document.getElementById('lote-preview');
+  if(!despachante){
+    prev.innerHTML = '<span style="color:#dc2626;">⚠️ Elegí un despachante</span>';
+    return;
+  }
+  const ops = opsParaLote();
+  const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  prev.innerHTML = ops.length
+    ? `${ops.length} operación(es) sin factura por un total de $${fmt2(totBruto)}`
+    : '<span style="color:#dc2626;">No hay operaciones sin factura con esos filtros</span>';
+};
+
+window.ejecutarAsignarFacturaMasiva = async function(){
+  const despachante = document.getElementById('lote_despachante').value;
+  if(!despachante){ toast('⚠️ Elegí un despachante'); return; }
+  const ops = opsParaLote();
   if(!ops.length){ toast('No hay operaciones sin factura con esos filtros'); return; }
+  const val = document.getElementById('lote_num_factura').value.trim().toUpperCase();
+  if(!val){ toast('⚠️ Ingresá el N° de factura'); return; }
   for(const o of ops){
     await updateDoc(doc(db,'despachantees_ops', o.id), { numFactura: val });
   }
   toast(`✅ Factura ${val} asignada a ${ops.length} operaciones`);
+  toggleFacturaLotePanel();
 };
 
 // ── RENDER TABLA OPERACIONES ──
@@ -1789,14 +1857,15 @@ function renderFiltros(){
   const mesSel   = document.getElementById('filtro_mes');
   const corrSelD = document.getElementById('dash_despachante');
   const mesSelD  = document.getElementById('dash_mes');
+  const loteSel  = document.getElementById('lote_despachante');
 
   const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
   const meses   = [...new Set(operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
 
-  [corrSel, corrSelD].forEach(sel => {
+  [corrSel, corrSelD, loteSel].forEach(sel => {
     if(!sel) return;
     const v = sel.value;
-    sel.innerHTML = '<option value="">Todos los despachantes</option>';
+    sel.innerHTML = '<option value="">' + (sel===loteSel ? 'Seleccioná...' : 'Todos los despachantes') + '</option>';
     nombres.forEach(n => { const opt = document.createElement('option'); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
     sel.value = v;
   });
