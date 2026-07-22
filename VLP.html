@@ -146,6 +146,7 @@ tr:hover td{background:#fafbff;}
     <div class="tab" onclick="showTab('pendientes',this)">⏳ Pendientes</div>
     <div class="tab" onclick="showTab('pagadas',this)">✅ Pagadas</div>
     <div class="tab" onclick="showTab('cepas',this)">🌿 CEPAS</div>
+    <div class="tab" onclick="showTab('fechasfaltantes',this)">📅 Fechas Faltantes</div>
     <div class="tab" onclick="showTab('historial',this)">📋 Historial</div>
     <div class="tab" onclick="showTab('log',this)">🔍 Log</div>
   </div>
@@ -355,6 +356,42 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
+    <!-- FECHAS FALTANTES -->
+    <div class="page" id="page-fechasfaltantes">
+      <div class="cards">
+        <div class="card"><div class="card-label">Sin fecha operativa</div><div class="card-value red" id="ffTotal">0</div></div>
+        <div class="card"><div class="card-label">Expo sin fecha</div><div class="card-value blue" id="ffExpo">0</div></div>
+        <div class="card"><div class="card-label">Impo sin fecha</div><div class="card-value purple" id="ffImpo">0</div></div>
+        <div class="card"><div class="card-label">Descartadas del reporte</div><div class="card-value" style="color:#888" id="ffDescartadas">0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          📅 Operaciones sin Fecha Operativa
+        </div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">
+          Estas operaciones no tienen fecha operativa porque en DUX no vino cargada la columna correspondiente
+          (Mercadería a bordo para EXPO, Plaza/Cumplido para el resto). Corregilas en DUX y volvé a importar,
+          o editá la fecha manualmente acá mismo. Si una operación no aplica, quitala del reporte.
+        </div>
+        <div class="search-bar"><input type="text" id="buscarFF" placeholder="Buscar operación, cliente..." oninput="renderFechasFaltantes()" /></div>
+        <div class="filtros">
+          <div><label>Tipo</label><select id="filtroTipoFF" onchange="renderFechasFaltantes()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option></select></div>
+          <div style="display:flex;align-items:center;gap:6px;padding-bottom:6px">
+            <input type="checkbox" id="filtroVerDescartadasFF" onchange="renderFechasFaltantes()" style="width:auto" />
+            <label style="margin:0;font-size:11px">Ver descartadas</label>
+          </div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosFF()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Origen</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaFF"></tbody>
+          </table>
+        </div>
+        <div id="resumenFF" style="margin-top:8px;font-size:12px;color:#666;"></div>
+      </div>
+    </div>
+
     <!-- HISTORIAL IMPORTACIONES -->
     <div class="page" id="page-historial">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -385,7 +422,7 @@ tr:hover td{background:#fafbff;}
         <div class="section-title">Log de Conciliaciones</div>
         <div class="filtros">
           <div><label>Operación</label><input type="text" id="filtroLogOp" placeholder="Número..." oninput="renderLog()" /></div>
-          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option></select></div>
+          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>REPORTE_FECHA_DESCARTADO</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosLog()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div id="logContainer" style="max-height:500px;overflow-y:auto;"></div>
@@ -456,6 +493,13 @@ tr:hover td{background:#fafbff;}
       <button class="modal-close" onclick="cerrarFicha()">✕</button>
     </div>
     <div class="ficha-grid" id="fichaGrid"></div>
+    <div id="fichaFechaOpSection" style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">📅 Corrección manual de Fecha Operativa</div>
+      <div class="form-grid" style="margin-bottom:4px">
+        <div class="field"><label>Fecha Operativa</label><input type="date" id="fichaFechaOperativa" /></div>
+      </div>
+      <div style="font-size:11px;color:#92400e">Dejala vacía y guardá para quitar la fecha manual. Si DUX trae la fecha correcta en un próximo reimport, se actualiza sola.</div>
+    </div>
     <div id="fichaCepasSection" style="display:none">
       <div style="font-size:12px;font-weight:700;color:#16a34a;margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em;">🌿 Datos CEPAS</div>
       <div class="form-grid">
@@ -641,6 +685,7 @@ window.showTab=function(name,el) {
   if(name==='pendientes')renderPendientes();
   if(name==='pagadas')renderPagadas();
   if(name==='cepas')renderCepas();
+  if(name==='fechasfaltantes')renderFechasFaltantes();
   if(name==='historial')renderHistorial();
   if(name==='log')renderLog();
 };
@@ -667,6 +712,7 @@ async function cargarOperaciones() {
   renderPendientes();
   renderPagadas();
   renderCepas();
+  renderFechasFaltantes();
   actualizarSelectVLP();
 }
 
@@ -828,9 +874,17 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     const dest=String(r[COL_DEST]||'');
     const codigoReg=dest.length>=9?dest.substring(5,9):'';
     const tipoOp=REGIMENES[codigoReg]||'REVISAR';
+    // Fecha operativa: SIN fallback cruzado. EXPO sale únicamente de
+    // "Fecha de mercadería a bordo"; el resto (IMPO, ZF, etc.) sale
+    // únicamente de "Plaza / Cumplido". Si la columna que corresponde
+    // no tiene dato, la operación queda SIN fecha (no se busca en la otra).
     let fechaOp=null;
-    if(tipoOp==='EXPORTACION'&&r[COL_BORDO]){fechaOp=xlsxDateToDate(r[COL_BORDO]);if(fechaOp&&isNaN(fechaOp))fechaOp=null;}
-    else if(r[COL_PLAZA]){fechaOp=xlsxDateToDate(r[COL_PLAZA]);if(fechaOp&&isNaN(fechaOp))fechaOp=null;}
+    let fechaVinoDeDux=false;
+    if(tipoOp==='EXPORTACION') {
+      if(r[COL_BORDO]) { fechaOp=xlsxDateToDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+    } else {
+      if(r[COL_PLAZA]) { fechaOp=xlsxDateToDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+    }
     let fechaOfic=xlsxDateToDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
     let fechaBordo=xlsxDateToDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
     let fechaPlaza=xlsxDateToDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
@@ -839,6 +893,17 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     fechaOfic=fechaValidaODefault(fechaOfic,null);
     fechaBordo=fechaValidaODefault(fechaBordo,null);
     fechaPlaza=fechaValidaODefault(fechaPlaza,null);
+
+    // Si DUX no trajo fecha pero la operación ya tenía una cargada a mano
+    // (fecha_operativa_manual), la conservamos para no perder la corrección
+    // manual en el próximo reimport.
+    const existentePrevio=existentes[opNorm];
+    let esManual=false;
+    if(!fechaVinoDeDux && existentePrevio && existentePrevio.fecha_operativa_manual && existentePrevio.fecha_operativa) {
+      const fPrev=existentePrevio.fecha_operativa.toDate?existentePrevio.fecha_operativa.toDate():new Date(existentePrevio.fecha_operativa);
+      if(!isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
+    }
+
     const nuevosDatos={
       operacion:opNorm,operacion_raw:r[COL_OP],cliente:String(r[COL_CLI]||''),
       destinacion:dest,aduana:String(r[COL_ADUANA]||''),codigo_regimen:codigoReg,
@@ -847,6 +912,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       estado:String(r[COL_ESTADO]||''),fecha_oficializacion:fechaOfic,
       fecha_mer_a_bordo:fechaBordo,cumplido_plaza:fechaPlaza,
       fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMes(fechaOp):null,
+      fecha_operativa_manual:esManual,
       observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
       importado_por:currentUser.nombre,dux_archivo:nombreArchivo
     };
@@ -867,7 +933,8 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
           numero_doc_vlp:null,razon_social_vlp:null,importe_vlp:null,origen:'SOLO_DUX',
           origen_pago:null,cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
           cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
-          cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora});
+          cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
+          reporte_fecha_descartado:false});
         logItems.push({tipo:'DUX_IMPORTADO_NUEVO',op:opNorm,desc:`Nueva op desde DUX. Régimen: ${codigoReg} (${tipoOp})`,despues:{tipo_operacion:tipoOp}});
         nuevas++;
       } else if(existente.origen==='SOLO_VLP') {
@@ -1001,11 +1068,11 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
         batch.set(ref,{operacion:opNorm,operacion_raw:opNorm,cliente:'',destinacion:'',
           aduana:'038',codigo_regimen:'',tipo_operacion:'',mercaderia:'',estado_sim:'',
           situacion:'',estado:'',fecha_oficializacion:null,fecha_mer_a_bordo:null,
-          cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,...vlpData,
+          cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,fecha_operativa_manual:false,...vlpData,
           origen:'SOLO_VLP',cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
           cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
           cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
-          importado_por:currentUser.nombre,dux_archivo:''});
+          importado_por:currentUser.nombre,dux_archivo:'',reporte_fecha_descartado:false});
         logItems.push({tipo:'VLP_SIN_DUX',op:opNorm,desc:`VLP antes que DUX. SOLO_VLP. VLP: ${nombreVLP}`,vlp:nombreVLP});
         sinDux++;
       }
@@ -1170,10 +1237,13 @@ function renderDashboard() {
       <span>${badgeTipo(t)} ${t}</span><span style="font-weight:700">${n}</span>
     </div>`).join('');
 
+  const sinFechaOperativa=ops.filter(o=>o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&!o.reporte_fecha_descartado).length;
+
   let alertas=[];
   if(revisar>0)alertas.push(`⚠️ ${revisar} operaciones con régimen REVISAR — requieren atención manual`);
   if(soloVlp>0)alertas.push(`📋 ${soloVlp} operaciones en VLP sin archivo DUX importado aún`);
   if(grupos.a90mas>0)alertas.push(`🔴 ${grupos.a90mas} operaciones pendientes hace más de 90 días`);
+  if(sinFechaOperativa>0)alertas.push(`📅 ${sinFechaOperativa} operaciones sin fecha operativa — no se pueden cobrar hasta corregir en DUX (ver pestaña Fechas Faltantes)`);
   document.getElementById('alertas').innerHTML=alertas.length?alertas.map(a=>`<div style="padding:6px 0;border-bottom:1px solid #f0f4f8;color:#dc2626;">${a}</div>`).join(''):'<span style="color:#16a34a">✓ Sin alertas críticas</span>';
 }
 
@@ -1555,6 +1625,71 @@ window.renderCepas=function() {
 window.limpiarFiltrosCepas=function(){['filtroMesCepas','filtroADCepas','filtroLiquidCepas'].forEach(id=>document.getElementById(id).value='');renderCepas();};
 
 // ====================================================
+// FECHAS FALTANTES (reporte)
+// ====================================================
+window.renderFechasFaltantes=function() {
+  const buscar=(document.getElementById('buscarFF')?.value||'').toLowerCase();
+  const filtTipo=document.getElementById('filtroTipoFF')?.value||'';
+  const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
+
+  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa);
+
+  document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
+  document.getElementById('ffExpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='EXPORTACION').length;
+  document.getElementById('ffImpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='IMPORTACION').length;
+  document.getElementById('ffDescartadas').textContent=base.filter(o=>o.reporte_fecha_descartado).length;
+
+  let fil=verDescartadas?base.filter(o=>o.reporte_fecha_descartado):base.filter(o=>!o.reporte_fecha_descartado);
+  if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')).toLowerCase().includes(buscar));
+  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
+
+  document.getElementById('tablaFF').innerHTML=fil.map(o=>`<tr>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||''}">${clienteCorto(o.cliente)||'-'}</td>
+      <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
+      <td>${badgeTipo(o.tipo_operacion)}</td>
+      <td>${badgeSIM(o.estado_sim)}</td>
+      <td>${badgeOrigen(o.origen)}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn btn-outline btn-sm" title="Editar / cargar fecha" onclick="abrirFicha('${o.id}')">✏️ Editar</button>
+          ${o.reporte_fecha_descartado
+            ?`<button class="btn btn-primary btn-sm" title="Restaurar al reporte" onclick="restaurarReporteFF('${o.id}')">↩ Restaurar</button>`
+            :`<button class="btn btn-danger btn-sm" title="Quitar del reporte" onclick="descartarReporteFF('${o.id}')">✕ Quitar</button>`}
+        </div>
+      </td>
+    </tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">${verDescartadas?'Sin operaciones descartadas':'✓ Sin operaciones con fecha faltante'}</td></tr>`;
+  document.getElementById('resumenFF').textContent=`📄 ${fil.length} operaciones mostradas`;
+};
+
+window.descartarReporteFF=async function(id) {
+  const o=allOps.find(x=>x.id===id);
+  if(!o)return;
+  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:true,ts_actualizacion:new Date()});
+  await logEvento('REPORTE_FECHA_DESCARTADO',o.operacion,'Operación quitada del reporte de fechas faltantes','','',{},{});
+  o.reporte_fecha_descartado=true;
+  renderFechasFaltantes();
+  toast('Quitada del reporte ✓','success');
+};
+
+window.restaurarReporteFF=async function(id) {
+  const o=allOps.find(x=>x.id===id);
+  if(!o)return;
+  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:false,ts_actualizacion:new Date()});
+  await logEvento('REPORTE_FECHA_DESCARTADO',o.operacion,'Operación restaurada al reporte de fechas faltantes','','',{},{});
+  o.reporte_fecha_descartado=false;
+  renderFechasFaltantes();
+  toast('Restaurada al reporte ✓','success');
+};
+
+window.limpiarFiltrosFF=function(){
+  document.getElementById('buscarFF').value='';
+  document.getElementById('filtroTipoFF').value='';
+  document.getElementById('filtroVerDescartadasFF').checked=false;
+  renderFechasFaltantes();
+};
+
+// ====================================================
 // FICHA DE OPERACION
 // ====================================================
 window.abrirFicha=function(id) {
@@ -1603,6 +1738,9 @@ window.abrirFicha=function(id) {
   }
 
   document.getElementById('fichaObs').value=o.observaciones||'';
+  const fechaOpISO=fo?fmtFechaISO(fo):'';
+  document.getElementById('fichaFechaOperativa').value=fechaOpISO;
+  document.getElementById('fichaFechaOperativa').dataset.original=fechaOpISO;
   document.getElementById('modalFicha').classList.add('open');
 };
 
@@ -1614,6 +1752,27 @@ window.guardarFicha=async function(){
   if(!o)return;
   const esCepas=o.cliente&&o.cliente.toUpperCase().includes('CEPAS');
   const update={observaciones:document.getElementById('fichaObs').value.trim(),ts_actualizacion:new Date()};
+
+  // Corrección manual de fecha operativa
+  const fechaOpInput=document.getElementById('fichaFechaOperativa');
+  const fechaOpValor=fechaOpInput.value;
+  const fechaOpOriginal=fechaOpInput.dataset.original||'';
+  let fechaOpCambio=false;
+  if(fechaOpValor!==fechaOpOriginal){
+    fechaOpCambio=true;
+    if(fechaOpValor){
+      const [anioFO,mesFO,diaFO]=fechaOpValor.split('-').map(Number);
+      const nuevaFecha=new Date(anioFO,mesFO-1,diaFO,12,0,0);
+      update.fecha_operativa=nuevaFecha;
+      update.mes_operativo=calcMes(nuevaFecha);
+      update.fecha_operativa_manual=true;
+    } else {
+      update.fecha_operativa=null;
+      update.mes_operativo=null;
+      update.fecha_operativa_manual=false;
+    }
+  }
+
   if(esCepas){
     update.cepas_ad_camion=document.getElementById('fichaAD').value.trim();
     update.cepas_patente=document.getElementById('fichaPatente').value.trim();
@@ -1627,8 +1786,10 @@ window.guardarFicha=async function(){
   }
   await updateDoc(doc(db,'operaciones_vlp',fichaId),update);
   if(esCepas)await logEvento('CEPAS_ACTUALIZADO',o.operacion,`Datos CEPAS actualizados. AD: ${update.cepas_ad_camion||''}. Liquidado: ${update.cepas_liquidado}`,'','',{},{cepas_ad_camion:update.cepas_ad_camion});
+  if(fechaOpCambio)await logEvento('FECHA_OPERATIVA_EDITADA',o.operacion,fechaOpValor?`Fecha operativa cargada manualmente: ${fechaOpValor}`:'Fecha operativa manual eliminada','','',{fecha_operativa:o.fecha_operativa||null},{fecha_operativa:update.fecha_operativa||null});
   cerrarFicha();
   toast('Operación guardada ✓','success');
+  await cargarOperaciones();
 };
 
 // ====================================================
