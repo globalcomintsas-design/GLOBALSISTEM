@@ -1225,6 +1225,9 @@ window.renderPendientes=function() {
       <td><strong>${o.operacion}</strong></td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente}">${clienteCorto(o.cliente)||'-'}</td>
       <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
+      <td>${badgeTipo(o.tipo_operacion)}</td>
+      <td style="font-size:11px">${fo?fo.toLocaleDateString('es-AR'):'-'}</td>
+      <td style="font-size:11px">${o.mes_operativo||'-'}</td>
       <td>${badgeSIM(o.estado_sim)}</td>
       <td>${badgeOrigen(o.origen)}</td>
       <td>${diasStr}</td>
