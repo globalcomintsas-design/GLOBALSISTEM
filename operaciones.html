@@ -531,7 +531,7 @@ td.mono{font-family:monospace;font-size:12px;}
       </select>
     </div>
     <div class="kpis" id="kpis-wrap"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;flex-wrap:wrap;" id="dash-detalle"></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;" id="dash-detalle"></div>
   </div>
 
   <!-- ═══════════════ TAB: SALDOS ═══════════════ -->
@@ -1715,9 +1715,23 @@ window.renderDashboard = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
-  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
-  const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
-  const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  // Mudanzas: no tienen "despachante", solo se filtran por mes. Si hay un despachante
+  // seleccionado, se muestran aparte (no se mezclan en los totales de ese despachante).
+  const mudFiltradas = mudanzas.filter(m => !filtMes || m.fecha?.startsWith(filtMes));
+  const incluirMudEnTotales = !filtCorr;
+
+  const totBrutoOps = ops.reduce((a,b) => a+(b.bruto||0), 0);
+  const totNetoOps  = ops.reduce((a,b) => a+(b.neto||0), 0);
+  const totUsdOps   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  const totBrutoMud = mudFiltradas.reduce((a,b) => a+(b.bruto||0), 0);
+  const totNetoMud  = mudFiltradas.reduce((a,b) => a+(b.honorNeto||0), 0);
+  const totUsdMud   = mudFiltradas.reduce((a,b) => a+(b.valorUsd||0), 0);
+
+  const totBruto = totBrutoOps + (incluirMudEnTotales ? totBrutoMud : 0);
+  const totNeto  = totNetoOps  + (incluirMudEnTotales ? totNetoMud  : 0);
+  const totUsd   = totUsdOps   + (incluirMudEnTotales ? totUsdMud   : 0);
+  const cantTotal = ops.length + (incluirMudEnTotales ? mudFiltradas.length : 0);
+
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
@@ -1728,14 +1742,14 @@ window.renderDashboard = function(){
 
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
-      <div class="kpi-label">Operaciones</div>
-      <div class="kpi-val">${ops.length}</div>
-      <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}</div>
+      <div class="kpi-label">Operaciones${incluirMudEnTotales?' + Mudanzas':''}</div>
+      <div class="kpi-val">${cantTotal}</div>
+      <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}${incluirMudEnTotales?` · Mudanzas: ${mudFiltradas.length}`:''}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total bruto facturado</div>
       <div class="kpi-val">$${fmt2(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt2(totNeto)}</div>
+      <div class="kpi-sub">Neto: $${fmt2(totNeto)}${incluirMudEnTotales&&mudFiltradas.length?` (incl. mudanzas)`:''}</div>
     </div>
     <div class="kpi">
       <div class="kpi-label">Total USD facturado</div>
@@ -1743,7 +1757,7 @@ window.renderDashboard = function(){
     </div>
     <div class="kpi">
       <div class="kpi-label">Promedio por operación</div>
-      <div class="kpi-val">$${ops.length ? fmt2(totBruto/ops.length) : '0,00'}</div>
+      <div class="kpi-val">$${cantTotal ? fmt2(totBruto/cantTotal) : '0,00'}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">💰 Total pagado</div>
@@ -1753,6 +1767,12 @@ window.renderDashboard = function(){
       <div class="kpi-label">⚖️ Saldo pendiente</div>
       <div class="kpi-val" style="color:${totSaldoDash>0.005?'#dc2626':'#059669'};">$${fmt2(totSaldoDash)}</div>
     </div>
+    ${!incluirMudEnTotales && mudFiltradas.length ? `
+    <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
+      <div class="kpi-label">📦 Mudanzas del período (aparte)</div>
+      <div class="kpi-val" style="color:#1e3a8a;">$${fmt2(totBrutoMud)}</div>
+      <div class="kpi-sub">${mudFiltradas.length} mudanza(s) · no se filtran por despachante</div>
+    </div>` : ''}
   `;
 
   const byCorr = {};
@@ -1767,6 +1787,23 @@ window.renderDashboard = function(){
     if(!byMes[m]) byMes[m] = {ops:0, bruto:0};
     byMes[m].ops++;
     byMes[m].bruto += o.bruto||0;
+  });
+  if(incluirMudEnTotales){
+    mudFiltradas.forEach(m => {
+      const mes = m.fecha?.slice(0,7) || 'S/F';
+      if(!byMes[mes]) byMes[mes] = {ops:0, bruto:0};
+      byMes[mes].ops++;
+      byMes[mes].bruto += m.bruto||0;
+    });
+  }
+
+  // Mudanzas por cliente (siempre se muestra, filtrado solo por mes)
+  const byClienteMud = {};
+  mudFiltradas.forEach(m => {
+    const cl = m.cliente || 'Sin nombre';
+    if(!byClienteMud[cl]) byClienteMud[cl] = {cant:0, bruto:0};
+    byClienteMud[cl].cant++;
+    byClienteMud[cl].bruto += m.bruto||0;
   });
 
   document.getElementById('dash-detalle').innerHTML = `
@@ -1791,6 +1828,17 @@ window.renderDashboard = function(){
           ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
             `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
           ).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="section-card" style="margin:0;">
+      <h3>📦 Mudanzas por cliente</h3>
+      <table style="width:100%;font-size:13px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Cliente</th><th style="padding:7px;text-align:right;">Cant.</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+        <tbody>
+          ${Object.entries(byClienteMud).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.cant}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
+          ).join('') || '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Sin mudanzas en el período</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2463,16 +2511,39 @@ window.renderRamiro = function(){
             ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
             : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}
         </td>
-        <td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
           ${i.estado === 'no'
             ? (i.col === 'mudanzas' && !i.cobrado
                 ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar</span>'
                 : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
-            : ''}
+            : `<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="editarRamiroItem('${i.id}','${i.col}')">✏️ Editar</button>`}
+          <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
         </td>
       </tr>
     `).join('')
     : '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+};
+
+// ── EDITAR (revertir a pendiente) un item de Ramiro por si se marcó pagado por error ──
+window.editarRamiroItem = async function(id, col){
+  if(!confirm('¿Volver a marcar este pago de Ramiro como PENDIENTE?')) return;
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+  await updateDoc(doc(db, colName, id), { [campo]: 'no' });
+  toast('↩️ Revertido a pendiente');
+};
+
+// ── ELIMINAR un item de Ramiro ──
+// Si es Kotinya (col='ops') elimina la operación completa (así se cargó la deuda a Ramiro).
+// Si es Mudanza (col='mudanzas') elimina la mudanza completa.
+window.eliminarRamiroItem = async function(id, col, tipo){
+  const msg = tipo === 'Mudanza'
+    ? '¿Eliminar esta mudanza? Se borra el registro completo, no solo la deuda de Ramiro.'
+    : '¿Eliminar esta operación Kotinya? Se borra el registro completo, no solo la deuda de Ramiro.';
+  if(!confirm(msg)) return;
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+  await deleteDoc(doc(db, colName, id));
+  toast('Registro eliminado');
 };
 
 window.pagarRamiroItem = async function(id, col){
