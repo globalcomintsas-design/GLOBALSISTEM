@@ -711,6 +711,13 @@ td.mono{font-family:monospace;font-size:12px;}
             onblur="setTimeout(()=>cerrarAC('ac_mud_cliente'),180)">
           <div id="ac_mud_cliente" class="ac-list"></div>
         </div>
+        <div class="form-group ac-wrap">
+          <label>Cliente final</label>
+          <input type="text" id="mud_cliente_final" placeholder="Nombre del cliente final..." autocomplete="off"
+            oninput="filtrarAC('mud_cliente_final','ac_mud_cliente_final',clientesNombres,false)"
+            onblur="setTimeout(()=>cerrarAC('ac_mud_cliente_final'),180)">
+          <div id="ac_mud_cliente_final" class="ac-list"></div>
+        </div>
         <div class="form-group">
           <label>TC Oficialización ⚠️ obligatorio</label>
           <input type="number" id="mud_tc" placeholder="Ingresá el TC" required oninput="recalcMudanza()">
@@ -812,6 +819,7 @@ td.mono{font-family:monospace;font-size:12px;}
             <tr>
               <th>Fecha</th>
               <th>Cliente</th>
+              <th>Cliente final</th>
               <th>TC</th>
               <th>USD</th>
               <th>Honorarios neto</th>
@@ -826,7 +834,7 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-mudanzas">
-            <tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
+            <tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
           </tbody>
         </table>
       </div>
@@ -1845,14 +1853,6 @@ window.renderDashboard = function(){
       <div class="kpi-val">$${fmt2(totBruto)}</div>
       <div class="kpi-sub">Neto: $${fmt2(totNeto)}${incluirMudEnTotales&&mudFiltradas.length?` (incl. mudanzas)`:''}</div>
     </div>
-    <div class="kpi">
-      <div class="kpi-label">Total USD facturado</div>
-      <div class="kpi-val">USD ${fmt(totUsd)}</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Promedio por operación</div>
-      <div class="kpi-val">$${cantTotal ? fmt2(totBruto/cantTotal) : '0,00'}</div>
-    </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">💰 Total pagado</div>
       <div class="kpi-val" style="color:#059669;">$${fmt2(totPagadoDash)}</div>
@@ -2309,6 +2309,7 @@ window.recalcMudanza = function(){
 
 window.guardarMudanza = async function(){
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
   const tcVal   = parseFloat(document.getElementById('mud_tc').value);
   if(!tcVal || tcVal <= 0){
@@ -2321,7 +2322,7 @@ window.guardarMudanza = async function(){
 
   const vals = recalcMudanza();
   const mud = {
-    fecha, cliente,
+    fecha, cliente, clienteFinal,
     tc: vals.tc,
     valorUsd: vals.usd,
     honorNeto: vals.honorNeto,
@@ -2352,6 +2353,7 @@ window.guardarMudanza = async function(){
 
 window.limpiarMudanza = function(){
   document.getElementById('mud_cliente').value = '';
+  document.getElementById('mud_cliente_final').value = '';
   document.getElementById('mud_valor_usd').value = '';
   document.getElementById('mud_precinto').value = '0';
   document.getElementById('mud_fiscal').value = '0';
@@ -2380,6 +2382,7 @@ window.editarMudanza = function(id){
 
   document.getElementById('mud_fecha').value       = m.fecha || '';
   document.getElementById('mud_cliente').value     = m.cliente || '';
+  document.getElementById('mud_cliente_final').value = m.clienteFinal || '';
   document.getElementById('mud_tc').value          = m.tc || 1440;
   document.getElementById('mud_valor_usd').value    = m.valorUsd || '';
   document.getElementById('mud_precinto').value    = m.precinto || 0;
@@ -2405,6 +2408,7 @@ window.editarMudanza = function(id){
 window.actualizarMudanza = async function(){
   if(!mudanzaEditandoId) return;
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
   const tcVal   = parseFloat(document.getElementById('mud_tc').value);
   if(!tcVal || tcVal <= 0){
@@ -2417,7 +2421,7 @@ window.actualizarMudanza = async function(){
 
   const vals = recalcMudanza();
   const datos = {
-    fecha, cliente,
+    fecha, cliente, clienteFinal,
     tc: vals.tc,
     valorUsd: vals.usd,
     honorNeto: vals.honorNeto,
@@ -2458,13 +2462,14 @@ window.cancelarEdicionMudanza = function(){
 function renderMudanzas(){
   const tbody = document.getElementById('tbody-mudanzas');
   if(!mudanzas.length){
-    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
     return;
   }
   tbody.innerHTML = mudanzas.map(m => `
     <tr>
       <td>${m.fecha||''}</td>
       <td><strong>${m.cliente||''}</strong></td>
+      <td>${m.clienteFinal||'-'}</td>
       <td class="mono">${m.tc||''}</td>
       <td class="mono">${m.valorUsd||''}</td>
       <td style="color:#1e3a8a;font-weight:600;">$${fmt(m.honorNeto)}</td>
@@ -2488,9 +2493,9 @@ function renderMudanzas(){
 }
 
 window.exportarMudanzas = function(){
-  const header = ['Fecha','Cliente','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Cobrado','Ramiro Pagado','Obs'];
+  const header = ['Fecha','Cliente','Cliente final','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Cobrado','Ramiro Pagado','Obs'];
   const rows = mudanzas.map(m => [
-    m.fecha, m.cliente, m.tc, m.valorUsd,
+    m.fecha, m.cliente, m.clienteFinal||'', m.tc, m.valorUsd,
     Math.round(m.honorNeto), Math.round(m.iva), Math.round(m.bruto),
     Math.round(m.precinto), Math.round(m.fiscal), m.ramiroUsd, Math.round(m.gastoRamiro),
     Math.round(m.otros), Math.round(m.totalGastos), Math.round(m.netoFinal),
