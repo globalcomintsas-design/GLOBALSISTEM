@@ -617,8 +617,10 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group">
           <label>Tipo</label>
           <select id="cli_tipo">
-            <option value="despachante">Despachante interno</option>
-            <option value="desp_externo">Despachante externo (premium)</option>
+            <option value="despachante">Despachante (tarifa estándar)</option>
+            <option value="desp_externo">Desp. externo (tarifa premium)</option>
+            <option value="apoderado">Apoderado</option>
+            <option value="kotinya">Kotinya / Ramiro</option>
           </select>
         </div>
         <div class="form-group">
@@ -659,6 +661,33 @@ td.mono{font-family:monospace;font-size:12px;}
           </thead>
           <tbody id="tbody-clientes">
             <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h3>🏠 Clientes finales (mudanzas / cliente final de operaciones)</h3>
+      <div class="form-row" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="clifinal_nombre" placeholder="Ej: PEREZ JUAN" onkeydown="if(event.key==='Enter'){event.preventDefault();guardarClienteFinal();}">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn-primary" onclick="guardarClienteFinal()">Agregar cliente</button>
+        </div>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Ops / Mudanzas</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-clientes-finales">
+            <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>
           </tbody>
         </table>
       </div>
@@ -882,6 +911,7 @@ let mudanzas = [];
 let pagos = [];
 let despachantesNombres = [];
 let clientesNombres = [];
+let clientesFinalesDocs = []; // [{id, nombre}] de corresponsales_clientes_finales
 window.despachantesNombres = despachantesNombres;
 window.clientesNombres = clientesNombres;
 
@@ -914,6 +944,17 @@ function toast(msg){
 }
 window.toast = toast;
 
+// Etiqueta legible para el tipo de tarifa de un despachante
+function etiquetaTipoDespachante(tipo){
+  switch(tipo){
+    case 'desp_externo': return { txt:'Externo ⭐', style:'background:#fef3c7;color:#92400e' };
+    case 'apoderado':    return { txt:'Apoderado',  style:'background:#ede9fe;color:#5b21b6' };
+    case 'kotinya':      return { txt:'Kotinya/Ramiro', style:'background:#fef9c3;color:#92400e' };
+    default:             return { txt:'Despachante', style:'' };
+  }
+}
+window.etiquetaTipoDespachante = etiquetaTipoDespachante;
+
 // ── TOGGLE TARIFAS ──
 window.toggleTarifas = function(){
   const body = document.getElementById('tarifas-body');
@@ -934,6 +975,7 @@ window.switchTab = function(tab){
   if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
   if(tab==='saldos')    renderSaldos();
+  if(tab==='clientes')  renderTablaClientesFinales();
   if(tab==='ramiro')    renderRamiro();
 };
 
@@ -1017,6 +1059,7 @@ onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDe
   if(tabActivo.includes('Dashboard')) renderDashboard();
   if(tabActivo.includes('Saldos'))    renderSaldos();
   if(tabActivo.includes('Ramiro'))    renderRamiro();
+  if(tabActivo.includes('Clientes'))  renderTablaClientesFinales();
   recalcularFormulario();
 });
 
@@ -1038,10 +1081,12 @@ onSnapshot(collection(db,'corresponsales_clientes'), snap => {
 });
 
 onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
-  const fromDB = snap.docs.map(d => d.data().nombre).filter(Boolean);
+  clientesFinalesDocs = snap.docs.map(d => ({id:d.id, nombre:d.data().nombre})).filter(c => c.nombre);
+  const fromDB = clientesFinalesDocs.map(c => c.nombre);
   const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
   clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
   window.clientesNombres = clientesNombres;
+  renderTablaClientesFinales();
 });
 
 // Mudanzas: tiempo real, solo año en curso
@@ -1049,7 +1094,8 @@ onSnapshot(query(collection(db,'corresponsales_mudanzas'), where('fecha','>=',_f
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderMudanzas();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
-  if(tabActivo.includes('Ramiro')) renderRamiro();
+  if(tabActivo.includes('Ramiro'))   renderRamiro();
+  if(tabActivo.includes('Clientes')) renderTablaClientesFinales();
 });
 
 // ── CAMBIO TIPO DESPACHO (select global) ──
@@ -1129,16 +1175,19 @@ window.onCambiarDespachante = function(){
   }
 
   const cli = clientes.find(c => c.nombre === nombre);
+  const tiposValidos = ['desp_externo','apoderado','kotinya'];
   if(cli){
-    document.getElementById('tipo_desp_global').value = cli.tipo === 'desp_externo' ? 'desp_externo' : 'despachante';
+    document.getElementById('tipo_desp_global').value = tiposValidos.includes(cli.tipo) ? cli.tipo : 'despachante';
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
     tieneFactura = cli.tieneFactura !== 'no';
   } else {
+    document.getElementById('tipo_desp_global').value = 'despachante';
     tieneFactura = true;
   }
 
-  esKotinya   = false;
-  esApoderado = document.getElementById('tipo_desp_global').value === 'apoderado';
+  const tipoSel = document.getElementById('tipo_desp_global').value;
+  esKotinya   = tipoSel === 'kotinya';
+  esApoderado = tipoSel === 'apoderado';
   onTipoDespachoChange();
 };
 
@@ -1508,7 +1557,7 @@ window.limpiarFormulario = function(){
   recalcularFormulario();
 };
 
-// ── GUARDAR CLIENTE ──
+// ── GUARDAR CLIENTE (despachante) ──
 window.guardarCliente = async function(){
   const nombre = document.getElementById('cli_nombre').value.trim().toUpperCase();
   if(!nombre){ toast('Ingresá el nombre'); return; }
@@ -1531,6 +1580,51 @@ window.eliminarCliente = async function(id){
   await deleteDoc(doc(db,'corresponsales_clientes',id));
   toast('Despachante eliminado');
 };
+
+// ── GUARDAR / ELIMINAR CLIENTE FINAL (mudanzas y cliente final de operaciones) ──
+window.guardarClienteFinal = async function(){
+  const input = document.getElementById('clifinal_nombre');
+  const nombre = input.value.trim().toUpperCase();
+  if(!nombre){ toast('Ingresá el nombre del cliente'); return; }
+  const id = nombre.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+  try {
+    await setDoc(doc(db,'corresponsales_clientes_finales', id), { nombre });
+    input.value = '';
+    toast('✅ Cliente guardado: ' + nombre);
+  } catch(e){
+    toast('❌ Error al guardar: ' + e.message);
+  }
+};
+
+window.eliminarClienteFinal = async function(id){
+  if(!confirm('¿Eliminar este cliente? (no borra operaciones ni mudanzas ya cargadas con su nombre)')) return;
+  try {
+    await deleteDoc(doc(db,'corresponsales_clientes_finales', id));
+    toast('Cliente eliminado');
+  } catch(e){
+    toast('❌ Error al eliminar: ' + e.message);
+  }
+};
+
+function renderTablaClientesFinales(){
+  const tbody = document.getElementById('tbody-clientes-finales');
+  if(!tbody) return;
+  if(!clientesFinalesDocs.length){
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>';
+    return;
+  }
+  const ordenados = [...clientesFinalesDocs].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  tbody.innerHTML = ordenados.map(c => {
+    const cantOps  = operaciones.filter(o => o.cliente === c.nombre).length;
+    const cantMud  = mudanzas.filter(m => m.cliente === c.nombre).length;
+    return `<tr>
+      <td><strong>${c.nombre}</strong></td>
+      <td style="text-align:center;">${cantOps} op${cantOps===1?'':'s'} · ${cantMud} mud.</td>
+      <td><button class="btn-danger" onclick="eliminarClienteFinal('${c.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+window.renderTablaClientesFinales = renderTablaClientesFinales;
 
 // ── CALCULAR COBERTURA FIFO (pagos sin factura asignada se aplican a las operaciones más viejas) ──
 function calcularCoberturaFIFO(nombre){
@@ -1975,7 +2069,7 @@ function renderSaldos(){
 }
 window.renderSaldos = renderSaldos;
 
-// ── RENDER TABLA CLIENTES ──
+// ── RENDER TABLA CLIENTES (DESPACHANTES) ──
 function renderTablaClientes(){
   const tbody = document.getElementById('tbody-clientes');
   if(!clientes.length){
@@ -1984,9 +2078,10 @@ function renderTablaClientes(){
   }
   tbody.innerHTML = clientes.map(c => {
     const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
+    const et = etiquetaTipoDespachante(c.tipo);
     return `<tr>
       <td><strong>${c.nombre}</strong></td>
-      <td><span class="tag" style="${c.tipo==='desp_externo'?'background:#fef3c7;color:#92400e':''}">${c.tipo === 'desp_externo' ? 'Externo ⭐' : 'Despachante'}</span></td>
+      <td><span class="tag" style="${et.style}">${et.txt}</span></td>
       <td>${c.factura||'-'}</td>
       <td>${c.tieneFactura === 'no' ? '❌ No' : '✅ Sí'}</td>
       <td class="mono">${c.cuit||'-'}</td>
