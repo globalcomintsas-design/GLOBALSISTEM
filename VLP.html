@@ -894,14 +894,15 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     const dest=String(r[COL_DEST]||'');
     const codigoReg=dest.length>=9?dest.substring(5,9):'';
     const tipoOp=REGIMENES[codigoReg]||'REVISAR';
-    // Fecha operativa: SIN fallback cruzado. EXPO sale únicamente de
-    // "Fecha de mercadería a bordo"; el resto (IMPO, ZF, etc.) sale
-    // únicamente de "Plaza / Cumplido". Si la columna que corresponde
-    // no tiene dato, la operación queda SIN fecha (no se busca en la otra).
+    // Fecha operativa: EXPO sale primero de "Fecha de mercadería a bordo"; si
+    // no está cargada, usa "Plaza / Cumplido" como respaldo (puede pasar que
+    // ya esté cumplida en plaza y se hayan olvidado de cargar el bordo).
+    // El resto (IMPO, ZF, etc.) sale únicamente de "Plaza / Cumplido".
     let fechaOp=null;
     let fechaVinoDeDux=false;
     if(tipoOp==='EXPORTACION') {
       if(r[COL_BORDO]) { fechaOp=xlsxDateToDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+      if(!fechaVinoDeDux && r[COL_PLAZA]) { fechaOp=xlsxDateToDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     } else {
       if(r[COL_PLAZA]) { fechaOp=xlsxDateToDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     }
@@ -1215,7 +1216,7 @@ function renderDashboard() {
   const pagadas=opsAnio.filter(o=>o.pagada).length;
 
   // Pendientes, %, Revisar, Sin DUX → histórico
-  const pendientes=ops.filter(o=>!o.pagada).length;
+  const pendientes=ops.filter(o=>!o.pagada&&o.fecha_operativa).length;
   const pct=ops.length>0?Math.round(ops.filter(o=>o.pagada).length/ops.length*100):0;
   const revisar=ops.filter(o=>o.tipo_operacion==='REVISAR').length;
   const soloVlp=ops.filter(o=>o.origen==='SOLO_VLP').length;
@@ -1287,7 +1288,7 @@ window.renderPendientes=function() {
   const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
 
   const hoy=new Date();hoy.setHours(0,0,0,0);
-  let fil=allOps.filter(o=>!o.pagada&&!o.archivada);
+  let fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
 
   if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
   if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
@@ -1301,10 +1302,10 @@ window.renderPendientes=function() {
     return fa-fb;
   });
 
-  document.getElementById('pTotal').textContent=allOps.filter(o=>!o.pagada&&!o.archivada).length;
-  document.getElementById('pExpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='EXPORTACION').length;
-  document.getElementById('pImpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='IMPORTACION').length;
-  document.getElementById('pZF').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.tipo_operacion==='ZONA_FRANCA').length;
+  document.getElementById('pTotal').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).length;
+  document.getElementById('pExpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='EXPORTACION').length;
+  document.getElementById('pImpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='IMPORTACION').length;
+  document.getElementById('pZF').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='ZONA_FRANCA').length;
 
   document.getElementById('tablaPendientes').innerHTML=fil.map(o=>{
     const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
@@ -1854,7 +1855,7 @@ window.limpiarFiltrosLog=function(){['filtroLogOp','filtroLogTipo'].forEach(id=>
 window.exportarPendientesExcel=function(){
   const wb=XLSX.utils.book_new();
   const hoy=new Date();hoy.setHours(0,0,0,0);
-  const fil=allOps.filter(o=>!o.pagada&&!o.archivada).sort((a,b)=>{
+  const fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).sort((a,b)=>{
     const fa=a.fecha_operativa?new Date(a.fecha_operativa.toDate?a.fecha_operativa.toDate():a.fecha_operativa):new Date('2099-01-01');
     const fb=b.fecha_operativa?new Date(b.fecha_operativa.toDate?b.fecha_operativa.toDate():b.fecha_operativa):new Date('2099-01-01');
     return fa-fb;
