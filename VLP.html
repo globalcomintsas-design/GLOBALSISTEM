@@ -99,6 +99,10 @@ tr:hover td{background:#fafbff;}
 .notif.warning{background:#d97706;}
 .progress-bar{height:6px;background:#e2e8f0;border-radius:3px;margin:10px 0;overflow:hidden;}
 .progress-bar-inner{height:100%;background:#1e3a8a;border-radius:3px;transition:width .3s;}
+.loader-overlay{display:none;position:fixed;inset:0;background:rgba(255,255,255,.55);z-index:500;justify-content:center;align-items:center;backdrop-filter:blur(1px);}
+.loader-overlay.show{display:flex;}
+.loader-spinner{width:46px;height:46px;border:4px solid #dbeafe;border-top-color:#1e3a8a;border-radius:50%;animation:girarLoader .7s linear infinite;}
+@keyframes girarLoader{to{transform:rotate(360deg);}}
 .upload-zone{border:2px dashed #bfdbfe;border-radius:12px;padding:30px;text-align:center;cursor:pointer;transition:all .2s;background:#f8fafc;}
 .upload-zone:hover{border-color:#1e3a8a;background:#eff6ff;}
 .upload-zone.dragover{border-color:#1e3a8a;background:#eff6ff;}
@@ -558,6 +562,8 @@ tr:hover td{background:#fafbff;}
   </div>
 </div>
 
+<div class="loader-overlay" id="loaderOverlay"><div class="loader-spinner"></div></div>
+
 <div class="notif" id="notif"></div>
 
 <script type="module">
@@ -603,41 +609,11 @@ let fichaId = null;
 let facturaOpId = null;
 let viajeEditId = null;
 
-// ---- UTILIDADES ----
+// ---- UTILIDADES GENERALES (no relacionadas a fechas) ----
 function normOp(x) {
   if(x===null||x===undefined||x==='')return null;
   try { return String(Math.round(Number(String(x).replace(/[^0-9.]/g,'')))).trim(); }
   catch(e){ return null; }
-}
-function fmtFecha(ts) {
-  if(!ts)return '-';
-  let d;
-  if(ts.toDate) d=ts.toDate();
-  else if(ts instanceof Date) d=ts;
-  else d=new Date(ts);
-  if(isNaN(d))return '-';
-  return d.toLocaleDateString('es-AR');
-}
-function fmtFechaISO(ts) {
-  if(!ts)return null;
-  let d;
-  if(ts.toDate) d=ts.toDate();
-  else if(ts instanceof Date) d=ts;
-  else d=new Date(ts);
-  if(isNaN(d))return null;
-  return d.toISOString().split('T')[0];
-}
-function calcMes(d) {
-  if(!d)return null;
-  const dt = d instanceof Date ? d : (d.toDate?d.toDate():new Date(d));
-  if(isNaN(dt))return null;
-  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
-}
-function diasEntre(d1,d2) {
-  if(!d1||!d2)return null;
-  const a=d1 instanceof Date?d1:(d1.toDate?d1.toDate():new Date(d1));
-  const b=d2 instanceof Date?d2:(d2.toDate?d2.toDate():new Date(d2));
-  return Math.round((b-a)/(1000*60*60*24));
 }
 function clienteCorto(c) {
   if(!c)return '-';
@@ -650,18 +626,191 @@ function toast(msg,type='') {
   setTimeout(()=>el.classList.add('show'),10);
   setTimeout(()=>el.classList.remove('show'),4000);
 }
-function now() { return new Date(); }
-function todayISO() { return now().toISOString().split('T')[0]; }
+
+// ============================================================================
+// ÚNICA FUENTE DE VERDAD PARA FECHAS — TODO EL SISTEMA TRABAJA EN HORA LOCAL
+// ----------------------------------------------------------------------------
+// Todas las fechas de negocio (fecha operativa, fecha de pago, oficialización,
+// mercadería a bordo, plaza/cumplido, retiro, liquidación, viaje, etc.) se
+// manejan EXCLUSIVAMENTE en hora LOCAL (Argentina). NINGÚN otro punto del
+// código debe usar toISOString(), toUTCString(), Date.parse(), ni los getters
+// UTC (getUTCFullYear/getUTCMonth/getUTCDate/getUTCHours) sobre una fecha de
+// negocio: esos métodos operan en UTC, y como Argentina está en UTC-3, la
+// medianoche UTC de un día cae en el día ANTERIOR al leerla con los getters
+// locales (getFullYear/getMonth/getDate) o con toLocaleDateString(). Esa es
+// la causa raíz del corrimiento de un día que tenía el sistema.
+// La ÚNICA excepción autorizada a este criterio es parseExcelDate(), donde
+// los getters UTC se usan a propósito para "desempaquetar" el valor que
+// entrega SheetJS (que codifica la fecha de la celda en UTC internamente).
+// Ningún módulo (Dashboard, Pendientes, Pagadas, CEPAS, Viajes, Historial,
+// Log, Ficha, exportaciones Excel, importación DUX/VLP) debe tener lógica
+// propia de fechas: todo pasa por las funciones de este bloque.
+// ============================================================================
+
+// Construye una fecha "pura" (sin hora relevante) en hora LOCAL. Se fija al
+// mediodía (12:00) para blindarla contra cualquier ajuste de huso horario.
+function fechaLocal(anio, mes, dia, horas=12, minutos=0) {
+  return new Date(anio, mes - 1, dia, horas, minutos, 0, 0);
+}
+
+// Fecha/hora actual, en hora local del navegador (Date nativo).
+function ahoraLocal() { return new Date(); }
+
+// "Hoy" normalizado a mediodía LOCAL (sin hora relevante), para comparar
+// antigüedad/vencimientos por día calendario.
+function hoyLocal() {
+  const n = new Date();
+  return fechaLocal(n.getFullYear(), n.getMonth()+1, n.getDate());
+}
+
+// Convierte CUALQUIER valor (Timestamp de Firestore, Date, string
+// "yyyy-mm-dd", etc.) a un Date de JS en hora LOCAL. Es la ÚNICA función que
+// debe usarse para "desempaquetar" una fecha que viene de Firestore o de un
+// <input type="date">. Reemplaza todo patrón suelto de
+// "x.toDate ? x.toDate() : new Date(x)" repetido por el sistema.
+function aFechaLocal(valor) {
+  if(valor===null||valor===undefined||valor==='') return null;
+  if(valor.toDate) { // Timestamp de Firestore
+    const d = valor.toDate();
+    return isNaN(d) ? null : d;
+  }
+  if(valor instanceof Date) return isNaN(valor) ? null : valor;
+  if(typeof valor === 'string') {
+    const s = valor.trim();
+    // yyyy-mm-dd — se parsea a mano para NO usar new Date('yyyy-mm-dd'),
+    // que JS interpreta como UTC y corre el día en Argentina.
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  const d = new Date(valor);
+  return isNaN(d) ? null : d;
+}
+
+// 'YYYY-MM-DD' en hora LOCAL. USAR SIEMPRE esta función en vez de
+// toISOString() para fechas de negocio, nombres de archivo, valores de
+// <input type="date">, etc. toISOString() usa UTC y puede correr el día
+// (incluso el "hoy" del sistema, cerca de la medianoche argentina).
+function fechaISOLocal(valor) {
+  const d = valor instanceof Date ? valor : aFechaLocal(valor);
+  if(!d || isNaN(d)) return null;
+  const anio = d.getFullYear();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${anio}-${mes}-${dia}`;
+}
+
+// Formatea una fecha para mostrar al usuario (dd/mm/aaaa), en hora LOCAL.
+// Acepta Timestamp de Firestore, Date o string — no hace falta convertir
+// antes de llamarla.
+function formatFecha(valor) {
+  const d = valor instanceof Date ? valor : aFechaLocal(valor);
+  if(!d || isNaN(d)) return '-';
+  const dia = String(d.getDate()).padStart(2,'0');
+  const mes = String(d.getMonth()+1).padStart(2,'0');
+  const anio = d.getFullYear();
+  return `${dia}/${mes}/${anio}`;
+}
+
+// Formatea fecha + hora (dd/mm/aaaa hh:mm), en hora LOCAL. Usado en el Log.
+function formatFechaHora(valor) {
+  const d = valor instanceof Date ? valor : aFechaLocal(valor);
+  if(!d || isNaN(d)) return '-';
+  const horas = String(d.getHours()).padStart(2,'0');
+  const mins = String(d.getMinutes()).padStart(2,'0');
+  return `${formatFecha(d)} ${horas}:${mins}`;
+}
+
+// Mes operativo 'YYYY-MM', SIEMPRE calculado con componentes LOCALES.
+function calcMesOperativo(valor) {
+  const d = valor instanceof Date ? valor : aFechaLocal(valor);
+  if(!d || isNaN(d)) return null;
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+// Diferencia en días CALENDARIO completos entre dos fechas. Normaliza ambas
+// a mediodía LOCAL antes de restar, así el resultado no se ve afectado por
+// la hora que traiga cada Timestamp.
+function diasEntreFechas(valor1, valor2) {
+  const d1 = valor1 instanceof Date ? valor1 : aFechaLocal(valor1);
+  const d2 = valor2 instanceof Date ? valor2 : aFechaLocal(valor2);
+  if(!d1 || !d2 || isNaN(d1) || isNaN(d2)) return null;
+  const a = fechaLocal(d1.getFullYear(), d1.getMonth()+1, d1.getDate());
+  const b = fechaLocal(d2.getFullYear(), d2.getMonth()+1, d2.getDate());
+  return Math.round((b - a) / (1000*60*60*24));
+}
+
+// Construye una fecha LOCAL a partir del valor de un <input type="date">
+// (string 'yyyy-mm-dd'), fijando la hora indicada (default: mediodía).
+// NUNCA usar new Date(valorInput) directo: JS interpreta 'yyyy-mm-dd' como
+// UTC y corre el día en Argentina.
+function fechaDesdeInputDate(valorInput, horas=12, minutos=0) {
+  if(!valorInput) return null;
+  const m = String(valorInput).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(!m) return null;
+  return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10), horas, minutos);
+}
 
 // Valida que una fecha sea razonable para guardar en Firestore (evita
-// FirebaseError: Timestamp seconds out of range cuando el Excel trae
-// un valor de fecha corrupto/fuera de rango).
+// FirebaseError: Timestamp seconds out of range cuando el Excel trae un
+// valor de fecha corrupto/fuera de rango).
 function fechaValidaODefault(fecha, fallback) {
   if(!(fecha instanceof Date) || isNaN(fecha)) return fallback;
   const anio = fecha.getFullYear();
   if(anio < 1990 || anio > 2100) return fallback;
   return fecha;
 }
+
+// Convierte un valor de celda de Excel/SheetJS (serial numérico, Date, o
+// texto) a un Date en hora LOCAL, SIN corrimiento de día.
+// Los seriales de Excel (y los Date que entrega SheetJS con cellDates:true)
+// codifican la fecha calendario "pura" a medianoche UTC de ese día. Por eso
+// — y SOLO aquí — se leen sus componentes con los getters UTC, y se
+// reconstruyen como fecha LOCAL con fechaLocal(). Si se leyeran con getters
+// locales directamente, en Argentina (UTC-3) la medianoche UTC cae en el
+// día anterior (ej: DUX trae 16/07/2026 y el sistema mostraba 15/07/2026).
+function parseExcelDate(v) {
+  if(v===null||v===undefined||v==='') return null;
+  if(v instanceof Date) {
+    if(isNaN(v)) return null;
+    return fechaLocal(v.getUTCFullYear(), v.getUTCMonth()+1, v.getUTCDate());
+  }
+  if(typeof v === 'number') {
+    // Serial Excel: días desde 1899-12-30 (con el bug del año bisiesto 1900).
+    // 25569 = días entre esa fecha y el epoch Unix (1970-01-01).
+    const ms = Math.round((v - 25569) * 86400 * 1000);
+    const utc = new Date(ms);
+    if(isNaN(utc)) return null;
+    return fechaLocal(utc.getUTCFullYear(), utc.getUTCMonth()+1, utc.getUTCDate());
+  }
+  if(typeof v === 'string') {
+    const s = v.trim();
+    // dd/mm/yyyy o dd-mm-yyyy (formato argentino) — NUNCA usar new Date()
+    // directo acá porque JS lo interpreta como MM/DD/YYYY y con día>12 rompe
+    // silenciosamente.
+    let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if(m) return fechaLocal(parseInt(m[3],10), parseInt(m[2],10), parseInt(m[1],10));
+    // yyyy-mm-dd (ISO, como llega VLP con dateNF:'yyyy-mm-dd')
+    m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
+    // último recurso: parseo nativo, normalizado a componentes LOCALES
+    const d = new Date(s);
+    if(isNaN(d)) return null;
+    return fechaLocal(d.getFullYear(), d.getMonth()+1, d.getDate());
+  }
+  return null;
+}
+
+// Alias retro-compatibles (mantener el nombre "now"/"todayISO" que ya usaba
+// el resto del código, pero apoyados 100% en las funciones locales de arriba).
+function now() { return ahoraLocal(); }
+function todayISO() { return fechaISOLocal(ahoraLocal()); }
+
+// ---- RUEDA DE CARGA GLOBAL ----
+let _loadingCount=0;
+function mostrarCarga(){ _loadingCount++; document.getElementById('loaderOverlay').classList.add('show'); }
+function ocultarCarga(){ _loadingCount=Math.max(0,_loadingCount-1); if(_loadingCount<=0) document.getElementById('loaderOverlay').classList.remove('show'); }
 
 // SESION CENTRALIZADA
 function autoLogin() {
@@ -692,11 +841,13 @@ window.showTab=function(name,el) {
 
 // ---- CARGA FIRESTORE (sin onSnapshot — evita lecturas masivas en tiempo real) ----
 async function cargarOperaciones() {
+  mostrarCarga();
+  try {
   // Estrategia de carga optimizada:
   // - Pendientes (pagada==false): TODAS, sin importar año (ej: Peñaflor atrasado)
   // - Pagadas: solo año en curso
-  const anioActual = new Date().getFullYear();
-  const primerDiaAnio = new Date(anioActual, 0, 1);
+  const anioActual = ahoraLocal().getFullYear();
+  const primerDiaAnio = fechaLocal(anioActual, 1, 1, 0, 0);
 
   const [snapPendientes, snapPagadas] = await Promise.all([
     getDocs(query(collection(db,'operaciones_vlp'), where('pagada','==',false))),
@@ -714,9 +865,12 @@ async function cargarOperaciones() {
   renderCepas();
   renderFechasFaltantes();
   actualizarSelectVLP();
+  } finally { ocultarCarga(); }
 }
 
 async function cargarHistorial() {
+  mostrarCarga();
+  try {
   const [snapDUX, snapVLP] = await Promise.all([
     getDocs(query(collection(db,'importaciones_dux'),orderBy('fecha_importacion','desc'))),
     getDocs(query(collection(db,'vlp_importados'),orderBy('fecha_importacion','desc')))
@@ -724,19 +878,26 @@ async function cargarHistorial() {
   allHistDUX = snapDUX.docs.map(d=>({id:d.id,...d.data()}));
   allHistVLP = snapVLP.docs.map(d=>({id:d.id,...d.data()}));
   renderHistorial();
+  } finally { ocultarCarga(); }
 }
 
 async function cargarLog() {
+  mostrarCarga();
+  try {
   const snap = await getDocs(query(collection(db,'log_conciliaciones'),orderBy('fecha_evento','desc'),limit(200)));
   allLog = snap.docs.map(d=>({id:d.id,...d.data()}));
   renderLog();
+  } finally { ocultarCarga(); }
 }
 
 async function cargarViajes() {
+  mostrarCarga();
+  try {
   const snap = await getDocs(query(collection(db,'viajes_cepas'),orderBy('fecha_viaje','desc')));
   allViajes = snap.docs.map(d=>({id:d.id,...d.data()}));
   renderViajes();
   actualizarCardViajesPend();
+  } finally { ocultarCarga(); }
 }
 
 // Recarga completa manual (botón Actualizar)
@@ -758,7 +919,7 @@ function initListeners() {
 async function logEvento(tipo, operacion, descripcion, vlp='', dux='', antes={}, despues={}) {
   await addDoc(collection(db,'log_conciliaciones'),{
     tipo_evento:tipo, operacion, descripcion, vlp_archivo:vlp, dux_archivo:dux,
-    fecha_evento:new Date(), usuario:currentUser.nombre,
+    fecha_evento:ahoraLocal(), usuario:currentUser.nombre,
     datos_antes:antes, datos_despues:despues
   });
 }
@@ -795,39 +956,6 @@ function leerArchivoExcel(file,tipo) {
     }
   };
   reader.readAsArrayBuffer(file);
-}
-
-// Convierte número serial de Excel o texto de fecha a Date
-function xlsxDateToDate(v) {
-  if(!v) return null;
-  if(v instanceof Date) return v;
-  if(typeof v==='number') {
-    // Excel serial date: días desde 1900-01-01 (con bug del año bisiesto 1900)
-    const d=new Date(Math.round((v-25569)*86400*1000));
-    return isNaN(d)?null:d;
-  }
-  if(typeof v==='string') {
-    const s=v.trim();
-    // dd/mm/yyyy o dd-mm-yyyy (formato argentino) — NUNCA usar new Date() directo
-    // acá porque JS lo interpreta como MM/DD/YYYY y con día>12 rompe silenciosamente.
-    let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if(m) {
-      const dia=parseInt(m[1],10), mes=parseInt(m[2],10), anio=parseInt(m[3],10);
-      const d=new Date(anio,mes-1,dia);
-      return isNaN(d)?null:d;
-    }
-    // yyyy-mm-dd (ISO)
-    m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-    if(m) {
-      const anio=parseInt(m[1],10), mes=parseInt(m[2],10), dia=parseInt(m[3],10);
-      const d=new Date(anio,mes-1,dia);
-      return isNaN(d)?null:d;
-    }
-    // último recurso: parseo nativo
-    const d=new Date(s);
-    return isNaN(d)?null:d;
-  }
-  return null;
 }
 
 window.procesarDUX=function(input){
@@ -883,7 +1011,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
 
   setBar(25,'Preparando datos...');
 
-  const ahora=new Date();
+  const ahora=ahoraLocal();
   let nuevas=0,actualizadas=0,reconciliadas=0;
   const logItems=[];
   const operaciones=[];
@@ -898,17 +1026,20 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     // no está cargada, usa "Plaza / Cumplido" como respaldo (puede pasar que
     // ya esté cumplida en plaza y se hayan olvidado de cargar el bordo).
     // El resto (IMPO, ZF, etc.) sale únicamente de "Plaza / Cumplido".
+    // Todas las fechas que llegan del Excel DUX pasan por parseExcelDate(),
+    // que las devuelve en hora LOCAL sin corrimiento de día (ver módulo de
+    // fechas más arriba).
     let fechaOp=null;
     let fechaVinoDeDux=false;
     if(tipoOp==='EXPORTACION') {
-      if(r[COL_BORDO]) { fechaOp=xlsxDateToDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
-      if(!fechaVinoDeDux && r[COL_PLAZA]) { fechaOp=xlsxDateToDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+      if(r[COL_BORDO]) { fechaOp=parseExcelDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+      if(!fechaVinoDeDux && r[COL_PLAZA]) { fechaOp=parseExcelDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     } else {
-      if(r[COL_PLAZA]) { fechaOp=xlsxDateToDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+      if(r[COL_PLAZA]) { fechaOp=parseExcelDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     }
-    let fechaOfic=xlsxDateToDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
-    let fechaBordo=xlsxDateToDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
-    let fechaPlaza=xlsxDateToDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
+    let fechaOfic=parseExcelDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
+    let fechaBordo=parseExcelDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
+    let fechaPlaza=parseExcelDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
     // Validación de rango: evita FirebaseError "Timestamp seconds out of range"
     fechaOp=fechaValidaODefault(fechaOp,null);
     fechaOfic=fechaValidaODefault(fechaOfic,null);
@@ -921,8 +1052,8 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     const existentePrevio=existentes[opNorm];
     let esManual=false;
     if(!fechaVinoDeDux && existentePrevio && existentePrevio.fecha_operativa_manual && existentePrevio.fecha_operativa) {
-      const fPrev=existentePrevio.fecha_operativa.toDate?existentePrevio.fecha_operativa.toDate():new Date(existentePrevio.fecha_operativa);
-      if(!isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
+      const fPrev=aFechaLocal(existentePrevio.fecha_operativa);
+      if(fPrev && !isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
     }
 
     const nuevosDatos={
@@ -932,7 +1063,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       estado_sim:String(r[COL_SIM]||''),situacion:String(r[COL_SITU]||''),
       estado:String(r[COL_ESTADO]||''),fecha_oficializacion:fechaOfic,
       fecha_mer_a_bordo:fechaBordo,cumplido_plaza:fechaPlaza,
-      fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMes(fechaOp):null,
+      fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMesOperativo(fechaOp):null,
       fecha_operativa_manual:esManual,
       observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
       importado_por:currentUser.nombre,dux_archivo:nombreArchivo
@@ -1066,7 +1197,7 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   allOps.forEach(o=>{existentes[o.id]=o;});
 
   setBar(25,'Preparando datos...');
-  const ahora=new Date();
+  const ahora=ahoraLocal();
   let conciliadas=0,sinDux=0;
   const logItems=[];
   const BATCH_SIZE=490;
@@ -1075,7 +1206,10 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   for(const r of datos) {
     const opNorm=normOp(r[COL_OP]);
     if(!opNorm)continue;
-    let fechaPago=r[COL_FECHA]?new Date(r[COL_FECHA]):ahora;
+    // r[COL_FECHA] llega como texto 'yyyy-mm-dd' (por dateNF al leer el
+    // Excel). Se parsea con parseExcelDate() — NUNCA con new Date(string),
+    // que JS interpreta como UTC y corre el día en Argentina.
+    let fechaPago=r[COL_FECHA]?parseExcelDate(r[COL_FECHA]):ahora;
     // Validación de rango: si la fecha viene corrupta o disparatada
     // (ej: columna corrida o serial mal interpretado), usamos "ahora"
     // en vez de dejar pasar un Timestamp inválido que traba el batch.
@@ -1191,8 +1325,10 @@ window.pagarMasivo=async function() {
   if(!vlp){toast('Ingresá el N° de VLP o Factura','error');return;}
   if(!confirm(`¿Marcar ${checks.length} operaciones como pagadas con "${vlp}"?`))return;
 
-  const ahora=new Date();
-  const fechaPago=fechaVal?new Date(fechaVal+'T12:00:00'):ahora;
+  mostrarCarga();
+  try {
+  const ahora=ahoraLocal();
+  const fechaPago=fechaVal?fechaDesdeInputDate(fechaVal):ahora;
   const ids=checks.map(c=>c.value);
   const BATCH_SIZE=490;
 
@@ -1212,17 +1348,18 @@ window.pagarMasivo=async function() {
   await cargarOperaciones();
   toast(`${ids.length} operaciones marcadas como pagadas ✓`,'success');
   deseleccionarTodo();
+  } finally { ocultarCarga(); }
 };
 
 
 function renderDashboard() {
   const ops=allOps.filter(o=>!o.archivada);
-  const anioActual=new Date().getFullYear();
+  const anioActual=ahoraLocal().getFullYear();
 
   // Total y Pagadas → año corriente
   const opsAnio=ops.filter(o=>{
-    const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
-             o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+    const f=o.fecha_operativa?(aFechaLocal(o.fecha_operativa)):
+             aFechaLocal(o.fecha_pago);
     return f&&f.getFullYear()===anioActual;
   });
   const total=opsAnio.length;
@@ -1244,13 +1381,13 @@ function renderDashboard() {
   document.getElementById('dSoloDUX').textContent=soloVlp;
   document.getElementById('dAnul').textContent=anul;
 
-  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const hoy=hoyLocal();
   const pend=ops.filter(o=>!o.pagada&&o.fecha_operativa);
   const grupos={a0_30:0,a31_60:0,a61_90:0,a90mas:0};
   const sinFecha=ops.filter(o=>!o.pagada&&!o.fecha_operativa).length;
   pend.forEach(o=>{
-    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
-    const dias=Math.round((hoy-fo)/(1000*60*60*24));
+    const fo=aFechaLocal(o.fecha_operativa);
+    const dias=diasEntreFechas(fo,hoy);
     if(dias<=30)grupos.a0_30++;
     else if(dias<=60)grupos.a31_60++;
     else if(dias<=90)grupos.a61_90++;
@@ -1300,7 +1437,7 @@ window.renderPendientes=function() {
   const filtSim=document.getElementById('filtroSimPend')?.value||'';
   const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
 
-  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const hoy=hoyLocal();
   let fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
 
   if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
@@ -1310,8 +1447,8 @@ window.renderPendientes=function() {
   if(filtOrigen)fil=fil.filter(o=>o.origen===filtOrigen);
 
   fil.sort((a,b)=>{
-    const fa=a.fecha_operativa?new Date(a.fecha_operativa.toDate?a.fecha_operativa.toDate():a.fecha_operativa):new Date('2099-01-01');
-    const fb=b.fecha_operativa?new Date(b.fecha_operativa.toDate?b.fecha_operativa.toDate():b.fecha_operativa):new Date('2099-01-01');
+    const fa=a.fecha_operativa?aFechaLocal(a.fecha_operativa):fechaLocal(2099,1,1);
+    const fb=b.fecha_operativa?aFechaLocal(b.fecha_operativa):fechaLocal(2099,1,1);
     return fa-fb;
   });
 
@@ -1321,8 +1458,8 @@ window.renderPendientes=function() {
   document.getElementById('pZF').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='ZONA_FRANCA').length;
 
   document.getElementById('tablaPendientes').innerHTML=fil.map(o=>{
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const dias=fo?Math.round((hoy-fo)/(1000*60*60*24)):null;
+    const fo=aFechaLocal(o.fecha_operativa);
+    const dias=fo?diasEntreFechas(fo,hoy):null;
     const diasStr=dias!==null?(dias>90?`<span style="color:#dc2626;font-weight:700">${dias}d</span>`:dias>60?`<span style="color:#d97706">${dias}d</span>`:`${dias}d`):'-';
     return `<tr>
       <td><input type="checkbox" class="chkPend" value="${o.id}" onchange="actualizarSeleccion()" /></td>
@@ -1330,7 +1467,7 @@ window.renderPendientes=function() {
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente}">${clienteCorto(o.cliente)||'-'}</td>
       <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
       <td>${badgeTipo(o.tipo_operacion)}</td>
-      <td style="font-size:11px">${fo?fo.toLocaleDateString('es-AR'):'-'}</td>
+      <td style="font-size:11px">${formatFecha(fo)}</td>
       <td style="font-size:11px">${o.mes_operativo||'-'}</td>
       <td>${badgeSIM(o.estado_sim)}</td>
       <td>${badgeOrigen(o.origen)}</td>
@@ -1386,9 +1523,11 @@ window.confirmarPagoFactura = async function() {
   const o = allOps.find(x => x.id === facturaOpId);
   if (!o) return;
 
-  // Construir la fecha correctamente sin problemas de TZ
-  const [anio, mes, dia] = fechaStr.split('-').map(Number);
-  const fechaPago = new Date(anio, mes - 1, dia, 12, 0, 0);
+  mostrarCarga();
+  try {
+
+  // Fecha LOCAL, sin problemas de zona horaria (ver módulo de fechas)
+  const fechaPago = fechaDesdeInputDate(fechaStr);
 
   const update = {
     pagada: true,
@@ -1402,25 +1541,25 @@ window.confirmarPagoFactura = async function() {
     observaciones: obs
       ? (o.observaciones ? o.observaciones + ' | ' + obs : obs)
       : (o.observaciones || ''),
-    ts_actualizacion: new Date()
+    ts_actualizacion: ahoraLocal()
   };
 
-  try {
-    await updateDoc(doc(db, 'operaciones_vlp', facturaOpId), update);
-    await logEvento(
-      'FACTURA_PAGO_MANUAL',
-      o.operacion,
-      `Pago registrado por Factura Propia. N°: ${nroFactura}. Importe: $${importe || 0}. Usuario: ${currentUser.nombre}`,
-      nroFactura, '',
-      { pagada: false },
-      { pagada: true, origen_pago: 'FACTURA_PROPIA', vlp_pago: 'FACTURA: ' + nroFactura }
-    );
-    cerrarModalFactura();
-    toast('✅ Pago por factura registrado — Op. ' + o.operacion, 'success');
+  await updateDoc(doc(db, 'operaciones_vlp', facturaOpId), update);
+  await logEvento(
+    'FACTURA_PAGO_MANUAL',
+    o.operacion,
+    `Pago registrado por Factura Propia. N°: ${nroFactura}. Importe: $${importe || 0}. Usuario: ${currentUser.nombre}`,
+    nroFactura, '',
+    { pagada: false },
+    { pagada: true, origen_pago: 'FACTURA_PROPIA', vlp_pago: 'FACTURA: ' + nroFactura }
+  );
+  cerrarModalFactura();
+  toast('✅ Pago por factura registrado — Op. ' + o.operacion, 'success');
+  await cargarOperaciones();
   } catch(e) {
     console.error(e);
     toast('Error al guardar. Intentá de nuevo.', 'error');
-  }
+  } finally { ocultarCarga(); }
 };
 
 // ====================================================
@@ -1442,8 +1581,8 @@ window.renderPagadas=function() {
   if(filtOrigenPago==='FACTURA_PROPIA')fil=fil.filter(o=>o.origen_pago==='FACTURA_PROPIA');
 
   fil.sort((a,b)=>{
-    const fa=a.fecha_pago?(a.fecha_pago.toDate?a.fecha_pago.toDate():new Date(a.fecha_pago)):new Date(0);
-    const fb=b.fecha_pago?(b.fecha_pago.toDate?b.fecha_pago.toDate():new Date(b.fecha_pago)):new Date(0);
+    const fa=a.fecha_pago?aFechaLocal(a.fecha_pago):new Date(0);
+    const fb=b.fecha_pago?aFechaLocal(b.fecha_pago):new Date(0);
     return fb-fa;
   });
 
@@ -1454,9 +1593,9 @@ window.renderPagadas=function() {
   let sumDias=0,cnt=0,fueraTerm=0;
   fil.forEach(o=>{
     if(o.fecha_operativa&&o.fecha_pago){
-      const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
-      const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
-      const d=Math.round((fp-fo)/(1000*60*60*24));
+      const fo=aFechaLocal(o.fecha_operativa);
+      const fp=aFechaLocal(o.fecha_pago);
+      const d=diasEntreFechas(fo,fp);
       sumDias+=d;cnt++;
       if(d>30)fueraTerm++;
     }
@@ -1466,18 +1605,18 @@ window.renderPagadas=function() {
 
   document.getElementById('tablaPagadas').innerHTML=fil.map(o=>{
     const esSoloVlp = o.origen==='SOLO_VLP';
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
-    const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fp=aFechaLocal(o.fecha_pago);
+    const dias=(fo&&fp)?diasEntreFechas(fo,fp):null;
     const diasStr=dias!==null?(dias>30?`<span style="color:#dc2626;font-weight:700">${dias}d</span>`:`<span style="color:#16a34a">${dias}d</span>`):'-';
     const esFactura = o.origen_pago==='FACTURA_PROPIA';
     const clienteMostrar = clienteCorto(o.cliente) || (esSoloVlp ? o.razon_social_vlp : null) || '-';
-    const fechaOpMostrar = fo ? fo.toLocaleDateString('es-AR') : (esSoloVlp && fp ? `<span style="color:#888;font-style:italic">${fp.toLocaleDateString('es-AR')}</span>` : '-');
+    const fechaOpMostrar = fo ? formatFecha(fo) : (esSoloVlp && fp ? `<span style="color:#888;font-style:italic">${formatFecha(fp)}</span>` : '-');
     return `<tr>
       <td><strong>${o.operacion}</strong></td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||o.razon_social_vlp||''}">${clienteMostrar}${esSoloVlp?'<span class="badge badge-solo-vlp" style="margin-left:4px;font-size:9px">SV</span>':''}</td>
       <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
-      <td>${fp?fp.toLocaleDateString('es-AR'):'-'}</td>
+      <td>${formatFecha(fp)}</td>
       <td>${diasStr}</td>
       <td style="font-size:11px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.vlp_pago||''}">${o.vlp_pago||'-'}</td>
       <td>${esFactura?'<span class="badge badge-factura">💵 Factura</span>':'<span class="badge badge-pagado">VLP</span>'}</td>
@@ -1514,7 +1653,7 @@ function actualizarCardViajesPend() {
 window.abrirModalViaje=function(id=null) {
   viajeEditId=id;
   document.getElementById('viajeModalTitulo').textContent=id?'Editar':'Nuevo';
-  document.getElementById('viajeFechaHoy').textContent=new Date().toLocaleDateString('es-AR');
+  document.getElementById('viajeFechaHoy').textContent=formatFecha(ahoraLocal());
   if(id) {
     const v=allViajes.find(x=>x.id===id);
     if(!v)return;
@@ -1539,11 +1678,13 @@ window.guardarViaje=async function() {
   const destinacion=document.getElementById('viajeDestinacion').value.trim();
   if(!operacion||!ad_camion||!destinacion){toast('Completá operación, AD y destinación','error');return;}
   const observaciones=document.getElementById('viajeObs').value.trim();
-  const ahora=new Date();
+  mostrarCarga();
+  try {
+  const ahora=ahoraLocal();
   const data={
     operacion, ad_camion, destinacion, observaciones,
     fecha_viaje:ahora,
-    mes:ahora.toISOString().substring(0,7),
+    mes:calcMesOperativo(ahora),
     cobrado:false,
     usuario:currentUser.nombre,
     ts_actualizacion:ahora
@@ -1557,17 +1698,27 @@ window.guardarViaje=async function() {
     toast('Viaje guardado ✓','success');
   }
   cerrarModalViaje();
+  await cargarViajes();
+  } finally { ocultarCarga(); }
 };
 
 window.eliminarViaje=async function(id) {
   if(!confirm('¿Eliminar este viaje?'))return;
+  mostrarCarga();
+  try {
   await deleteDoc(doc(db,'viajes_cepas',id));
   toast('Viaje eliminado','error');
+  await cargarViajes();
+  } finally { ocultarCarga(); }
 };
 
 window.toggleCobradoViaje=async function(id,val) {
-  await updateDoc(doc(db,'viajes_cepas',id),{cobrado:val,ts_actualizacion:new Date()});
+  mostrarCarga();
+  try {
+  await updateDoc(doc(db,'viajes_cepas',id),{cobrado:val,ts_actualizacion:ahoraLocal()});
   toast(val?'Marcado como cobrado ✓':'Marcado como pendiente','success');
+  await cargarViajes();
+  } finally { ocultarCarga(); }
 };
 
 window.renderViajes=function() {
@@ -1579,9 +1730,9 @@ window.renderViajes=function() {
   if(filtCob==='no')fil=fil.filter(v=>!v.cobrado);
   actualizarCardViajesPend();
   document.getElementById('tablaViajes').innerHTML=fil.map(v=>{
-    const fd=v.fecha_viaje?(v.fecha_viaje.toDate?v.fecha_viaje.toDate():new Date(v.fecha_viaje)):null;
+    const fd=aFechaLocal(v.fecha_viaje);
     return `<tr>
-      <td><strong>${fd?fd.toLocaleDateString('es-AR'):'-'}</strong></td>
+      <td><strong>${formatFecha(fd)}</strong></td>
       <td style="font-family:monospace;font-size:12px">${v.operacion||'-'}</td>
       <td style="font-size:11px">${v.destinacion||'-'}</td>
       <td style="font-weight:600">${v.ad_camion||'-'}</td>
@@ -1609,8 +1760,8 @@ window.exportarViajesExcel=function(){
   const wb=XLSX.utils.book_new();
   const data=[['Fecha Viaje','Mes','Operaciones','Cobrado','Observaciones','Cargado por']];
   allViajes.forEach(v=>{
-    const fd=v.fecha_viaje?(v.fecha_viaje.toDate?v.fecha_viaje.toDate():new Date(v.fecha_viaje)):null;
-    data.push([fd?fd.toLocaleDateString('es-AR'):'',v.mes||'',(v.operaciones||[]).join(', '),v.cobrado?'Sí':'No',v.observaciones||'',v.usuario||'']);
+    const fd=aFechaLocal(v.fecha_viaje);
+    data.push([fd?formatFecha(fd):'',v.mes||'',(v.operaciones||[]).join(', '),v.cobrado?'Sí':'No',v.observaciones||'',v.usuario||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:F1'};ws['!cols']=[{wch:14},{wch:10},{wch:50},{wch:10},{wch:24},{wch:14}];
   XLSX.utils.book_append_sheet(wb,ws,'Viajes CEPAS');
@@ -1639,16 +1790,16 @@ window.renderCepas=function() {
   document.getElementById('cepPendLiquid').textContent=total.filter(o=>!o.cepas_liquidado).length;
 
   document.getElementById('tablaCepas').innerHTML=fil.map(o=>{
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fr=aFechaLocal(o.cepas_fecha_retiro);
     return `<tr>
       <td><strong>${o.operacion}</strong></td>
       <td style="font-size:11px">${o.mes_operativo||'-'}</td>
-      <td>${fo?fo.toLocaleDateString('es-AR'):'-'}</td>
+      <td>${formatFecha(fo)}</td>
       <td style="font-weight:600">${o.cepas_ad_camion||'<span style="color:#d97706">Sin AD</span>'}</td>
       <td style="font-size:11px">${o.cepas_patente||'-'}</td>
       <td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cepas_transportista||'-'}</td>
-      <td>${fr?fr.toLocaleDateString('es-AR'):'-'}</td>
+      <td>${formatFecha(fr)}</td>
       <td>${o.cepas_liquidado?'<span class="badge badge-pagado">✓ Sí</span>':'<span class="badge badge-pendiente">Pendiente</span>'}</td>
       <td style="font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cepas_observaciones||'-'}</td>
       <td><button class="btn btn-primary btn-sm" onclick="abrirFicha('${o.id}')">✏️</button></td>
@@ -1666,7 +1817,7 @@ window.renderFechasFaltantes=function() {
   const filtTipo=document.getElementById('filtroTipoFF')?.value||'';
   const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
 
-  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&o.estado_sim!=='ANUL');
+  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&o.estado_sim!=='ANUL'&&(o.estado||'').toUpperCase()!=='OFI');
 
   document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
   document.getElementById('ffExpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='EXPORTACION').length;
@@ -1699,21 +1850,27 @@ window.renderFechasFaltantes=function() {
 window.descartarReporteFF=async function(id) {
   const o=allOps.find(x=>x.id===id);
   if(!o)return;
-  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:true,ts_actualizacion:new Date()});
+  mostrarCarga();
+  try {
+  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:true,ts_actualizacion:ahoraLocal()});
   await logEvento('REPORTE_FECHA_DESCARTADO',o.operacion,'Operación quitada del reporte de fechas faltantes','','',{},{});
   o.reporte_fecha_descartado=true;
   renderFechasFaltantes();
   toast('Quitada del reporte ✓','success');
+  } finally { ocultarCarga(); }
 };
 
 window.restaurarReporteFF=async function(id) {
   const o=allOps.find(x=>x.id===id);
   if(!o)return;
-  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:false,ts_actualizacion:new Date()});
+  mostrarCarga();
+  try {
+  await updateDoc(doc(db,'operaciones_vlp',id),{reporte_fecha_descartado:false,ts_actualizacion:ahoraLocal()});
   await logEvento('REPORTE_FECHA_DESCARTADO',o.operacion,'Operación restaurada al reporte de fechas faltantes','','',{},{});
   o.reporte_fecha_descartado=false;
   renderFechasFaltantes();
   toast('Restaurada al reporte ✓','success');
+  } finally { ocultarCarga(); }
 };
 
 window.limpiarFiltrosFF=function(){
@@ -1732,9 +1889,9 @@ window.abrirFicha=function(id) {
   fichaId=id;
   document.getElementById('fichaOpNum').textContent=o.operacion;
 
-  const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-  const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
-  const fofic=o.fecha_oficializacion?(o.fecha_oficializacion.toDate?o.fecha_oficializacion.toDate():new Date(o.fecha_oficializacion)):null;
+  const fo=aFechaLocal(o.fecha_operativa);
+  const fp=aFechaLocal(o.fecha_pago);
+  const fofic=aFechaLocal(o.fecha_oficializacion);
 
   const esFactura = o.origen_pago==='FACTURA_PROPIA';
   document.getElementById('fichaGrid').innerHTML=`
@@ -1747,12 +1904,12 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">Tipo</div><div class="ficha-val">${badgeTipo(o.tipo_operacion)}</div></div>
     <div class="ficha-item"><div class="ficha-label">Estado SIM</div><div class="ficha-val">${badgeSIM(o.estado_sim)}</div></div>
     <div class="ficha-item"><div class="ficha-label">Situación</div><div class="ficha-val">${o.situacion||'-'}</div></div>
-    <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${fofic?fofic.toLocaleDateString('es-AR'):'-'}</div></div>
-    <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${fo?fo.toLocaleDateString('es-AR'):'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${formatFecha(fofic)}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${formatFecha(fo)}</div></div>
     <div class="ficha-item"><div class="ficha-label">Mes Operativo</div><div class="ficha-val">${o.mes_operativo||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Estado Pago</div><div class="ficha-val">${o.pagada?'<span class="badge badge-pagado">✓ PAGADA</span>':'<span class="badge badge-pendiente">PENDIENTE</span>'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Origen Pago</div><div class="ficha-val">${esFactura?'<span class="badge badge-factura">💵 Factura Propia</span>':(o.pagada?'<span class="badge badge-pagado">VLP</span>':'-')}</div></div>
-    <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${fp?fp.toLocaleDateString('es-AR'):'-'}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${formatFecha(fp)}</div></div>
     <div class="ficha-item"><div class="ficha-label">VLP / Factura</div><div class="ficha-val" style="font-size:11px">${o.vlp_pago||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Importe</div><div class="ficha-val">${o.importe_vlp?'$'+Number(o.importe_vlp).toLocaleString('es-AR',{minimumFractionDigits:2}):'-'}</div></div>
     <div class="ficha-item full"><div class="ficha-label">Mercadería</div><div class="ficha-val" style="font-size:12px">${o.mercaderia||'-'}</div></div>`;
@@ -1763,16 +1920,16 @@ window.abrirFicha=function(id) {
     document.getElementById('fichaAD').value=o.cepas_ad_camion||'';
     document.getElementById('fichaPatente').value=o.cepas_patente||'';
     document.getElementById('fichaTransp').value=o.cepas_transportista||'';
-    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
-    document.getElementById('fichaFechaRetiro').value=fr?fmtFechaISO(fr):'';
+    const fr=aFechaLocal(o.cepas_fecha_retiro);
+    document.getElementById('fichaFechaRetiro').value=fr?fechaISOLocal(fr):'';
     document.getElementById('fichaObsCepas').value=o.cepas_observaciones||'';
     document.getElementById('fichaLiquidado').value=String(o.cepas_liquidado||false);
-    const fl=o.cepas_fecha_liquid?(o.cepas_fecha_liquid.toDate?o.cepas_fecha_liquid.toDate():new Date(o.cepas_fecha_liquid)):null;
-    document.getElementById('fichaFechaLiquid').value=fl?fmtFechaISO(fl):'';
+    const fl=aFechaLocal(o.cepas_fecha_liquid);
+    document.getElementById('fichaFechaLiquid').value=fl?fechaISOLocal(fl):'';
   }
 
   document.getElementById('fichaObs').value=o.observaciones||'';
-  const fechaOpISO=fo?fmtFechaISO(fo):'';
+  const fechaOpISO=fo?fechaISOLocal(fo):'';
   document.getElementById('fichaFechaOperativa').value=fechaOpISO;
   document.getElementById('fichaFechaOperativa').dataset.original=fechaOpISO;
   document.getElementById('modalFicha').classList.add('open');
@@ -1784,8 +1941,10 @@ window.guardarFicha=async function(){
   if(!fichaId)return;
   const o=allOps.find(x=>x.id===fichaId);
   if(!o)return;
+  mostrarCarga();
+  try {
   const esCepas=o.cliente&&o.cliente.toUpperCase().includes('CEPAS');
-  const update={observaciones:document.getElementById('fichaObs').value.trim(),ts_actualizacion:new Date()};
+  const update={observaciones:document.getElementById('fichaObs').value.trim(),ts_actualizacion:ahoraLocal()};
 
   // Corrección manual de fecha operativa
   const fechaOpInput=document.getElementById('fichaFechaOperativa');
@@ -1795,10 +1954,9 @@ window.guardarFicha=async function(){
   if(fechaOpValor!==fechaOpOriginal){
     fechaOpCambio=true;
     if(fechaOpValor){
-      const [anioFO,mesFO,diaFO]=fechaOpValor.split('-').map(Number);
-      const nuevaFecha=new Date(anioFO,mesFO-1,diaFO,12,0,0);
+      const nuevaFecha=fechaDesdeInputDate(fechaOpValor);
       update.fecha_operativa=nuevaFecha;
-      update.mes_operativo=calcMes(nuevaFecha);
+      update.mes_operativo=calcMesOperativo(nuevaFecha);
       update.fecha_operativa_manual=true;
     } else {
       update.fecha_operativa=null;
@@ -1813,10 +1971,12 @@ window.guardarFicha=async function(){
     update.cepas_transportista=document.getElementById('fichaTransp').value.trim();
     update.cepas_observaciones=document.getElementById('fichaObsCepas').value.trim();
     update.cepas_liquidado=document.getElementById('fichaLiquidado').value==='true';
+    // fechaDesdeInputDate() evita el bug de UTC de "new Date('yyyy-mm-dd')"
+    // que corría estas fechas un día para atrás en Argentina.
     const fr=document.getElementById('fichaFechaRetiro').value;
-    update.cepas_fecha_retiro=fr?new Date(fr):null;
+    update.cepas_fecha_retiro=fr?fechaDesdeInputDate(fr):null;
     const fl=document.getElementById('fichaFechaLiquid').value;
-    update.cepas_fecha_liquid=fl?new Date(fl):null;
+    update.cepas_fecha_liquid=fl?fechaDesdeInputDate(fl):null;
   }
   await updateDoc(doc(db,'operaciones_vlp',fichaId),update);
   if(esCepas)await logEvento('CEPAS_ACTUALIZADO',o.operacion,`Datos CEPAS actualizados. AD: ${update.cepas_ad_camion||''}. Liquidado: ${update.cepas_liquidado}`,'','',{},{cepas_ad_camion:update.cepas_ad_camion});
@@ -1824,6 +1984,7 @@ window.guardarFicha=async function(){
   cerrarFicha();
   toast('Operación guardada ✓','success');
   await cargarOperaciones();
+  } finally { ocultarCarga(); }
 };
 
 // ====================================================
@@ -1831,13 +1992,13 @@ window.guardarFicha=async function(){
 // ====================================================
 window.renderHistorial=function(){
   document.getElementById('tablaHistDUX').innerHTML=allHistDUX.map(h=>{
-    const f=h.fecha_importacion?(h.fecha_importacion.toDate?h.fecha_importacion.toDate():new Date(h.fecha_importacion)):null;
-    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${f?f.toLocaleDateString('es-AR'):'-'}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.importadas_038||0}</td><td style="color:#16a34a">${h.nuevas||0}</td><td style="color:#0284c7">${h.actualizadas||0}</td><td style="color:#7c3aed">${h.reconciliadas||0}</td></tr>`;
+    const f=aFechaLocal(h.fecha_importacion);
+    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${formatFecha(f)}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.importadas_038||0}</td><td style="color:#16a34a">${h.nuevas||0}</td><td style="color:#0284c7">${h.actualizadas||0}</td><td style="color:#7c3aed">${h.reconciliadas||0}</td></tr>`;
   }).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:12px">Sin importaciones</td></tr>';
 
   document.getElementById('tablaHistVLP').innerHTML=allHistVLP.map(h=>{
-    const f=h.fecha_importacion?(h.fecha_importacion.toDate?h.fecha_importacion.toDate():new Date(h.fecha_importacion)):null;
-    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${f?f.toLocaleDateString('es-AR'):'-'}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.total_registros||0}</td><td style="color:#16a34a">${h.conciliadas||0}</td><td style="color:#d97706">${h.sin_dux||0}</td></tr>`;
+    const f=aFechaLocal(h.fecha_importacion);
+    return `<tr><td style="font-size:11px">${h.nombre_archivo||'-'}</td><td style="font-size:11px">${formatFecha(f)}</td><td style="font-size:11px">${h.usuario||'-'}</td><td>${h.total_registros||0}</td><td style="color:#16a34a">${h.conciliadas||0}</td><td style="color:#d97706">${h.sin_dux||0}</td></tr>`;
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:12px">Sin importaciones</td></tr>';
 };
 
@@ -1851,12 +2012,12 @@ window.renderLog=function(){
   if(filtOp)fil=fil.filter(l=>l.operacion&&l.operacion.includes(filtOp));
   if(filtTipo)fil=fil.filter(l=>l.tipo_evento===filtTipo);
   document.getElementById('logContainer').innerHTML=fil.map(l=>{
-    const f=l.fecha_evento?(l.fecha_evento.toDate?l.fecha_evento.toDate():new Date(l.fecha_evento)):null;
+    const f=aFechaLocal(l.fecha_evento);
     const esFactura=l.tipo_evento==='FACTURA_PAGO_MANUAL';
     return `<div class="log-item">
       <span class="log-tipo${esFactura?' factura':''}">${l.tipo_evento||''}</span>
       <strong>Op: ${l.operacion||'-'}</strong> — ${l.descripcion||''}
-      <div style="font-size:10px;color:#aaa;margin-top:2px">${f?f.toLocaleString('es-AR'):'-'} · ${l.usuario||''}</div>
+      <div style="font-size:10px;color:#aaa;margin-top:2px">${formatFechaHora(f)} · ${l.usuario||''}</div>
     </div>`;
   }).join('')||'<div style="text-align:center;color:#888;padding:20px;font-size:13px">Sin registros en el log</div>';
 };
@@ -1867,17 +2028,17 @@ window.limpiarFiltrosLog=function(){['filtroLogOp','filtroLogTipo'].forEach(id=>
 // ====================================================
 window.exportarPendientesExcel=function(){
   const wb=XLSX.utils.book_new();
-  const hoy=new Date();hoy.setHours(0,0,0,0);
+  const hoy=hoyLocal();
   const fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).sort((a,b)=>{
-    const fa=a.fecha_operativa?new Date(a.fecha_operativa.toDate?a.fecha_operativa.toDate():a.fecha_operativa):new Date('2099-01-01');
-    const fb=b.fecha_operativa?new Date(b.fecha_operativa.toDate?b.fecha_operativa.toDate():b.fecha_operativa):new Date('2099-01-01');
+    const fa=a.fecha_operativa?aFechaLocal(a.fecha_operativa):fechaLocal(2099,1,1);
+    const fb=b.fecha_operativa?aFechaLocal(b.fecha_operativa):fechaLocal(2099,1,1);
     return fa-fb;
   });
   const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería']];
   fil.forEach(o=>{
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const dias=fo?Math.round((hoy-fo)/(1000*60*60*24)):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||'']);
+    const fo=aFechaLocal(o.fecha_operativa);
+    const dias=fo?diasEntreFechas(fo,hoy):null;
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:J1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:10},{wch:10},{wch:12},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,'Pendientes');
@@ -1890,10 +2051,10 @@ window.exportarPagadasExcel=function(){
   const fil=allOps.filter(o=>o.pagada&&!o.archivada);
   const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Fecha Pago','Días tardó','VLP / Factura','Origen Pago','Importe','N° Doc']];
   fil.forEach(o=>{
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const fp=o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
-    const dias=(fo&&fp)?Math.round((fp-fo)/(1000*60*60*24)):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?fo.toLocaleDateString('es-AR'):'',o.mes_operativo||'',fp?fp.toLocaleDateString('es-AR'):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fp=aFechaLocal(o.fecha_pago);
+    const dias=(fo&&fp)?diasEntreFechas(fo,fp):null;
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',fp?formatFecha(fp):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:L1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
   XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
@@ -1905,15 +2066,15 @@ window.exportarFueraTerminoExcel=function(){
   const wb=XLSX.utils.book_new();
   const fil=allOps.filter(o=>{
     if(!o.pagada||!o.fecha_operativa||!o.fecha_pago)return false;
-    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
-    const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
-    return Math.round((fp-fo)/(1000*60*60*24))>30;
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fp=aFechaLocal(o.fecha_pago);
+    return diasEntreFechas(fo,fp)>30;
   });
   const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Fecha Pago','Días tardó','VLP / Factura','Origen Pago']];
   fil.forEach(o=>{
-    const fo=o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa);
-    const fp=o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago);
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo.toLocaleDateString('es-AR'),fp.toLocaleDateString('es-AR'),Math.round((fp-fo)/(1000*60*60*24)),o.vlp_pago||'',o.origen_pago||'VLP']);
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fp=aFechaLocal(o.fecha_pago);
+    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',formatFecha(fo),formatFecha(fp),diasEntreFechas(fo,fp),o.vlp_pago||'',o.origen_pago||'VLP']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:I1'};
   XLSX.utils.book_append_sheet(wb,ws,'Fuera de término');
@@ -1926,10 +2087,10 @@ window.exportarCepasExcel=function(){
   const fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
   const data=[['Operación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería']];
   fil.forEach(o=>{
-    const fo=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):null;
-    const fr=o.cepas_fecha_retiro?(o.cepas_fecha_retiro.toDate?o.cepas_fecha_retiro.toDate():new Date(o.cepas_fecha_retiro)):null;
-    const fl=o.cepas_fecha_liquid?(o.cepas_fecha_liquid.toDate?o.cepas_fecha_liquid.toDate():new Date(o.cepas_fecha_liquid)):null;
-    data.push([o.operacion,o.mes_operativo||'',o.pagada?'Pagada':'Pendiente',fo?fo.toLocaleDateString('es-AR'):'',o.vlp_pago||'',o.cepas_ad_camion||'',o.cepas_patente||'',o.cepas_transportista||'',fr?fr.toLocaleDateString('es-AR'):'',o.cepas_liquidado?'Sí':'No',fl?fl.toLocaleDateString('es-AR'):'',o.cepas_observaciones||'',o.mercaderia||'']);
+    const fo=aFechaLocal(o.fecha_operativa);
+    const fr=aFechaLocal(o.cepas_fecha_retiro);
+    const fl=aFechaLocal(o.cepas_fecha_liquid);
+    data.push([o.operacion,o.mes_operativo||'',o.pagada?'Pagada':'Pendiente',fo?formatFecha(fo):'',o.vlp_pago||'',o.cepas_ad_camion||'',o.cepas_patente||'',o.cepas_transportista||'',fr?formatFecha(fr):'',o.cepas_liquidado?'Sí':'No',fl?formatFecha(fl):'',o.cepas_observaciones||'',o.mercaderia||'']);
   });
   const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:M1'};ws['!cols']=[{wch:12},{wch:10},{wch:12},{wch:14},{wch:22},{wch:12},{wch:10},{wch:18},{wch:12},{wch:10},{wch:14},{wch:20},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,'CEPAS');
@@ -1952,16 +2113,16 @@ window.abrirModalDash = function(tipo) {
     sinDux: '📋 Sin DUX (Solo VLP)',
     anul: '🚫 ANUL Pagadas'
   };
-  const anioActual=new Date().getFullYear();
+  const anioActual=ahoraLocal().getFullYear();
   const filtros = {
     total: o=>{
-      const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
-               o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      const f=o.fecha_operativa?(aFechaLocal(o.fecha_operativa)):
+               aFechaLocal(o.fecha_pago);
       return f&&f.getFullYear()===anioActual;
     },
     pagadas: o=>{
-      const f=o.fecha_operativa?(o.fecha_operativa.toDate?o.fecha_operativa.toDate():new Date(o.fecha_operativa)):
-               o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      const f=o.fecha_operativa?(aFechaLocal(o.fecha_operativa)):
+               aFechaLocal(o.fecha_pago);
       return o.pagada&&f&&f.getFullYear()===anioActual;
     },
     pendientes: o=>!o.pagada,
@@ -1987,12 +2148,12 @@ window.abrirModalDash = function(tipo) {
 function renderTablaModalDash(lista) {
   document.getElementById('tablaModalDash').innerHTML = lista.map(o=>{
     if(_dashTipo==='sinDux') {
-      const fp = o.fecha_pago?(o.fecha_pago.toDate?o.fecha_pago.toDate():new Date(o.fecha_pago)):null;
+      const fp = aFechaLocal(o.fecha_pago);
       return `<tr>
         <td><strong>${o.operacion}</strong></td>
         <td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.razon_social_vlp||'-'}</td>
         <td>${badgeTipo(o.tipo_operacion)}</td>
-        <td style="font-size:11px">${fp?fp.toLocaleDateString('es-AR'):'-'}</td>
+        <td style="font-size:11px">${formatFecha(fp)}</td>
         <td style="font-size:11px">${o.numero_doc_vlp||'-'}</td>
         <td>${badgeOrigen(o.origen)}</td>
       </tr>`;
