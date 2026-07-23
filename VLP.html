@@ -564,7 +564,7 @@ tr:hover td{background:#fafbff;}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, getDoc, getDocs,
-  addDoc, updateDoc, deleteDoc, query, orderBy, limit, onSnapshot, where, writeBatch
+  addDoc, updateDoc, deleteDoc, query, orderBy, limit, onSnapshot, where, writeBatch, documentId
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -938,6 +938,19 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       importado_por:currentUser.nombre,dux_archivo:nombreArchivo
     };
     operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp});
+  }
+
+  // 1.5 VERIFICACIÓN PUNTUAL — las que no están en memoria (allOps solo trae
+  // pendientes + pagadas del año en curso) podrían existir igual en Firestore
+  // (ej: pagadas en un mes anterior a este año). Si las tratáramos como
+  // "nuevas" les pisaríamos pagada/fecha_pago/vlp_pago con set(). Por eso
+  // se verifica puntualmente contra Firestore antes de decidir.
+  setBar(30,'Verificando operaciones ya existentes...');
+  const idsDesconocidos=[...new Set(operaciones.filter(o=>!existentes[o.opNorm]).map(o=>o.opNorm))];
+  for(let i=0;i<idsDesconocidos.length;i+=30) {
+    const chunk=idsDesconocidos.slice(i,i+30);
+    const snapCheck=await getDocs(query(collection(db,'operaciones_vlp'),where(documentId(),'in',chunk)));
+    snapCheck.docs.forEach(d=>{existentes[d.id]={id:d.id,...d.data()};});
   }
 
   // 2. ESCRIBIR EN BATCHES DE 490
