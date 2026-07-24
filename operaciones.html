@@ -321,7 +321,7 @@ td.mono{font-family:monospace;font-size:12px;}
             onblur="setTimeout(()=>cerrarAC('ac_cliente'),180)">
           <div id="ac_cliente" class="ac-list"></div>
         </div>
-        <div class="form-group">
+        <div class="form-group" id="destinacion-group">
           <label>Destinación / Permiso</label>
           <input type="text" id="op_destinacion" placeholder="IC03 1251N / EC01..." style="text-transform:uppercase;">
         </div>
@@ -342,9 +342,9 @@ td.mono{font-family:monospace;font-size:12px;}
           <select id="op_tipo" onchange="onTipoChange()">
             <option value="EXPO">Exportación (EC)</option>
             <option value="IMPO">Importación (IC)</option>
-            <option value="TRAN">Tránsito (IT)</option>
             <option value="MIC">MIC (solo manifiesto)</option>
             <option value="MULTINOTA">Multinota</option>
+            <option value="ADICIONALES">Adicionales</option>
           </select>
         </div>
         <div class="form-group">
@@ -430,6 +430,10 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="form-group" style="min-width:200px;">
           <label>Adicionales en pesos</label>
           <input type="number" id="op_adicionales_pesos" value="0" oninput="recalcularFormulario()" placeholder="$ 0">
+        </div>
+        <div class="form-group" style="min-width:200px;">
+          <label>Adicionales en USD</label>
+          <input type="number" id="op_adicionales_usd" value="0" step="0.5" oninput="recalcularFormulario()" placeholder="USD 0">
         </div>
         <div class="form-group" style="min-width:240px;">
           <label>Observaciones</label>
@@ -1213,7 +1217,7 @@ window.onTipoDespachoChange = function(){
 
   // Ocultar/mostrar canal según tipo
   const tipoOpActual = document.getElementById('op_tipo').value;
-  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA';
+  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA' || tipoOpActual === 'ADICIONALES';
   const canalGroup = document.getElementById('op_canal').closest('.form-group');
   const sinCanal = esApoderado || esKotinya || esMICoMultinota;
   canalGroup.style.opacity = sinCanal ? '0.4' : '';
@@ -1227,6 +1231,7 @@ window.onTipoChange = function(){
   const tipoOp  = document.getElementById('op_tipo').value;
   const esMIC       = tipoOp === 'MIC';
   const esMultinota = tipoOp === 'MULTINOTA';
+  const esAdicionales = tipoOp === 'ADICIONALES';
 
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
@@ -1234,17 +1239,25 @@ window.onTipoChange = function(){
     document.getElementById('chk_mic').checked = false;
   }
 
-  if(esMIC || esMultinota){
-    document.getElementById('op_canal').closest('.form-group').style.opacity = '0.3';
-    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = 'none';
+  const destinGroup = document.getElementById('destinacion-group');
+  const canalGroup  = document.getElementById('op_canal').closest('.form-group');
+
+  // Tipo "Adicionales": no tiene destinación ni canal, se ocultan por completo
+  destinGroup.style.display = esAdicionales ? 'none' : '';
+
+  if(esMIC || esMultinota || esAdicionales){
+    canalGroup.style.display = esAdicionales ? 'none' : '';
+    canalGroup.style.opacity = '0.3';
+    canalGroup.style.pointerEvents = 'none';
     document.getElementById('chk-sobre-wrap').style.display = 'none';
     document.getElementById('chk-cam-wrap').style.display = 'none';
     document.getElementById('chk-senasa-p-wrap').style.display = 'none';
     document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
   } else {
     const sinCanal = esApoderado || esKotinya;
-    document.getElementById('op_canal').closest('.form-group').style.opacity = sinCanal ? '0.4' : '';
-    document.getElementById('op_canal').closest('.form-group').style.pointerEvents = sinCanal ? 'none' : '';
+    canalGroup.style.display = '';
+    canalGroup.style.opacity = sinCanal ? '0.4' : '';
+    canalGroup.style.pointerEvents = sinCanal ? 'none' : '';
     document.getElementById('chk-sobre-wrap').style.display = '';
     document.getElementById('chk-cam-wrap').style.display = '';
     document.getElementById('chk-senasa-p-wrap').style.display = '';
@@ -1291,6 +1304,7 @@ function getTarifas(){
   const tipoOp      = document.getElementById('op_tipo').value;
   const esMIC       = tipoOp === 'MIC';
   const esMultinota = tipoOp === 'MULTINOTA';
+  const esAdicionales = tipoOp === 'ADICIONALES';
   const esPremium   = tipo === 'desp_externo';
   const _esApoderado = tipo === 'apoderado';
   const _esKotinya   = tipo === 'kotinya';
@@ -1309,7 +1323,7 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
   } else if(esMultinota){
     usd(parseFloat(document.getElementById('t_multinota').value) || 2, 'Multinota');
-  } else if(!esMIC){
+  } else if(!esMIC && !esAdicionales){
     let hon_usd;
     if(esPremium){
       hon_usd = canal === 'R'
@@ -1323,10 +1337,10 @@ function getTarifas(){
     usd(hon_usd, `Honorarios canal ${canal}`);
   }
 
-  if(!esMultinota && document.getElementById('chk_sobre').checked)
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
 
-  if(!esMultinota && document.getElementById('chk_cam').checked){
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
     let t;
     if(_esApoderado){
@@ -1343,12 +1357,12 @@ function getTarifas(){
     usd(t*n, `Camión AD ×${n}`);
   }
 
-  if(!esMultinota && document.getElementById('chk_senasa_p').checked){
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_p').checked){
     const n = parseInt(document.getElementById('n_senasa_p').value)||1;
     usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA embalaje ×${n}`);
   }
 
-  if(!esMultinota && document.getElementById('chk_senasa_prod').checked)
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_prod').checked)
     usd(parseFloat(document.getElementById('t_senasa_prod').value), 'SENASA producto');
 
   if(document.getElementById('chk_hojas').checked){
@@ -1376,12 +1390,16 @@ function getTarifas(){
   const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
   if(adicPesos > 0) pesos(adicPesos, 'Adicionales en pesos');
 
+  // Adicionales en USD
+  const adicUsd = parseFloat(document.getElementById('op_adicionales_usd').value)||0;
+  if(adicUsd > 0) usd(adicUsd, 'Adicionales en USD');
+
   const totalNeto = items.reduce((a,b) => a + b.pesos, 0);
   const iva       = tieneFactura ? totalNeto * 0.21 : 0;
   const bruto     = totalNeto + iva;
   const totalUsd  = items.reduce((a,b) => a + b.usd, 0);
 
-  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, tcFalta };
+  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, tcFalta };
 }
 
 window.recalcularFormulario = function(){
@@ -1425,20 +1443,21 @@ window.recalcularFormulario = function(){
 
 // ── CONSTRUIR DATOS DEL FORMULARIO (compartido entre crear y actualizar) ──
 function construirDatosOperacion(){
-  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota } = getTarifas();
+  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales } = getTarifas();
   const tipo = document.getElementById('tipo_desp_global').value;
 
   const adicTags = [];
-  if(!esMultinota && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
-  if(!esMultinota && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
-  if(!esMultinota && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
-  if(!esMultinota && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
   if(document.getElementById('chk_hojas').checked)      adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
   if(document.getElementById('chk_mic').checked){
     const numMic = document.getElementById('n_mic_num').value.trim() || document.getElementById('op_mic').value.trim() || 's/n';
     adicTags.push(`MIC:${numMic}`);
   }
   if(esMultinota) adicTags.push('Multinota');
+  if(esAdicionales) adicTags.push('Adicionales');
   if(document.getElementById('chk_mic_fojas').checked)  adicTags.push(`FojaMIC×${document.getElementById('n_mic_fojas').value}`);
   if(document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
   if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
@@ -1447,8 +1466,8 @@ function construirDatosOperacion(){
     fecha: document.getElementById('op_fecha').value,
     despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
-    destinacion: document.getElementById('op_destinacion').value.trim().toUpperCase(),
-    canal: (esMIC || esMultinota) ? '' : document.getElementById('op_canal').value,
+    destinacion: esAdicionales ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
+    canal: (esMIC || esMultinota || esAdicionales) ? '' : document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
     tipo: document.getElementById('op_tipo').value,
     mic: document.getElementById('op_mic').value.trim().toUpperCase(),
@@ -1468,10 +1487,12 @@ function construirDatosOperacion(){
     ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
     esMIC,
     esMultinota,
+    esAdicionales,
     // Estado crudo del formulario (para poder reconstruirlo exacto al editar)
     tipoDespGlobal: tipo,
     opTcInput: document.getElementById('op_tc').value,
     adicionalesPesos: parseFloat(document.getElementById('op_adicionales_pesos').value) || 0,
+    adicionalesUsd: parseFloat(document.getElementById('op_adicionales_usd').value) || 0,
     chk_sobre: document.getElementById('chk_sobre').checked,
     chk_cam: document.getElementById('chk_cam').checked,
     n_cam: document.getElementById('n_cam').value,
@@ -1493,6 +1514,7 @@ function construirDatosOperacion(){
 window.guardarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
   if(!tcVal || tcVal <= 0){
     toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
@@ -1500,7 +1522,7 @@ window.guardarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!esAdicionalesTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
   const datos = construirDatosOperacion();
   const op = {
@@ -1525,6 +1547,7 @@ window.actualizarOperacion = async function(){
   if(!opEditandoId) return;
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
   if(!tcVal || tcVal <= 0){
     toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
@@ -1532,7 +1555,7 @@ window.actualizarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!esAdicionalesTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
   const datos = construirDatosOperacion();
 
@@ -1567,6 +1590,7 @@ window.editarOperacion = function(id){
   document.getElementById('op_canal').value        = o.canal || 'V';
   document.getElementById('op_tipo').value         = o.tipo || 'EXPO';
   document.getElementById('op_adicionales_pesos').value = o.adicionalesPesos || 0;
+  document.getElementById('op_adicionales_usd').value   = o.adicionalesUsd || 0;
   document.getElementById('op_tc').value           = o.opTcInput || o.tc || 1440;
 
   tieneFactura = o.tieneFactura !== false;
@@ -1635,6 +1659,7 @@ window.limpiarFormulario = function(){
   document.getElementById('op_mic').value = '';
   document.getElementById('op_toma').value = '';
   document.getElementById('op_adicionales_pesos').value = '0';
+  document.getElementById('op_adicionales_usd').value = '0';
   document.getElementById('op_tc').value = '';
   document.getElementById('op_canal').value = 'V';
   document.getElementById('op_tipo').value = 'EXPO';
