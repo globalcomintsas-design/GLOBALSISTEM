@@ -192,75 +192,75 @@ td.mono{font-family:monospace;font-size:12px;}
         <div class="tarifas-grid">
           <div class="tarifa-item">
             <span class="tarifa-label">Honorarios V/N</span>
-            <span class="tarifa-val"><input type="number" id="t_vn" value="17" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_vn" value="17" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Honorarios R</span>
-            <span class="tarifa-val"><input type="number" id="t_r" value="20" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_r" value="20" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Armado sobre</span>
-            <span class="tarifa-val"><input type="number" id="t_sobre" value="4" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_sobre" value="4" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Camión AD (V/N)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_vn" value="5" step="0.5"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_cam_vn" value="5" step="0.5" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Camión AD (R)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_r" value="6" step="0.5"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_cam_r" value="6" step="0.5" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">SENASA embalaje</span>
-            <span class="tarifa-val"><input type="number" id="t_senasa_p" value="2" step="0.5"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_senasa_p" value="2" step="0.5" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">SENASA producto</span>
-            <span class="tarifa-val"><input type="number" id="t_senasa_prod" value="3" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_senasa_prod" value="3" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Hojas adicionales</span>
-            <span class="tarifa-val"><input type="number" id="t_hoja" value="0.15" step="0.05"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_hoja" value="0.15" step="0.05" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">MIC base</span>
-            <span class="tarifa-val"><input type="number" id="t_mic" value="5" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_mic" value="5" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Foja ad. MIC</span>
-            <span class="tarifa-val"><input type="number" id="t_mic_foja" value="2" step="0.5"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_mic_foja" value="2" step="0.5" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Multinota</span>
-            <span class="tarifa-val"><input type="number" id="t_multinota" value="2" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_multinota" value="2" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Fin de semana</span>
-            <span class="tarifa-val"><input type="number" id="t_finsem" value="4" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_finsem" value="4" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Apoderado</span>
-            <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1" oninput="onTipoDespachoChange()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Honorarios Kotinya</span>
-            <span class="tarifa-val"><input type="number" id="t_kotinya" value="85" step="1"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_kotinya" value="85" step="1" oninput="onTipoDespachoChange()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Pago a Ramiro</span>
-            <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1" oninput="onTipoDespachoChange()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Camión AD (apod.)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_apod" value="10" step="0.5"> USD/u</span>
+            <span class="tarifa-val"><input type="number" id="t_cam_apod" value="10" step="0.5" oninput="recalcularFormulario()"> USD/u</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">MOV AD</span>
-            <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="0.5"> USD</span>
+            <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="0.5" oninput="recalcularFormulario()"> USD</span>
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Adicionales (pesos)</span>
-            <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100"> $</span>
+            <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100" oninput="recalcularFormulario()"> $</span>
           </div>
         </div>
         <div style="margin-top:12px;padding:10px 14px;border-top:1px solid #fef3c7;background:#fffbeb;border-radius:8px;">
@@ -268,19 +268,19 @@ td.mono{font-family:monospace;font-size:12px;}
           <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
             <div class="tarifa-item" style="background:#fef9c3;">
               <span class="tarifa-label">Honorarios V/N (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_vn" value="26" step="0.5"> USD</span>
+              <span class="tarifa-val"><input type="number" id="t_prem_vn" value="26" step="0.5" oninput="recalcularFormulario()"> USD</span>
             </div>
             <div class="tarifa-item" style="background:#fef9c3;">
               <span class="tarifa-label">Honorarios R (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_r" value="28" step="0.5"> USD</span>
+              <span class="tarifa-val"><input type="number" id="t_prem_r" value="28" step="0.5" oninput="recalcularFormulario()"> USD</span>
             </div>
             <div class="tarifa-item" style="background:#fef9c3;">
               <span class="tarifa-label">Camión AD V/N (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_cam_vn" value="6" step="0.5"> USD</span>
+              <span class="tarifa-val"><input type="number" id="t_prem_cam_vn" value="6" step="0.5" oninput="recalcularFormulario()"> USD</span>
             </div>
             <div class="tarifa-item" style="background:#fef9c3;">
               <span class="tarifa-label">Camión AD R (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_cam_r" value="8" step="0.5"> USD</span>
+              <span class="tarifa-val"><input type="number" id="t_prem_cam_r" value="8" step="0.5" oninput="recalcularFormulario()"> USD</span>
             </div>
           </div>
         </div>
