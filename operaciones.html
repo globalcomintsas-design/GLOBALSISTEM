@@ -1511,7 +1511,10 @@ function construirDatosOperacion(){
 }
 
 // ── GUARDAR OPERACIÓN (nueva) ──
+let guardandoOperacion = false; // evita doble-click / doble-submit mientras Firestore procesa
 window.guardarOperacion = async function(){
+  if(guardandoOperacion) return; // ya se está guardando, ignorar clicks repetidos
+
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
@@ -1533,18 +1536,31 @@ window.guardarOperacion = async function(){
     ts: Date.now()
   };
 
+  const btn = document.getElementById('op-btn-guardar');
+  const textoOriginal = btn.innerHTML;
+  guardandoOperacion = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
   try {
     await addDoc(collection(db,'despachantees_ops'), op);
     toast('✅ Operación guardada: #' + op.numOp);
     limpiarFormulario();
   } catch(e){
     toast('❌ Error al guardar: ' + e.message);
+  } finally {
+    guardandoOperacion = false;
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
   }
 };
 
 // ── ACTUALIZAR OPERACIÓN (edición) ──
+let actualizandoOperacion = false; // evita doble-click / doble-submit mientras Firestore procesa
 window.actualizarOperacion = async function(){
   if(!opEditandoId) return;
+  if(actualizandoOperacion) return; // ya se está actualizando, ignorar clicks repetidos
+
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
@@ -1559,6 +1575,12 @@ window.actualizarOperacion = async function(){
 
   const datos = construirDatosOperacion();
 
+  const btn = document.getElementById('op-btn-actualizar');
+  const textoOriginal = btn.innerHTML;
+  actualizandoOperacion = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Actualizando...';
+
   try {
     await updateDoc(doc(db,'despachantees_ops', opEditandoId), {
       ...datos,
@@ -1569,6 +1591,10 @@ window.actualizarOperacion = async function(){
     cancelarEdicionOperacion();
   } catch(e){
     toast('❌ Error: ' + e.message);
+  } finally {
+    actualizandoOperacion = false;
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
   }
 };
 
