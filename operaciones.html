@@ -2943,7 +2943,7 @@ const EMPRESA_REMITO = {
   subtitulo: 'Despachante de Aduana',
   direccion: 'Mendoza, Argentina', // TODO: confirmar (Ej: PTM Of. 14 / Puerto Seco Of. A4)
   telefono: '261 701-6488',
-  cuit: '' // TODO: completar si querés que figure impreso
+  cuit: '30-71614367-4'
 };
 
 let remitos = [];
@@ -3050,7 +3050,7 @@ function renderHistorialRemitos(){
       <td><strong>${r.despachante||''}</strong></td>
       <td style="text-align:center;">${(r.ops||[]).length}</td>
       <td style="font-weight:700;color:#059669;">$${fmt2(r.total)}</td>
-      <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button></td>
+      <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button> <button class="btn-danger" onclick="eliminarRecibo('${r.id}')">✕</button></td>
     </tr>
   `).join('');
 }
@@ -3174,6 +3174,22 @@ window.reimprimirRemito = function(id){
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
+};
+
+window.eliminarRecibo = async function(id){
+  const r = remitos.find(x => x.id === id);
+  if(!r) return;
+  if(!confirm(`¿Eliminar el recibo N° ${r.numero} de ${r.despachante}? Las operaciones incluidas quedarán marcadas como "Sin recibo" y se van a poder volver a incluir en uno nuevo.`)) return;
+  try {
+    for(const o of (r.ops||[])){
+      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: null });
+    }
+    await deleteDoc(doc(db,'despachantees_remitos', id));
+    toast('Recibo eliminado');
+    renderRemitos();
+  } catch(e){
+    toast('❌ Error al eliminar el recibo: ' + e.message);
+  }
 };
 
 // ── INIT ──
