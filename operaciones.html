@@ -177,6 +177,7 @@ td.mono{font-family:monospace;font-size:12px;}
     <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
     <button class="tab" onclick="switchTab('mudanzas')">📦 Mudanzas</button>
     <button class="tab" onclick="switchTab('ramiro')">👷 Cuenta Ramiro</button>
+    <button class="tab" onclick="switchTab('remitos')">🧾 Recibos</button>
   </div>
 
   <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
@@ -925,7 +926,87 @@ td.mono{font-family:monospace;font-size:12px;}
     </div>
   </div>
 
+  <!-- ═══════════════ TAB: RECIBOS ═══════════════ -->
+  <div id="tab-remitos" style="display:none;">
+
+    <div class="section-card">
+      <h3>🧾 Generar recibo</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Despachante</label>
+          <select id="remito_despachante" onchange="renderRemitos()">
+            <option value="">Seleccioná un despachante...</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Fecha desde</label>
+          <input type="date" id="remito_fecha_desde" onchange="renderRemitos()">
+        </div>
+        <div class="form-group">
+          <label>Fecha hasta</label>
+          <input type="date" id="remito_fecha_hasta" onchange="renderRemitos()">
+        </div>
+        <div class="form-group">
+          <label>Mostrar</label>
+          <select id="remito_filtro_estado" onchange="renderRemitos()">
+            <option value="todas">Todas las operaciones</option>
+            <option value="sin_remito">Solo sin recibo emitido</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card" id="remito-lista-card" style="display:none;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+        <h3 style="margin:0;">Operaciones de <span id="remito-desp-nombre" style="color:#1e3a8a;"></span></h3>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <span id="remito-total-sel" style="font-size:13px;font-weight:700;color:#1e3a8a;"></span>
+          <button class="btn-success" onclick="generarRemito()">🧾 Generar Recibo con seleccionadas</button>
+        </div>
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:36px;"><input type="checkbox" id="remito_chk_todas" onchange="toggleRemitoTodas(this.checked)"></th>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Destinación</th>
+              <th>Canal</th>
+              <th>Valor $</th>
+              <th>Recibo previo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-remito-ops"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h3>📜 Historial de recibos emitidos</h3>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>N° Recibo</th>
+              <th>Fecha</th>
+              <th>Despachante</th>
+              <th>Ops</th>
+              <th>Total $</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-remitos-hist">
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
 </div><!-- /main -->
+
 
 <div class="toast" id="toast"></div>
 
@@ -1013,17 +1094,18 @@ window.toggleTarifas = function(){
 
 // ── SWITCH TAB ──
 window.switchTab = function(tab){
-  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro'].forEach(t => {
+  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn,i) => {
-    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro'][i]===tab);
+    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos'][i]===tab);
   });
   if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
   if(tab==='saldos')    renderSaldos();
   if(tab==='clientes')  renderTablaClientesFinales();
   if(tab==='ramiro')    renderRamiro();
+  if(tab==='remitos')   renderRemitos();
 };
 
 // ── AUTOCOMPLETE ──
@@ -2089,33 +2171,33 @@ window.renderDashboard = function(){
   document.getElementById('dash-detalle').innerHTML = `
     <div class="section-card" style="margin:0;">
       <h3>Por despachante</h3>
-      <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Despachante</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th><th style="padding:7px;text-align:right;">Pagado $</th><th style="padding:7px;text-align:right;">Saldo $</th></tr></thead>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
             const { pagado, saldo } = calcularSaldoDespachante(k);
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
-            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:7px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:7px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
+            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
           }).join('')}
-          ${incluirMudEnTotales && mudFiltradas.length ? `<tr style="border-bottom:1px solid #f1f5f9;background:#eff6ff;"><td style="padding:7px;"><strong>📦 Mudanzas</strong></td><td style="padding:7px;text-align:right;">${mudFiltradas.length}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(totBrutoMud)}</td><td style="padding:7px;text-align:right;color:#059669;">$${fmt2(mudPagado)}</td><td style="padding:7px;text-align:right;font-weight:700;color:${mudPendiente>0.005?'#dc2626':'#059669'};">$${fmt2(mudPendiente)}</td></tr>` : ''}
+          ${incluirMudEnTotales && mudFiltradas.length ? `<tr style="border-bottom:1px solid #f1f5f9;background:#eff6ff;"><td style="padding:5px 6px;"><strong>📦 Mudanzas</strong></td><td style="padding:5px 6px;text-align:right;">${mudFiltradas.length}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(totBrutoMud)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(mudPagado)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${mudPendiente>0.005?'#dc2626':'#059669'};">$${fmt2(mudPendiente)}</td></tr>` : ''}
         </tbody>
       </table>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>Por mes</h3>
-      <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Mes</th><th style="padding:7px;text-align:right;">Ops</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Mes</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.ops}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
           ).join('')}
         </tbody>
       </table>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>📦 Mudanzas por cliente</h3>
-      <table style="width:100%;font-size:13px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:7px;text-align:left;">Cliente</th><th style="padding:7px;text-align:right;">Cant.</th><th style="padding:7px;text-align:right;">Total $</th></tr></thead>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:right;">Cant.</th><th style="padding:5px 6px;text-align:right;">Total $</th></tr></thead>
         <tbody>
           ${Object.entries(byClienteMud).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
             `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.cant}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
@@ -2850,6 +2932,248 @@ window.marcarTodoPagadoRamiro = async function(){
     await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
   }
   toast(`✅ ${pending.length} registros marcados como pagados`);
+};
+
+// ── RECIBOS ──
+// Datos de la empresa para el membrete del recibo.
+// ⚠️ No pude confirmar la dirección/CUIT exactos buscando en la web (el sitio no aparece bien
+// indexado). Completá o corregí estos datos si hace falta, quedaron todos juntos acá:
+const EMPRESA_REMITO = {
+  nombre: 'GLOBALCOMINT SAS',
+  subtitulo: 'Despachante de Aduana',
+  direccion: 'Mendoza, Argentina', // TODO: confirmar (Ej: PTM Of. 14 / Puerto Seco Of. A4)
+  telefono: '261 701-6488',
+  cuit: '' // TODO: completar si querés que figure impreso
+};
+
+let remitos = [];
+let remitoSeleccionadas = new Set();
+
+onSnapshot(collection(db,'despachantees_remitos'), snap => {
+  remitos = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (b.numero||0)-(a.numero||0));
+  renderHistorialRemitos();
+});
+
+function poblarSelectRemitoDespachante(){
+  const sel = document.getElementById('remito_despachante');
+  if(!sel) return;
+  const v = sel.value;
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  sel.innerHTML = '<option value="">Seleccioná un despachante...</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = v;
+}
+
+window.renderRemitos = function(){
+  poblarSelectRemitoDespachante();
+  const desp = document.getElementById('remito_despachante').value;
+  const desde = document.getElementById('remito_fecha_desde').value;
+  const hasta = document.getElementById('remito_fecha_hasta').value;
+  const filtroEstado = document.getElementById('remito_filtro_estado').value;
+  const card = document.getElementById('remito-lista-card');
+
+  if(!desp){
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  document.getElementById('remito-desp-nombre').textContent = desp;
+
+  let ops = operaciones.filter(o => o.despachante === desp);
+  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
+  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
+  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
+  ops = ops.sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  // Limpiar selección de operaciones que ya no están visibles con estos filtros
+  const idsVisibles = new Set(ops.map(o => o.id));
+  [...remitoSeleccionadas].forEach(id => { if(!idsVisibles.has(id)) remitoSeleccionadas.delete(id); });
+
+  const tbody = document.getElementById('tbody-remito-ops');
+  if(!ops.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px;">Sin operaciones con esos filtros</td></tr>';
+  } else {
+    tbody.innerHTML = ops.map(o => `
+      <tr>
+        <td><input type="checkbox" ${remitoSeleccionadas.has(o.id)?'checked':''} onchange="toggleRemitoOp('${o.id}', this.checked)"></td>
+        <td>${o.fecha||''}</td>
+        <td>${o.cliente||'-'}</td>
+        <td class="mono">${o.destinacion||'-'}</td>
+        <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='ADICIONALES') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
+        <td style="font-weight:700;color:#059669;">$${fmt2(o.bruto)}</td>
+        <td>${o.numRemito ? `<span class="tag" style="background:#fef9c3;color:#92400e;">N° ${o.numRemito}</span>` : '<span class="tag" style="background:#f1f5f9;color:#64748b;">Sin recibo</span>'}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('remito_chk_todas').checked = ops.length > 0 && ops.every(o => remitoSeleccionadas.has(o.id));
+  actualizarTotalRemito();
+};
+
+window.toggleRemitoOp = function(id, checked){
+  if(checked) remitoSeleccionadas.add(id);
+  else remitoSeleccionadas.delete(id);
+  actualizarTotalRemito();
+};
+
+window.toggleRemitoTodas = function(checked){
+  const desp = document.getElementById('remito_despachante').value;
+  const desde = document.getElementById('remito_fecha_desde').value;
+  const hasta = document.getElementById('remito_fecha_hasta').value;
+  const filtroEstado = document.getElementById('remito_filtro_estado').value;
+  let ops = operaciones.filter(o => o.despachante === desp);
+  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
+  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
+  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
+  ops.forEach(o => { if(checked) remitoSeleccionadas.add(o.id); else remitoSeleccionadas.delete(o.id); });
+  renderRemitos();
+};
+
+function actualizarTotalRemito(){
+  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
+  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
+  document.getElementById('remito-total-sel').textContent =
+    seleccionadas.length ? `${seleccionadas.length} operación(es) seleccionada(s) — Total $${fmt2(total)}` : 'Ninguna operación seleccionada';
+}
+
+function renderHistorialRemitos(){
+  const tbody = document.getElementById('tbody-remitos-hist');
+  if(!tbody) return;
+  if(!remitos.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>';
+    return;
+  }
+  tbody.innerHTML = remitos.map(r => `
+    <tr>
+      <td class="mono">${r.numero||''}</td>
+      <td>${r.fecha||''}</td>
+      <td><strong>${r.despachante||''}</strong></td>
+      <td style="text-align:center;">${(r.ops||[]).length}</td>
+      <td style="font-weight:700;color:#059669;">$${fmt2(r.total)}</td>
+      <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button></td>
+    </tr>
+  `).join('');
+}
+
+function construirHtmlRemito(numero, despachante, fecha, opsData, total){
+  const filas = opsData.map(o => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.fecha||''}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.cliente||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-family:monospace;">${o.destinacion||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${fmt2(o.bruto)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero} - ${despachante}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;color:#1e293b;padding:40px;max-width:800px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px;}
+  .empresa-nombre{font-size:22px;font-weight:700;color:#1e3a8a;}
+  .empresa-sub{font-size:12px;color:#64748b;margin-top:2px;}
+  .empresa-datos{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;}
+  .recibo-titulo{text-align:right;}
+  .recibo-titulo .tag{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:15px;padding:6px 16px;border-radius:8px;display:inline-block;}
+  .recibo-num{font-size:12px;color:#64748b;margin-top:6px;}
+  .datos-recibo{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px;}
+  table{width:100%;border-collapse:collapse;margin-top:10px;}
+  thead tr{background:#1e3a8a;color:#fff;}
+  th{padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
+  .total-row{font-weight:700;font-size:15px;color:#1e3a8a;}
+  .firma-box{display:flex;justify-content:space-between;margin-top:60px;}
+  .firma{width:220px;border-top:1px solid #94a3b8;text-align:center;padding-top:6px;font-size:11px;color:#64748b;}
+  @media print{ body{padding:20px;} }
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div class="empresa-nombre">${EMPRESA_REMITO.nombre}</div>
+      <div class="empresa-sub">${EMPRESA_REMITO.subtitulo}</div>
+      <div class="empresa-datos">
+        ${EMPRESA_REMITO.direccion}<br>
+        Tel: ${EMPRESA_REMITO.telefono}${EMPRESA_REMITO.cuit ? '<br>CUIT: '+EMPRESA_REMITO.cuit : ''}
+      </div>
+    </div>
+    <div class="recibo-titulo">
+      <span class="tag">RECIBO</span>
+      <div class="recibo-num">N° ${String(numero).padStart(5,'0')}</div>
+    </div>
+  </div>
+
+  <div class="datos-recibo">
+    <div><strong>Despachante:</strong> ${despachante}</div>
+    <div><strong>Fecha de emisión:</strong> ${fecha}</div>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Cliente</th><th>Destinación</th><th style="text-align:right;">Valor $</th></tr>
+    </thead>
+    <tbody>${filas}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="3" style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">TOTAL</td>
+        <td style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">$${fmt2(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="firma-box">
+    <div class="firma">Recibí conforme</div>
+    <div class="firma">Aclaración / DNI</div>
+  </div>
+
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`;
+}
+
+window.generarRemito = async function(){
+  const despachante = document.getElementById('remito_despachante').value;
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
+  if(!seleccionadas.length){ toast('⚠️ Tildá al menos una operación'); return; }
+
+  const numero = remitos.length + 1;
+  const fechaHoy = new Date().toISOString().split('T')[0];
+  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
+
+  const opsData = seleccionadas
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''))
+    .map(o => ({ id:o.id, fecha:o.fecha||'', cliente:o.cliente||'', destinacion:o.destinacion||'', bruto:o.bruto||0 }));
+
+  try {
+    await addDoc(collection(db,'despachantees_remitos'), {
+      numero, despachante, fecha: fechaHoy, ops: opsData, total,
+      generadoPor: user.username, ts: Date.now()
+    });
+    // Marca cada operación con el N° de recibo emitido
+    for(const o of seleccionadas){
+      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: numero });
+    }
+
+    const html = construirHtmlRemito(numero, despachante, fechaHoy, opsData, total);
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+
+    remitoSeleccionadas.clear();
+    toast('✅ Recibo N° ' + numero + ' generado');
+    renderRemitos();
+  } catch(e){
+    toast('❌ Error al generar el recibo: ' + e.message);
+  }
+};
+
+window.reimprimirRemito = function(id){
+  const r = remitos.find(x => x.id === id);
+  if(!r) return;
+  const html = construirHtmlRemito(r.numero, r.despachante, r.fecha, r.ops||[], r.total||0);
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
 };
 
 // ── INIT ──
