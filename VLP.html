@@ -1771,19 +1771,29 @@ window.exportarViajesExcel=function(){
 
 // CEPAS
 // ====================================================
+// Criterio unificado: SOLO entran acá las operaciones que son de CEPAS
+// (cliente) Y cuya mercadería es MOSTO. Esto evita que entren vinos de
+// CEPAS (Vinos S.A. / etc., no son mosto) o mostos de otros clientes que
+// no sean CEPAS. La sección CEPAS de la Ficha de Operación usa el mismo
+// criterio de cliente para mostrarse.
+// ====================================================
 window.renderCepas=function() {
   const filtMes=document.getElementById('filtroMesCepas')?.value||'';
   const filtAD=document.getElementById('filtroADCepas')?.value||'';
   const filtLiquid=document.getElementById('filtroLiquidCepas')?.value||'';
 
-  let fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  let fil=allOps.filter(o=>!o.archivada
+    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
+    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
   if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
   if(filtAD==='con')fil=fil.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='');
   if(filtAD==='sin')fil=fil.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='');
   if(filtLiquid==='si')fil=fil.filter(o=>o.cepas_liquidado);
   if(filtLiquid==='no')fil=fil.filter(o=>!o.cepas_liquidado);
 
-  const total=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  const total=allOps.filter(o=>!o.archivada
+    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
+    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
   document.getElementById('cepTotal').textContent=total.length;
   document.getElementById('cepConAD').textContent=total.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='').length;
   document.getElementById('cepSinAD').textContent=total.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='').length;
@@ -2084,7 +2094,9 @@ window.exportarFueraTerminoExcel=function(){
 
 window.exportarCepasExcel=function(){
   const wb=XLSX.utils.book_new();
-  const fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
+  const fil=allOps.filter(o=>!o.archivada
+    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
+    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
   const data=[['Operación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería']];
   fil.forEach(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
