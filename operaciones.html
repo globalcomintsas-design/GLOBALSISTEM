@@ -486,8 +486,9 @@ td.mono{font-family:monospace;font-size:12px;}
             <select id="filtro_mes" onchange="resetPaginaListado()">
               <option value="">Todos los meses</option>
             </select>
-            <input type="date" id="filtro_fecha" onchange="resetPaginaListado()">
-            <button class="btn-outline" onclick="document.getElementById('filtro_fecha').value='';resetPaginaListado()">✕ Día</button>
+           <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
+           <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
+           <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
           </div>
           <button class="btn-outline" onclick="toggleFacturaLotePanel()">🧾 Asignar factura (lote)</button>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
