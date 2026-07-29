@@ -426,7 +426,7 @@ tr:hover td{background:#fafbff;}
         <div class="section-title">Log de Conciliaciones</div>
         <div class="filtros">
           <div><label>Operación</label><input type="text" id="filtroLogOp" placeholder="Número..." oninput="renderLog()" /></div>
-          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>REPORTE_FECHA_DESCARTADO</option></select></div>
+          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>REPORTE_FECHA_DESCARTADO</option><option>OPERACION_ARCHIVADA</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosLog()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div id="logContainer" style="max-height:500px;overflow-y:auto;"></div>
@@ -807,6 +807,21 @@ function parseExcelDate(v) {
 function now() { return ahoraLocal(); }
 function todayISO() { return fechaISOLocal(ahoraLocal()); }
 
+// ---- ARCHIVADO AUTOMÁTICO DE ANULADAS SIN PAGAR ----
+// Una operación ANUL que NUNCA se cobró no aporta nada a los reportes de
+// cobranza y solo genera ruido (dashboard, pendientes, %cobrado, etc.).
+// Regla: si estado_sim === 'ANUL' y la operación está pagada === false,
+// se marca archivada:true (desaparece de todo, ya que casi todas las
+// funciones de render ya filtran por !o.archivada). Si esa misma operación
+// se termina cobrando (llega el VLP), se desarchiva sola y vuelve a
+// aparecer en Pagadas + en la card "ANUL Pagadas" del Dashboard.
+// El histórico de DUX (ANUL nunca cobradas) NO es información útil para
+// este sistema — por eso se archivan y no se muestran en ningún lado,
+// salvo que se paguen.
+function calcularArchivada(estadoSim, pagada) {
+  return estadoSim === 'ANUL' && !pagada;
+}
+
 // ---- RUEDA DE CARGA GLOBAL ----
 let _loadingCount=0;
 function mostrarCarga(){ _loadingCount++; document.getElementById('loaderOverlay').classList.add('show'); }
@@ -1056,11 +1071,13 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       if(fPrev && !isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
     }
 
+    const estadoSim=String(r[COL_SIM]||'');
+
     const nuevosDatos={
       operacion:opNorm,operacion_raw:r[COL_OP],cliente:String(r[COL_CLI]||''),
       destinacion:dest,aduana:String(r[COL_ADUANA]||''),codigo_regimen:codigoReg,
       tipo_operacion:tipoOp,mercaderia:String(r[COL_MERC]||''),
-      estado_sim:String(r[COL_SIM]||''),situacion:String(r[COL_SITU]||''),
+      estado_sim:estadoSim,situacion:String(r[COL_SITU]||''),
       estado:String(r[COL_ESTADO]||''),fecha_oficializacion:fechaOfic,
       fecha_mer_a_bordo:fechaBordo,cumplido_plaza:fechaPlaza,
       fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMesOperativo(fechaOp):null,
@@ -1068,7 +1085,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
       importado_por:currentUser.nombre,dux_archivo:nombreArchivo
     };
-    operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp});
+    operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim});
   }
 
   // 1.5 VERIFICACIÓN PUNTUAL — las que no están en memoria (allOps solo trae
@@ -1090,24 +1107,31 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
   for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
     const chunk=operaciones.slice(i,i+BATCH_SIZE);
     const batch=writeBatch(db);
-    for(const {opNorm,nuevosDatos,codigoReg,tipoOp} of chunk) {
+    for(const {opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim} of chunk) {
       const ref=doc(db,'operaciones_vlp',opNorm);
       const existente=existentes[opNorm];
       if(!existente) {
+        // ANUL sin pagar → se archiva directo, no aporta al histórico de cobranza.
+        const archivadaCalc=calcularArchivada(estadoSim,false);
         batch.set(ref,{...nuevosDatos,pagada:false,fecha_pago:null,vlp_pago:null,
           numero_doc_vlp:null,razon_social_vlp:null,importe_vlp:null,origen:'SOLO_DUX',
           origen_pago:null,cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
           cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
-          cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
+          cepas_fecha_liquid:null,observaciones:'',archivada:archivadaCalc,ts_creacion:ahora,
           reporte_fecha_descartado:false});
         logItems.push({tipo:'DUX_IMPORTADO_NUEVO',op:opNorm,desc:`Nueva op desde DUX. Régimen: ${codigoReg} (${tipoOp})`,despues:{tipo_operacion:tipoOp}});
         nuevas++;
       } else if(existente.origen==='SOLO_VLP') {
-        batch.update(ref,{...nuevosDatos,origen:'COMPLETO'});
+        // Ya tiene VLP (pagada=true en ese caso) → nunca se archiva por ANUL.
+        const archivadaCalc=calcularArchivada(estadoSim,existente.pagada);
+        batch.update(ref,{...nuevosDatos,origen:'COMPLETO',archivada:archivadaCalc});
         logItems.push({tipo:'RECONCILIACION_AUTO',op:opNorm,desc:`Reconciliada auto. VLP previo: ${existente.vlp_pago}`,vlp:existente.vlp_pago||''});
         reconciliadas++;
       } else {
-        batch.update(ref,nuevosDatos);
+        // Respeta el estado de pago actual: si ya estaba pagada, nunca se archiva
+        // aunque el régimen figure como ANUL en DUX.
+        const archivadaCalc=calcularArchivada(estadoSim,existente.pagada);
+        batch.update(ref,{...nuevosDatos,archivada:archivadaCalc});
         logItems.push({tipo:'DUX_ACTUALIZADO',op:opNorm,desc:'Operación actualizada desde DUX'});
         actualizadas++;
       }
@@ -1229,7 +1253,10 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
       const ref=doc(db,'operaciones_vlp',opNorm);
       const existente=existentes[opNorm];
       if(existente) {
-        batch.update(ref,{...vlpData,origen:existente.origen==='SOLO_DUX'?'COMPLETO':existente.origen});
+        // Se cobró (aunque el régimen figure como ANUL en DUX): la palabra
+        // ANUL sigue siendo válida para conciliar el pago, y la operación
+        // se desarchiva si es que estaba archivada por ANUL sin pagar.
+        batch.update(ref,{...vlpData,origen:existente.origen==='SOLO_DUX'?'COMPLETO':existente.origen,archivada:false});
         logItems.push({tipo:'VLP_PAGADO',op:opNorm,desc:`Marcada PAGADA. VLP: ${nombreVLP}. Importe: $${imp||0}`,vlp:nombreVLP});
         conciliadas++;
       } else {
@@ -1340,7 +1367,7 @@ window.pagarMasivo=async function() {
       batch.update(doc(db,'operaciones_vlp',id),{
         pagada:true, fecha_pago:fechaPago, vlp_pago:vlp,
         origen_pago:'VLP', origen:op.origen==='SOLO_DUX'?'COMPLETO':op.origen,
-        ts_actualizacion:ahora
+        archivada:false, ts_actualizacion:ahora
       });
     }
     await batch.commit();
@@ -1371,7 +1398,9 @@ function renderDashboard() {
   const revisar=ops.filter(o=>o.tipo_operacion==='REVISAR').length;
   const soloVlp=ops.filter(o=>o.origen==='SOLO_VLP').length;
 
-  const anul=ops.filter(o=>o.estado_sim==='ANUL'&&o.pagada).length;
+  // ANUL Pagadas: se calcula sobre allOps (no ops), ya que las ANUL pagadas
+  // nunca están archivadas (calcularArchivada las excluye si pagada=true).
+  const anul=allOps.filter(o=>o.estado_sim==='ANUL'&&o.pagada).length;
 
   document.getElementById('dTotal').textContent=total;
   document.getElementById('dPagadas').textContent=pagadas;
@@ -1491,7 +1520,7 @@ window.limpiarFiltrosPend=function(){
 };
 
 // ====================================================
-// PAGO POR FACTURA PROPIA  ← NUEVO
+// PAGO POR FACTURA PROPIA
 // ====================================================
 window.abrirModalFactura = function(id) {
   facturaOpId = id;
@@ -1541,6 +1570,8 @@ window.confirmarPagoFactura = async function() {
     observaciones: obs
       ? (o.observaciones ? o.observaciones + ' | ' + obs : obs)
       : (o.observaciones || ''),
+    // Se cobró: si estaba archivada por ANUL sin pagar, se desarchiva.
+    archivada: false,
     ts_actualizacion: ahoraLocal()
   };
 
@@ -1771,29 +1802,19 @@ window.exportarViajesExcel=function(){
 
 // CEPAS
 // ====================================================
-// Criterio unificado: SOLO entran acá las operaciones que son de CEPAS
-// (cliente) Y cuya mercadería es MOSTO. Esto evita que entren vinos de
-// CEPAS (Vinos S.A. / etc., no son mosto) o mostos de otros clientes que
-// no sean CEPAS. La sección CEPAS de la Ficha de Operación usa el mismo
-// criterio de cliente para mostrarse.
-// ====================================================
 window.renderCepas=function() {
   const filtMes=document.getElementById('filtroMesCepas')?.value||'';
   const filtAD=document.getElementById('filtroADCepas')?.value||'';
   const filtLiquid=document.getElementById('filtroLiquidCepas')?.value||'';
 
-  let fil=allOps.filter(o=>!o.archivada
-    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
-    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
+  let fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
   if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
   if(filtAD==='con')fil=fil.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='');
   if(filtAD==='sin')fil=fil.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='');
   if(filtLiquid==='si')fil=fil.filter(o=>o.cepas_liquidado);
   if(filtLiquid==='no')fil=fil.filter(o=>!o.cepas_liquidado);
 
-  const total=allOps.filter(o=>!o.archivada
-    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
-    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
+  const total=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
   document.getElementById('cepTotal').textContent=total.length;
   document.getElementById('cepConAD').textContent=total.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='').length;
   document.getElementById('cepSinAD').textContent=total.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='').length;
@@ -2094,9 +2115,7 @@ window.exportarFueraTerminoExcel=function(){
 
 window.exportarCepasExcel=function(){
   const wb=XLSX.utils.book_new();
-  const fil=allOps.filter(o=>!o.archivada
-    && o.cliente && o.cliente.toUpperCase().includes('CEPAS')
-    && o.mercaderia && o.mercaderia.toUpperCase().includes('MOSTO'));
+  const fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
   const data=[['Operación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería']];
   fil.forEach(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
@@ -2137,12 +2156,18 @@ window.abrirModalDash = function(tipo) {
                aFechaLocal(o.fecha_pago);
       return o.pagada&&f&&f.getFullYear()===anioActual;
     },
-    pendientes: o=>!o.pagada,
+    // Mismo criterio que la card y la pestaña Pendientes: exige fecha
+    // operativa. Al estar las ANUL sin pagar ya archivadas de antemano,
+    // "ops" (que filtra !archivada) nunca las incluye acá tampoco.
+    pendientes: o=>!o.pagada&&o.fecha_operativa,
     revisar: o=>o.tipo_operacion==='REVISAR',
     sinDux: o=>o.origen==='SOLO_VLP',
+    // ANUL pagadas puede haber quedado desarchivada por el pago, así que
+    // usamos allOps (no ops) para no perderla si algún otro criterio de
+    // archivado la tocara en el futuro.
     anul: o=>o.estado_sim==='ANUL'&&o.pagada
   };
-  _dashOps = ops.filter(filtros[tipo]);
+  _dashOps = (tipo==='anul'?allOps.filter(o=>!o.archivada||o.pagada):ops).filter(filtros[tipo]);
   _dashTipo = tipo;
   document.getElementById('modalDashTitulo').textContent = titulos[tipo] + ' (' + _dashOps.length + ')';
   document.getElementById('buscarModalDash').value = '';
@@ -2207,6 +2232,44 @@ function badgeOrigen(o) {
   const l={COMPLETO:'✓ Completo',SOLO_DUX:'Solo DUX',SOLO_VLP:'⚠️ Solo VLP'};
   return `<span class="badge ${m[o]||'badge-pendiente'}">${l[o]||o}</span>`;
 }
+
+// ====================================================
+// LIMPIEZA ÚNICA DE HISTÓRICO — ANUL SIN PAGAR
+// ====================================================
+// Ejecutar UNA sola vez desde la consola del navegador (F12 → Console),
+// escribiendo: archivarAnulHistoricas()
+// Archiva todas las operaciones ANUL sin pagar que ya existían en el
+// sistema antes de este cambio. De acá en adelante, el propio import de
+// DUX se encarga de archivarlas automáticamente (ver calcularArchivada()).
+window.archivarAnulHistoricas = async function() {
+  const aArchivar = allOps.filter(o=>o.estado_sim==='ANUL'&&!o.pagada&&!o.archivada);
+  if(!aArchivar.length){ toast('No hay ANUL sin pagar para archivar','success'); return; }
+  if(!confirm(`¿Archivar ${aArchivar.length} operaciones ANUL sin pagar? Esta acción es para limpieza única del histórico.`)) return;
+  mostrarCarga();
+  try {
+    const ahora=ahoraLocal();
+    const BATCH_SIZE=490;
+    for(let i=0;i<aArchivar.length;i+=BATCH_SIZE){
+      const batch=writeBatch(db);
+      aArchivar.slice(i,i+BATCH_SIZE).forEach(o=>{
+        batch.update(doc(db,'operaciones_vlp',o.id),{archivada:true,ts_actualizacion:ahora});
+      });
+      await batch.commit();
+    }
+    const batchLog=writeBatch(db);
+    aArchivar.forEach(o=>{
+      batchLog.set(doc(collection(db,'log_conciliaciones')),{
+        tipo_evento:'OPERACION_ARCHIVADA',operacion:o.operacion,
+        descripcion:'ANUL sin pagar archivada (limpieza histórico único)',
+        vlp_archivo:'',dux_archivo:'',fecha_evento:ahora,
+        usuario:currentUser.nombre,datos_antes:{archivada:false},datos_despues:{archivada:true}
+      });
+    });
+    await batchLog.commit();
+    toast(`${aArchivar.length} ANUL archivadas ✓`,'success');
+    await cargarOperaciones();
+  } finally { ocultarCarga(); }
+};
 
 autoLogin();
 </script>
