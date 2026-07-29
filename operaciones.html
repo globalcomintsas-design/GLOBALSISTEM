@@ -2381,8 +2381,9 @@ window.exportarExcel = function(){
   let pagosFiltrados = [...pagos];
   if(filtCorr) pagosFiltrados = pagosFiltrados.filter(p => p.despachante === filtCorr);
   if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
-  if(filtFecha) pagosFiltrados = pagosFiltrados.filter(p => p.fecha === filtFecha);
-
+  if(filtDesde) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') >= filtDesde);
+  if(filtHasta) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') <= filtHasta);
+  
   const fmtFechaAR = (iso) => {
     if(!iso) return '';
     const [y,m,d] = iso.split('-');
