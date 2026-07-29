@@ -486,9 +486,9 @@ td.mono{font-family:monospace;font-size:12px;}
             <select id="filtro_mes" onchange="resetPaginaListado()">
               <option value="">Todos los meses</option>
             </select>
-           <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
-           <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
-           <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
+            <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
+            <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
+            <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
           </div>
           <button class="btn-outline" onclick="toggleFacturaLotePanel()">🧾 Asignar factura (lote)</button>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
@@ -2374,16 +2374,16 @@ window.exportarExcel = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
-  
+
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
 
-  // Pagos que corresponden a los mismos filtros (mismo despachante / mismo mes de pago)
+  // Pagos que corresponden a los mismos filtros (mismo despachante / mismo rango de fechas de pago)
   let pagosFiltrados = [...pagos];
   if(filtCorr) pagosFiltrados = pagosFiltrados.filter(p => p.despachante === filtCorr);
   if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
   if(filtDesde) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') >= filtDesde);
   if(filtHasta) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') <= filtHasta);
-  
+
   const fmtFechaAR = (iso) => {
     if(!iso) return '';
     const [y,m,d] = iso.split('-');
@@ -2449,7 +2449,7 @@ window.exportarExcel = function(){
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto - totPagado), '', '', dec2(totPagado), ''];
+  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
@@ -2524,7 +2524,8 @@ window.exportarExcel = function(){
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
 
-  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${filtMes||'todos'}.xlsx`
+  const rangoNombre = (filtDesde || filtHasta) ? `${filtDesde||'inicio'}_a_${filtHasta||'hoy'}` : (filtMes||'todos');
+  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}.xlsx`
     .replace(/\s+/g,'_');
 
   XLSX.writeFile(wb, nombreArchivo);
@@ -3067,6 +3068,9 @@ function construirHtmlRemito(numero, despachante, fecha, opsData, total){
       <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.fecha||''}</td>
       <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.cliente||'-'}</td>
       <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-family:monospace;">${o.destinacion||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;">${o.canal||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;">${o.tc||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b;">${o.obs||'-'}</td>
       <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${fmt2(o.bruto)}</td>
     </tr>
   `).join('');
@@ -3116,12 +3120,12 @@ function construirHtmlRemito(numero, despachante, fecha, opsData, total){
 
   <table>
     <thead>
-      <tr><th>Fecha</th><th>Cliente</th><th>Destinación</th><th style="text-align:right;">Valor $</th></tr>
+      <tr><th>Fecha</th><th>Cliente</th><th>Destinación</th><th>Canal</th><th>TC</th><th>Obs</th><th style="text-align:right;">Valor $</th></tr>
     </thead>
     <tbody>${filas}</tbody>
     <tfoot>
       <tr class="total-row">
-        <td colspan="3" style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">TOTAL</td>
+        <td colspan="6" style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">TOTAL</td>
         <td style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">$${fmt2(total)}</td>
       </tr>
     </tfoot>
@@ -3148,7 +3152,7 @@ window.generarRemito = async function(){
 
   const opsData = seleccionadas
     .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''))
-    .map(o => ({ id:o.id, fecha:o.fecha||'', cliente:o.cliente||'', destinacion:o.destinacion||'', bruto:o.bruto||0 }));
+    .map(o => ({ id:o.id, fecha:o.fecha||'', cliente:o.cliente||'', destinacion:o.destinacion||'', canal:o.canal||'', tc:o.tc||'', obs:o.obs||'', bruto:o.bruto||0 }));
 
   try {
     await addDoc(collection(db,'despachantees_remitos'), {
