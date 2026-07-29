@@ -2367,12 +2367,14 @@ function renderTablaClientes(){
 window.exportarExcel = function(){
   const filtCorr = document.getElementById('filtro_despachante').value;
   const filtMes  = document.getElementById('filtro_mes').value;
-  const filtFecha = document.getElementById('filtro_fecha')?.value || '';
+  const filtDesde = document.getElementById('filtro_fecha_desde')?.value || '';
+  const filtHasta = document.getElementById('filtro_fecha_hasta')?.value || '';
   let ops = [...operaciones];
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
-  if(filtFecha) ops = ops.filter(o => o.fecha === filtFecha);
-
+  if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
+  if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
 
   // Pagos que corresponden a los mismos filtros (mismo despachante / mismo mes de pago)
