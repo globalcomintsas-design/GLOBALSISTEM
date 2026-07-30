@@ -760,6 +760,10 @@ td.mono{font-family:monospace;font-size:12px;}
           <div id="ac_mud_cliente_final" class="ac-list"></div>
         </div>
         <div class="form-group">
+          <label>Destinación / Permiso</label>
+          <input type="text" id="mud_destinacion" placeholder="IC03 1251N / EC01..." style="text-transform:uppercase;">
+        </div>
+        <div class="form-group">
           <label>TC Oficialización ⚠️ obligatorio</label>
           <input type="number" id="mud_tc" placeholder="Ingresá el TC" required oninput="recalcMudanza()">
         </div>
@@ -779,6 +783,10 @@ td.mono{font-family:monospace;font-size:12px;}
           <div class="form-group">
             <label>Gastos de fiscal</label>
             <input type="number" id="mud_fiscal" value="0" oninput="recalcMudanza()" placeholder="$ 0">
+          </div>
+          <div class="form-group">
+            <label>Valor digitalización</label>
+            <input type="number" id="mud_digitalizacion" value="0" oninput="recalcMudanza()" placeholder="$ 0">
           </div>
           <div class="form-group">
             <label>Pago Ramiro (USD)</label>
@@ -850,9 +858,22 @@ td.mono{font-family:monospace;font-size:12px;}
 
     <!-- LISTADO MUDANZAS -->
     <div class="section-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
         <h3 style="margin:0;">📋 Mudanzas registradas</h3>
-        <button class="btn-success" onclick="exportarMudanzas()">📥 Exportar CSV</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div class="periodo-bar" style="margin:0;">
+            <select id="mud_filtro_cliente" onchange="resetPaginaMudanzas()">
+              <option value="">Todos los clientes</option>
+            </select>
+            <select id="mud_filtro_mes" onchange="resetPaginaMudanzas()">
+              <option value="">Todos los meses</option>
+            </select>
+            <input type="date" id="mud_filtro_fecha_desde" onchange="resetPaginaMudanzas()" title="Desde">
+            <input type="date" id="mud_filtro_fecha_hasta" onchange="resetPaginaMudanzas()" title="Hasta">
+            <button class="btn-outline" onclick="document.getElementById('mud_filtro_fecha_desde').value='';document.getElementById('mud_filtro_fecha_hasta').value='';resetPaginaMudanzas()">✕ Fechas</button>
+          </div>
+          <button class="btn-success" onclick="exportarMudanzas()">📥 Exportar Excel</button>
+        </div>
       </div>
       <div class="tabla-wrap">
         <table>
@@ -861,6 +882,7 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Fecha</th>
               <th>Cliente</th>
               <th>Cliente final</th>
+              <th>Destinación</th>
               <th>TC</th>
               <th>USD</th>
               <th>Honorarios neto</th>
@@ -875,10 +897,12 @@ td.mono{font-family:monospace;font-size:12px;}
             </tr>
           </thead>
           <tbody id="tbody-mudanzas">
-            <tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
+            <tr><td colspan="15" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
           </tbody>
+          <tfoot id="tfoot-mudanzas"></tfoot>
         </table>
       </div>
+      <div id="mudanzas-paginacion"></div>
     </div>
 
   </div><!-- /tab-mudanzas -->
@@ -2393,70 +2417,41 @@ window.exportarExcel = function(){
   // Sin redondeo a entero: solo se recorta a 2 decimales (centavos exactos), nada de Math.round a pesos
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','PAGO','OBSERVAC'];
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
 
-  // Armamos una lista combinada: operaciones + pagos, ordenada cronológicamente.
-  // Los pagos NO son operaciones (no suman a "Ops"), pero sí ocupan su propia línea.
-  const combinados = [
-    ...ops.map(o => ({ tipo:'op', fecha:o.fecha, data:o })),
-    ...pagosFiltrados.map(p => ({ tipo:'pago', fecha:p.fecha, data:p }))
-  ].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+  const opsOrdenadas = [...ops].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
-  // Saldo corriente por despachante: Total facturado acumulado − Total pagado acumulado
-  const saldoCorriente = {};
-
-  const rows = combinados.map(item => {
-    if(item.tipo === 'op'){
-      const o = item.data;
-      const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
-      saldoCorriente[o.despachante] = (saldoCorriente[o.despachante] || 0) + (o.bruto || 0);
-      return [
-        fmtFechaAR(o.fecha),
-        o.despachante || '',
-        o.cliente || '',
-        o.destinacion || '',
-        o.canal || '',
-        o.zpa || '',
-        dec2(o.neto),
-        dec2(o.iva),
-        dec2(o.bruto),
-        o.tc || '',
-        o.totalUsd || '',
-        '',
-        obsCompleto
-      ];
-    } else {
-      const p = item.data;
-      saldoCorriente[p.despachante] = (saldoCorriente[p.despachante] || 0) - (p.monto || 0);
-      const obsPago = ['PAGO RECIBIDO', p.obs].filter(Boolean).join(' - ');
-      return [
-        fmtFechaAR(p.fecha),
-        p.despachante || '',
-        '', '', '', '',
-        '', '',
-        dec2(saldoCorriente[p.despachante] || 0), // el "bruto" de esta línea = total acumulado menos el pago
-        '', '',
-        dec2(p.monto),
-        obsPago
-      ];
-    }
+  const rows = opsOrdenadas.map(o => {
+    const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+    return [
+      fmtFechaAR(o.fecha),
+      o.despachante || '',
+      o.cliente || '',
+      o.destinacion || '',
+      o.canal || '',
+      o.zpa || '',
+      dec2(o.neto),
+      dec2(o.iva),
+      dec2(o.bruto),
+      o.tc || '',
+      o.totalUsd || '',
+      obsCompleto
+    ];
   });
 
-  const filaPagoIdx = combinados.map((item,i) => item.tipo === 'pago' ? i+1 : null).filter(i => i !== null);
-
-  const totNeto  = ops.reduce((a,b) => a + (b.neto||0), 0);
-  const totIva   = ops.reduce((a,b) => a + (b.iva||0), 0);
-  const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  const totNeto   = ops.reduce((a,b) => a + (b.neto||0), 0);
+  const totIva    = ops.reduce((a,b) => a + (b.iva||0), 0);
+  const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL','','','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', dec2(totPagado), ''];
+  const totalRow = ['TOTAL',`${ops.length} op(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', totPagado ? `Total pagado: $${fmt2(totPagado)}` : ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:12},{wch:32}
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:32}
   ];
 
   // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
@@ -2466,8 +2461,8 @@ window.exportarExcel = function(){
   // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
-  const colsNumericas = [6,7,8,9,10,11]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGO
-  const colsDecimal2  = [6,7,8,11]; // columnas que siempre llevan 2 decimales exactos (sin redondeo a entero)
+  const colsNumericas = [6,7,8,9,10]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+  const colsDecimal2  = [6,7,8]; // columnas que siempre llevan 2 decimales exactos (sin redondeo a entero)
   const formatoDecimal = '#,##0.00';
   const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
 
@@ -2477,12 +2472,10 @@ window.exportarExcel = function(){
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if(!ws[addr]) ws[addr] = { t: 's', v: '' };
 
-      // VALOR, IVA, SUB TOTAL y PAGO siempre con 2 decimales exactos
-      if(R > 0 && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+      // VALOR, IVA, SUB TOTAL siempre con 2 decimales exactos
+      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].z = formatoDecimal;
       }
-
-      const esFilaPago = filaPagoIdx.includes(R);
 
       if(R === 0){
         // Encabezado: negrita, más grande, fondo azul, letra blanca
@@ -2493,18 +2486,10 @@ window.exportarExcel = function(){
           alignment: { horizontal: 'center', vertical: 'center' }
         };
       } else if(R === totalRowIdx){
-        // Fila TOTAL: negrita y destacada
+        // Fila TOTAL: negrita y destacada, con la suma de cada columna
         ws[addr].s = {
           font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
-          border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
-        };
-      } else if(esFilaPago){
-        // Fila de PAGO (no es operación): fondo verde claro para diferenciarla
-        ws[addr].s = {
-          font: { sz: 10, bold: true, color: { rgb: '166534' } },
-          fill: { fgColor: { rgb: 'DCFCE7' } },
+          fill: { fgColor: { rgb: 'FEF2F2' } },
           border: bordeTodo,
           alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
           numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
@@ -2541,13 +2526,14 @@ window.recalcMudanza = function(){
   const ramiroUsd = parseFloat(document.getElementById('mud_ramiro').value) || 190;
   const precinto  = parseFloat(document.getElementById('mud_precinto').value) || 0;
   const fiscal    = parseFloat(document.getElementById('mud_fiscal').value) || 0;
+  const digitalizacion = parseFloat(document.getElementById('mud_digitalizacion').value) || 0;
   const otros     = parseFloat(document.getElementById('mud_otros').value) || 0;
 
   const honorNeto   = usd * tc;
   const iva         = honorNeto * 0.21;
   const bruto       = honorNeto + iva;
   const gastoRamiro = ramiroUsd * tc;
-  const totalGastos = precinto + fiscal + gastoRamiro + otros;
+  const totalGastos = precinto + fiscal + digitalizacion + gastoRamiro + otros;
   const netofinal   = honorNeto - totalGastos;
 
   if(tcFalta){
@@ -2559,7 +2545,7 @@ window.recalcMudanza = function(){
     document.getElementById('mud_gastos_total').textContent = '⚠️ Falta TC';
     document.getElementById('mud_neto_final').textContent  = '⚠️ Falta TC';
     document.getElementById('mud_desglose').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
-    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd, tcFalta };
+    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta };
   }
 
   tcInputEl.style.borderColor = '';
@@ -2575,17 +2561,19 @@ window.recalcMudanza = function(){
     `USD ${usd} × TC ${tc} = $${fmt(honorNeto)}`,
     `Precinto: $${fmt(precinto)}`,
     `Fiscal: $${fmt(fiscal)}`,
+    digitalizacion > 0 ? `Digitalización: $${fmt(digitalizacion)}` : null,
     `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt(gastoRamiro)}`,
     otros > 0 ? `Otros: $${fmt(otros)}` : null
   ].filter(Boolean);
   document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
 
-  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, otros, ramiroUsd, tcFalta };
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta };
 };
 
 window.guardarMudanza = async function(){
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
   const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
+  const destinacion = document.getElementById('mud_destinacion').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
   const tcVal   = parseFloat(document.getElementById('mud_tc').value);
   if(!tcVal || tcVal <= 0){
@@ -2598,7 +2586,7 @@ window.guardarMudanza = async function(){
 
   const vals = recalcMudanza();
   const mud = {
-    fecha, cliente, clienteFinal,
+    fecha, cliente, clienteFinal, destinacion,
     tc: vals.tc,
     valorUsd: vals.usd,
     honorNeto: vals.honorNeto,
@@ -2606,6 +2594,7 @@ window.guardarMudanza = async function(){
     bruto: vals.bruto,
     precinto: vals.precinto,
     fiscal: vals.fiscal,
+    digitalizacion: vals.digitalizacion,
     ramiroUsd: vals.ramiroUsd,
     gastoRamiro: vals.gastoRamiro,
     otros: vals.otros,
@@ -2630,9 +2619,11 @@ window.guardarMudanza = async function(){
 window.limpiarMudanza = function(){
   document.getElementById('mud_cliente').value = '';
   document.getElementById('mud_cliente_final').value = '';
+  document.getElementById('mud_destinacion').value = '';
   document.getElementById('mud_valor_usd').value = '';
   document.getElementById('mud_precinto').value = '0';
   document.getElementById('mud_fiscal').value = '0';
+  document.getElementById('mud_digitalizacion').value = '0';
   document.getElementById('mud_ramiro').value = '190';
   document.getElementById('mud_otros').value = '0';
   document.getElementById('mud_obs').value = '';
@@ -2659,10 +2650,12 @@ window.editarMudanza = function(id){
   document.getElementById('mud_fecha').value       = m.fecha || '';
   document.getElementById('mud_cliente').value     = m.cliente || '';
   document.getElementById('mud_cliente_final').value = m.clienteFinal || '';
+  document.getElementById('mud_destinacion').value = m.destinacion || '';
   document.getElementById('mud_tc').value          = m.tc || 1440;
   document.getElementById('mud_valor_usd').value    = m.valorUsd || '';
   document.getElementById('mud_precinto').value    = m.precinto || 0;
   document.getElementById('mud_fiscal').value      = m.fiscal || 0;
+  document.getElementById('mud_digitalizacion').value = m.digitalizacion || 0;
   document.getElementById('mud_ramiro').value      = m.ramiroUsd || 190;
   document.getElementById('mud_otros').value       = m.otros || 0;
   document.getElementById('mud_obs').value         = m.obs || '';
@@ -2685,6 +2678,7 @@ window.actualizarMudanza = async function(){
   if(!mudanzaEditandoId) return;
   const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
   const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
+  const destinacion = document.getElementById('mud_destinacion').value.trim().toUpperCase();
   const fecha   = document.getElementById('mud_fecha').value;
   const tcVal   = parseFloat(document.getElementById('mud_tc').value);
   if(!tcVal || tcVal <= 0){
@@ -2697,7 +2691,7 @@ window.actualizarMudanza = async function(){
 
   const vals = recalcMudanza();
   const datos = {
-    fecha, cliente, clienteFinal,
+    fecha, cliente, clienteFinal, destinacion,
     tc: vals.tc,
     valorUsd: vals.usd,
     honorNeto: vals.honorNeto,
@@ -2705,6 +2699,7 @@ window.actualizarMudanza = async function(){
     bruto: vals.bruto,
     precinto: vals.precinto,
     fiscal: vals.fiscal,
+    digitalizacion: vals.digitalizacion,
     ramiroUsd: vals.ramiroUsd,
     gastoRamiro: vals.gastoRamiro,
     otros: vals.otros,
@@ -2735,17 +2730,78 @@ window.cancelarEdicionMudanza = function(){
   limpiarMudanza();
 };
 
+// Paginación del listado de mudanzas
+let mudanzasPage = 1;
+const MUDANZAS_PAGE_SIZE = 15;
+
+window.resetPaginaMudanzas = function(){
+  mudanzasPage = 1;
+  renderMudanzas();
+};
+
+window.cambiarPaginaMudanzas = function(delta){
+  mudanzasPage += delta;
+  renderMudanzas();
+};
+
+function renderFiltrosMudanzas(){
+  const cliSel = document.getElementById('mud_filtro_cliente');
+  if(!cliSel) return;
+  const v = cliSel.value;
+  const nombres = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))].sort();
+  cliSel.innerHTML = '<option value="">Todos los clientes</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  cliSel.value = v;
+
+  const mesSel = document.getElementById('mud_filtro_mes');
+  if(mesSel){
+    const vm = mesSel.value;
+    const meses = [...new Set(mudanzas.map(m => m.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+    mesSel.innerHTML = '<option value="">Todos los meses</option>' +
+      meses.map(m => `<option value="${m}">${m}</option>`).join('');
+    mesSel.value = vm;
+  }
+}
+
+function filtrarMudanzas(){
+  const filtCliente = document.getElementById('mud_filtro_cliente')?.value || '';
+  const filtMes     = document.getElementById('mud_filtro_mes')?.value || '';
+  const filtDesde   = document.getElementById('mud_filtro_fecha_desde')?.value || '';
+  const filtHasta   = document.getElementById('mud_filtro_fecha_hasta')?.value || '';
+  let out = [...mudanzas];
+  if(filtCliente) out = out.filter(m => m.cliente === filtCliente);
+  if(filtMes)      out = out.filter(m => m.fecha && m.fecha.startsWith(filtMes));
+  if(filtDesde)    out = out.filter(m => (m.fecha||'') >= filtDesde);
+  if(filtHasta)    out = out.filter(m => (m.fecha||'') <= filtHasta);
+  return out;
+}
+window.filtrarMudanzas = filtrarMudanzas;
+
 function renderMudanzas(){
+  renderFiltrosMudanzas();
   const tbody = document.getElementById('tbody-mudanzas');
-  if(!mudanzas.length){
-    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+  const tfoot = document.getElementById('tfoot-mudanzas');
+  const todas = filtrarMudanzas();
+
+  if(!todas.length){
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    if(tfoot) tfoot.innerHTML = '';
+    document.getElementById('mudanzas-paginacion').innerHTML = '';
     return;
   }
-  tbody.innerHTML = mudanzas.map(m => `
+
+  const totalPaginas = Math.max(1, Math.ceil(todas.length / MUDANZAS_PAGE_SIZE));
+  if(mudanzasPage > totalPaginas) mudanzasPage = totalPaginas;
+  if(mudanzasPage < 1) mudanzasPage = 1;
+  const inicio = (mudanzasPage - 1) * MUDANZAS_PAGE_SIZE;
+  const pagina = todas.slice(inicio, inicio + MUDANZAS_PAGE_SIZE);
+
+  tbody.innerHTML = pagina.map(m => `
     <tr>
       <td>${m.fecha||''}</td>
       <td><strong>${m.cliente||''}</strong></td>
       <td>${m.clienteFinal||'-'}</td>
+      <td class="mono">${m.destinacion||'-'}</td>
       <td class="mono">${m.tc||''}</td>
       <td class="mono">${m.valorUsd||''}</td>
       <td style="color:#1e3a8a;font-weight:600;">$${fmt(m.honorNeto)}</td>
@@ -2766,24 +2822,129 @@ function renderMudanzas(){
       </td>
     </tr>
   `).join('');
+
+  if(tfoot){
+    const totUsd    = todas.reduce((a,b)=>a+(b.valorUsd||0),0);
+    const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
+    const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
+    const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
+    const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
+    const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
+    tfoot.innerHTML = `
+      <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+        <td colspan="5">TOTAL (${todas.length} mudanzas)</td>
+        <td class="mono">${totUsd.toFixed(2)}</td>
+        <td style="color:#1e3a8a;">$${fmt(totNeto)}</td>
+        <td>$${fmt(totIva)}</td>
+        <td style="color:#059669;">$${fmt(totBruto)}</td>
+        <td style="color:#dc2626;">$${fmt(totGastos)}</td>
+        <td style="color:#059669;">$${fmt(totQueda)}</td>
+        <td colspan="4"></td>
+      </tr>`;
+  }
+
+  document.getElementById('mudanzas-paginacion').innerHTML = `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaMudanzas(-1)" ${mudanzasPage<=1?'disabled':''}>‹ Anterior</button>
+      <span>${mudanzasPage}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaMudanzas(1)" ${mudanzasPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
 }
 
 window.exportarMudanzas = function(){
-  const header = ['Fecha','Cliente','Cliente final','TC','USD','Honor.Neto','IVA','Bruto','Precinto','Fiscal','Ramiro USD','Gasto Ramiro','Otros','Total Gastos','Nos Queda','Cobrado','Ramiro Pagado','Obs'];
-  const rows = mudanzas.map(m => [
-    m.fecha, m.cliente, m.clienteFinal||'', m.tc, m.valorUsd,
-    Math.round(m.honorNeto), Math.round(m.iva), Math.round(m.bruto),
-    Math.round(m.precinto), Math.round(m.fiscal), m.ramiroUsd, Math.round(m.gastoRamiro),
-    Math.round(m.otros), Math.round(m.totalGastos), Math.round(m.netoFinal),
+  const todas = filtrarMudanzas();
+  if(!todas.length){ toast('No hay mudanzas para exportar con esos filtros'); return; }
+
+  const fmtFechaAR = (iso) => {
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+  const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','RAMIRO PAGADO','OBS'];
+
+  const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const rows = ordenadas.map(m => [
+    fmtFechaAR(m.fecha), m.cliente||'', m.clienteFinal||'', m.destinacion||'',
+    m.tc||'', m.valorUsd||'',
+    dec2(m.honorNeto), dec2(m.iva), dec2(m.bruto), dec2(m.totalGastos), dec2(m.netoFinal),
     m.cobrado ? 'SI' : 'NO',
-    m.ramiroPagado === 'si' ? 'SI' : 'NO', m.obs
+    m.ramiroPagado === 'si' ? 'SI' : 'NO',
+    m.obs || ''
   ]);
-  let csv = [header, ...rows].map(r => r.map(v => `"${v??''}"`).join(',')).join('\n');
-  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'mudanzas.csv'; a.click();
-  URL.revokeObjectURL(url);
+
+  const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
+  const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
+  const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
+  const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
+  const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
+
+  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', ''];
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:20},{wch:20},{wch:16},{wch:8},{wch:8},
+    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:12},{wch:28}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  ws['!autofilter'] = { ref: `A1:${lastCol}1` };
+
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const colsNumericas = [4,5,6,7,8,9,10];
+  const colsDecimal2  = [6,7,8,9,10];
+  const formatoDecimal = '#,##0.00';
+  const totalRowIdx = 1 + rows.length;
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R = range.s.r; R <= range.e.r; R++){
+    for(let C = range.s.c; C <= range.e.c; C++){
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].z = formatoDecimal;
+      }
+
+      if(R === 0){
+        ws[addr].s = {
+          font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1E3A8A' } },
+          border: bordeTodo,
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      } else if(R === totalRowIdx){
+        ws[addr].s = {
+          font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
+          fill: { fgColor: { rgb: 'FEF2F2' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else {
+        ws[addr].s = {
+          font: { sz: 10 },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      }
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mudanzas');
+
+  const filtCliente = document.getElementById('mud_filtro_cliente')?.value || 'todos';
+  const filtMes     = document.getElementById('mud_filtro_mes')?.value || 'todos';
+  const nombreArchivo = `mudanzas_${filtCliente}_${filtMes}.xlsx`.replace(/\s+/g,'_');
+
+  XLSX.writeFile(wb, nombreArchivo);
 };
 
 // ── CUENTA RAMIRO ──
