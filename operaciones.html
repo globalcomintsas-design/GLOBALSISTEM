@@ -2458,6 +2458,19 @@ window.exportarExcel = function(){
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   ws['!autofilter'] = { ref: `A1:${lastCol}1` };
 
+  // ── TOTAL con fórmula SUBTOTAL: al filtrar en Excel (autofiltro), estas celdas
+  // recalculan solas y muestran la suma SOLO de las filas visibles/filtradas ──
+  {
+    const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
+    const firstDataRow = 2;
+    const lastDataRow  = 1 + rows.length;
+    [6,7,8].forEach(c => { // VALOR, IVA, SUB TOTAL
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
   // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
@@ -2893,6 +2906,19 @@ window.exportarMudanzas = function(){
 
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   ws['!autofilter'] = { ref: `A1:${lastCol}1` };
+
+  // ── TOTAL con fórmula SUBTOTAL: al filtrar en Excel (autofiltro), estas celdas
+  // recalculan solas y muestran la suma SOLO de las filas visibles/filtradas ──
+  {
+    const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
+    const firstDataRow = 2;
+    const lastDataRow  = 1 + rows.length;
+    [6,7,8,9,10].forEach(c => { // HONOR. NETO, IVA, BRUTO, GASTOS, NOS QUEDA
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
 
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
