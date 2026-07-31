@@ -2244,17 +2244,6 @@ window.renderDashboard = function(){
 
   document.getElementById('dash-detalle').innerHTML = `
     <div class="section-card" style="margin:0;">
-      <h3>🏠 Residencia pendiente</h3>
-      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente final</th><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:left;">Vencimiento</th><th style="padding:5px 6px;text-align:left;">Estado</th></tr></thead>
-        <tbody>
-          ${mudResidenciaPendiente.map(m =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;"><strong>${m.clienteFinal||'-'}</strong></td><td style="padding:5px 6px;">${m.cliente||''}</td><td style="padding:5px 6px;" class="mono">${m.vencimientoResidencia||''}</td><td style="padding:5px 6px;"><span class="tag" style="background:${m._est.bg};color:${m._est.color};">${m._est.label}</span></td></tr>`
-          ).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px;">Sin residencias pendientes 🎉</td></tr>'}
-        </tbody>
-      </table>
-    </div>
-    <div class="section-card" style="margin:0;">
       <h3>Por despachante (mes en curso: ${_mesActualDash})</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
@@ -2268,6 +2257,17 @@ window.renderDashboard = function(){
         </tbody>
       </table>
       <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 Pagado/Saldo acá es solo del mes en curso. El saldo histórico acumulado de cada despachante se ve en la pestaña Saldos.</div>
+    </div>
+    <div class="section-card" style="margin:0;">
+      <h3>🏠 Residencia pendiente</h3>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente final</th><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:left;">Vencimiento</th><th style="padding:5px 6px;text-align:left;">Estado</th></tr></thead>
+        <tbody>
+          ${mudResidenciaPendiente.map(m =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;"><strong>${m.clienteFinal||'-'}</strong></td><td style="padding:5px 6px;">${m.cliente||''}</td><td style="padding:5px 6px;" class="mono">${m.vencimientoResidencia||''}</td><td style="padding:5px 6px;"><span class="tag" style="background:${m._est.bg};color:${m._est.color};">${m._est.label}</span></td></tr>`
+          ).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px;">Sin residencias pendientes 🎉</td></tr>'}
+        </tbody>
+      </table>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>📦 Mudanzas por cliente</h3>
