@@ -799,6 +799,30 @@ td.mono{font-family:monospace;font-size:12px;}
         </div>
       </div>
 
+      <div style="margin-top:16px;">
+        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px;">Facturación y residencia</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>¿Tiene factura?</label>
+            <select id="mud_tiene_factura" onchange="recalcMudanza()">
+              <option value="si">✅ Sí — neto + IVA</option>
+              <option value="no">❌ No — sin factura (sin IVA)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Vencimiento residencia (si aplica)</label>
+            <input type="date" id="mud_venc_residencia" oninput="recalcMudanza()">
+          </div>
+          <div class="form-group">
+            <label>Estado residencia</label>
+            <select id="mud_residencia_cancelada" onchange="recalcMudanza()">
+              <option value="no">⏳ Vigente / pendiente</option>
+              <option value="si">✅ Cancelada / renovada</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
       <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
         <div class="form-group">
           <label>Observaciones</label>
@@ -892,12 +916,13 @@ td.mono{font-family:monospace;font-size:12px;}
               <th>Nos queda</th>
               <th>Cobrado</th>
               <th>Ramiro</th>
+              <th>Residencia</th>
               <th>Obs</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tbody-mudanzas">
-            <tr><td colspan="15" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
+            <tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
           </tbody>
           <tfoot id="tfoot-mudanzas"></tfoot>
         </table>
@@ -1107,6 +1132,31 @@ function etiquetaTipoDespachante(tipo){
   }
 }
 window.etiquetaTipoDespachante = etiquetaTipoDespachante;
+
+// Estado de residencia (para color del Cliente final y de la columna Residencia en Mudanzas)
+// - Sin fecha de vencimiento cargada -> verde (no aplica / no tiene residencia temporal)
+// - Cancelada/renovada -> verde
+// - Falta más de 30 días -> amarillo
+// - Falta 30 días o menos (o ya vencida) -> rojo
+function estadoResidencia(m){
+  if(!m || !m.vencimientoResidencia){
+    return { clase:'ok', label:'N/A', bg:'#dcfce7', color:'#166534' };
+  }
+  if(m.residenciaCancelada){
+    return { clase:'ok', label:'Cancelada', bg:'#dcfce7', color:'#166534' };
+  }
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = new Date(m.vencimientoResidencia + 'T00:00:00');
+  const diffDias = Math.ceil((venc - hoy) / (1000*60*60*24));
+  if(diffDias > 30){
+    return { clase:'warn', label:`Vence en ${diffDias}d`, bg:'#fef9c3', color:'#854d0e' };
+  }
+  if(diffDias >= 0){
+    return { clase:'danger', label:`Vence en ${diffDias}d`, bg:'#fee2e2', color:'#991b1b' };
+  }
+  return { clase:'danger', label:'Vencida', bg:'#fee2e2', color:'#991b1b' };
+}
+window.estadoResidencia = estadoResidencia;
 
 // ── TOGGLE TARIFAS ──
 window.toggleTarifas = function(){
@@ -2541,13 +2591,19 @@ window.recalcMudanza = function(){
   const fiscal    = parseFloat(document.getElementById('mud_fiscal').value) || 0;
   const digitalizacion = parseFloat(document.getElementById('mud_digitalizacion').value) || 0;
   const otros     = parseFloat(document.getElementById('mud_otros').value) || 0;
+  const mudTieneFactura = document.getElementById('mud_tiene_factura').value !== 'no';
 
   const honorNeto   = usd * tc;
-  const iva         = honorNeto * 0.21;
+  const iva         = mudTieneFactura ? honorNeto * 0.21 : 0;
   const bruto       = honorNeto + iva;
   const gastoRamiro = ramiroUsd * tc;
   const totalGastos = precinto + fiscal + digitalizacion + gastoRamiro + otros;
   const netofinal   = honorNeto - totalGastos;
+
+  // Vista previa del estado de residencia en el formulario (si hay fecha cargada)
+  const vencResidencia = document.getElementById('mud_venc_residencia')?.value || '';
+  const residenciaCancelada = document.getElementById('mud_residencia_cancelada')?.value === 'si';
+  const estRes = estadoResidencia({ vencimientoResidencia: vencResidencia, residenciaCancelada });
 
   if(tcFalta){
     tcInputEl.style.borderColor = '#dc2626';
@@ -2558,29 +2614,31 @@ window.recalcMudanza = function(){
     document.getElementById('mud_gastos_total').textContent = '⚠️ Falta TC';
     document.getElementById('mud_neto_final').textContent  = '⚠️ Falta TC';
     document.getElementById('mud_desglose').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
-    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta };
+    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada };
   }
 
   tcInputEl.style.borderColor = '';
   tcInputEl.style.background  = '';
 
   document.getElementById('mud_neto').textContent        = '$ ' + fmt(honorNeto);
-  document.getElementById('mud_iva').textContent         = '$ ' + fmt(iva);
+  document.getElementById('mud_iva').textContent         = mudTieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
   document.getElementById('mud_bruto').textContent       = '$ ' + fmt(bruto);
   document.getElementById('mud_gastos_total').textContent = '$ ' + fmt(totalGastos);
   document.getElementById('mud_neto_final').textContent  = '$ ' + fmt(netofinal);
 
   const items = [
     `USD ${usd} × TC ${tc} = $${fmt(honorNeto)}`,
+    mudTieneFactura ? `IVA 21%: $${fmt(iva)}` : `Sin factura (sin IVA)`,
     `Precinto: $${fmt(precinto)}`,
     `Fiscal: $${fmt(fiscal)}`,
     digitalizacion > 0 ? `Digitalización: $${fmt(digitalizacion)}` : null,
     `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt(gastoRamiro)}`,
-    otros > 0 ? `Otros: $${fmt(otros)}` : null
+    otros > 0 ? `Otros: $${fmt(otros)}` : null,
+    vencResidencia ? `Residencia: ${estRes.label}` : null
   ].filter(Boolean);
   document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
 
-  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta };
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada };
 };
 
 window.guardarMudanza = async function(){
@@ -2613,6 +2671,9 @@ window.guardarMudanza = async function(){
     otros: vals.otros,
     totalGastos: vals.totalGastos,
     netoFinal: vals.netofinal,
+    tieneFactura: vals.tieneFactura,
+    vencimientoResidencia: vals.vencimientoResidencia || '',
+    residenciaCancelada: !!vals.residenciaCancelada,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
     cobrado: document.getElementById('mud_cobrado').value === 'si',
     obs: document.getElementById('mud_obs').value.trim(),
@@ -2643,6 +2704,9 @@ window.limpiarMudanza = function(){
   document.getElementById('mud_ramiro_pagado').value = 'no';
   document.getElementById('mud_cobrado').value = 'no';
   document.getElementById('mud_tc').value = '';
+  document.getElementById('mud_tiene_factura').value = 'si';
+  document.getElementById('mud_venc_residencia').value = '';
+  document.getElementById('mud_residencia_cancelada').value = 'no';
   recalcMudanza();
 };
 
@@ -2674,6 +2738,9 @@ window.editarMudanza = function(id){
   document.getElementById('mud_obs').value         = m.obs || '';
   document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
   document.getElementById('mud_cobrado').value     = m.cobrado ? 'si' : 'no';
+  document.getElementById('mud_tiene_factura').value = m.tieneFactura === false ? 'no' : 'si';
+  document.getElementById('mud_venc_residencia').value = m.vencimientoResidencia || '';
+  document.getElementById('mud_residencia_cancelada').value = m.residenciaCancelada ? 'si' : 'no';
 
   // Cambiar título y botones del formulario
   document.getElementById('mud-form-titulo').textContent = '✏️ Editando mudanza: ' + m.cliente;
@@ -2718,6 +2785,9 @@ window.actualizarMudanza = async function(){
     otros: vals.otros,
     totalGastos: vals.totalGastos,
     netoFinal: vals.netofinal,
+    tieneFactura: vals.tieneFactura,
+    vencimientoResidencia: vals.vencimientoResidencia || '',
+    residenciaCancelada: !!vals.residenciaCancelada,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
     cobrado: document.getElementById('mud_cobrado').value === 'si',
     obs: document.getElementById('mud_obs').value.trim(),
@@ -2797,7 +2867,7 @@ function renderMudanzas(){
   const todas = filtrarMudanzas();
 
   if(!todas.length){
-    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
     if(tfoot) tfoot.innerHTML = '';
     document.getElementById('mudanzas-paginacion').innerHTML = '';
     return;
@@ -2809,16 +2879,18 @@ function renderMudanzas(){
   const inicio = (mudanzasPage - 1) * MUDANZAS_PAGE_SIZE;
   const pagina = todas.slice(inicio, inicio + MUDANZAS_PAGE_SIZE);
 
-  tbody.innerHTML = pagina.map(m => `
+  tbody.innerHTML = pagina.map(m => {
+    const estRes = estadoResidencia(m);
+    return `
     <tr>
       <td>${m.fecha||''}</td>
       <td><strong>${m.cliente||''}</strong></td>
-      <td>${m.clienteFinal||'-'}</td>
+      <td><strong style="background:${estRes.bg};color:${estRes.color};padding:2px 8px;border-radius:6px;" title="Residencia: ${estRes.label}">${m.clienteFinal||'-'}</strong></td>
       <td class="mono">${m.destinacion||'-'}</td>
       <td class="mono">${m.tc||''}</td>
       <td class="mono">${m.valorUsd||''}</td>
       <td style="color:#1e3a8a;font-weight:600;">$${fmt(m.honorNeto)}</td>
-      <td>$${fmt(m.iva)}</td>
+      <td>${m.tieneFactura === false ? '— s/fact' : '$'+fmt(m.iva)}</td>
       <td style="font-weight:700;">$${fmt(m.bruto)}</td>
       <td style="color:#dc2626;">$${fmt(m.totalGastos)}</td>
       <td style="color:#059669;font-weight:700;">$${fmt(m.netoFinal)}</td>
@@ -2828,13 +2900,15 @@ function renderMudanzas(){
       <td>${m.ramiroPagado === 'si'
         ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
         : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
+      <td><span class="tag" style="background:${estRes.bg};color:${estRes.color};">${m.vencimientoResidencia ? m.vencimientoResidencia+' · ' : ''}${estRes.label}</span></td>
       <td style="font-size:11px;color:#64748b;">${m.obs||''}</td>
       <td style="display:flex;gap:6px;">
         <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarMudanza('${m.id}')">✏️ Editar</button>
         <button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   if(tfoot){
     const totUsd    = todas.reduce((a,b)=>a+(b.valorUsd||0),0);
@@ -2852,7 +2926,7 @@ function renderMudanzas(){
         <td style="color:#059669;">$${fmt(totBruto)}</td>
         <td style="color:#dc2626;">$${fmt(totGastos)}</td>
         <td style="color:#059669;">$${fmt(totQueda)}</td>
-        <td colspan="4"></td>
+        <td colspan="5"></td>
       </tr>`;
   }
 
@@ -2875,18 +2949,24 @@ window.exportarMudanzas = function(){
   };
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','RAMIRO PAGADO','OBS'];
+  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','RAMIRO PAGADO','FACTURA','VENC. RESIDENCIA','ESTADO RESIDENCIA','OBS'];
 
   const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
-  const rows = ordenadas.map(m => [
-    fmtFechaAR(m.fecha), m.cliente||'', m.clienteFinal||'', m.destinacion||'',
-    m.tc||'', m.valorUsd||'',
-    dec2(m.honorNeto), dec2(m.iva), dec2(m.bruto), dec2(m.totalGastos), dec2(m.netoFinal),
-    m.cobrado ? 'SI' : 'NO',
-    m.ramiroPagado === 'si' ? 'SI' : 'NO',
-    m.obs || ''
-  ]);
+  const rows = ordenadas.map(m => {
+    const estRes = estadoResidencia(m);
+    return [
+      fmtFechaAR(m.fecha), m.cliente||'', m.clienteFinal||'', m.destinacion||'',
+      m.tc||'', m.valorUsd||'',
+      dec2(m.honorNeto), dec2(m.iva), dec2(m.bruto), dec2(m.totalGastos), dec2(m.netoFinal),
+      m.cobrado ? 'SI' : 'NO',
+      m.ramiroPagado === 'si' ? 'SI' : 'NO',
+      m.tieneFactura === false ? 'NO' : 'SI',
+      m.vencimientoResidencia ? fmtFechaAR(m.vencimientoResidencia) : '',
+      estRes.label,
+      m.obs || ''
+    ];
+  });
 
   const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
   const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
@@ -2894,14 +2974,14 @@ window.exportarMudanzas = function(){
   const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
   const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
 
-  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', ''];
+  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', '', '', '', ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:20},{wch:20},{wch:16},{wch:8},{wch:8},
-    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:12},{wch:28}
+    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
   ];
 
   const lastCol = XLSX.utils.encode_col(header.length - 1);
