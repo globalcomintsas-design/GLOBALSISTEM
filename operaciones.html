@@ -2214,27 +2214,17 @@ window.renderDashboard = function(){
     </div>` : ''}
   `;
 
+  // "Por despachante" siempre muestra el MES EN CURSO (no depende del selector de mes del
+  // dashboard). El saldo/pagado de cada despachante se ve en la pestaña Saldos, acá solo el total.
+  const _mesActualDash = new Date().toISOString().slice(0,7);
+  const opsMesActual = operaciones.filter(o => o.fecha?.startsWith(_mesActualDash) && (!filtCorr || o.despachante === filtCorr));
+
   const byCorr = {};
-  ops.forEach(o => {
+  opsMesActual.forEach(o => {
     if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
     byCorr[o.despachante].ops++;
     byCorr[o.despachante].bruto += o.bruto||0;
   });
-  const byMes = {};
-  ops.forEach(o => {
-    const m = o.fecha?.slice(0,7) || 'S/F';
-    if(!byMes[m]) byMes[m] = {ops:0, bruto:0};
-    byMes[m].ops++;
-    byMes[m].bruto += o.bruto||0;
-  });
-  if(incluirMudEnTotales){
-    mudFiltradas.forEach(m => {
-      const mes = m.fecha?.slice(0,7) || 'S/F';
-      if(!byMes[mes]) byMes[mes] = {ops:0, bruto:0};
-      byMes[mes].ops++;
-      byMes[mes].bruto += m.bruto||0;
-    });
-  }
 
   // Mudanzas por cliente (siempre se muestra, filtrado solo por mes)
   const byClienteMud = {};
@@ -2245,31 +2235,39 @@ window.renderDashboard = function(){
     byClienteMud[cl].bruto += m.bruto||0;
   });
 
+  // Mudanzas con residencia pendiente (amarillo o rojo) — no depende de los filtros del dashboard,
+  // es un estado vigente independiente del mes/despachante seleccionado.
+  const mudResidenciaPendiente = mudanzas
+    .map(m => ({ ...m, _est: estadoResidencia(m) }))
+    .filter(m => m._est.clase !== 'ok')
+    .sort((a,b) => (a.vencimientoResidencia||'').localeCompare(b.vencimientoResidencia||''));
+
   document.getElementById('dash-detalle').innerHTML = `
     <div class="section-card" style="margin:0;">
-      <h3>Por despachante</h3>
+      <h3>🏠 Residencia pendiente</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente final</th><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:left;">Vencimiento</th><th style="padding:5px 6px;text-align:left;">Estado</th></tr></thead>
         <tbody>
-          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
-            const { pagado, saldo } = calcularSaldoDespachante(k);
-            const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
-            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagado)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
-          }).join('')}
-          ${incluirMudEnTotales && mudFiltradas.length ? `<tr style="border-bottom:1px solid #f1f5f9;background:#eff6ff;"><td style="padding:5px 6px;"><strong>📦 Mudanzas</strong></td><td style="padding:5px 6px;text-align:right;">${mudFiltradas.length}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(totBrutoMud)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(mudPagado)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${mudPendiente>0.005?'#dc2626':'#059669'};">$${fmt2(mudPendiente)}</td></tr>` : ''}
+          ${mudResidenciaPendiente.map(m =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;"><strong>${m.clienteFinal||'-'}</strong></td><td style="padding:5px 6px;">${m.cliente||''}</td><td style="padding:5px 6px;" class="mono">${m.vencimientoResidencia||''}</td><td style="padding:5px 6px;"><span class="tag" style="background:${m._est.bg};color:${m._est.color};">${m._est.label}</span></td></tr>`
+          ).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px;">Sin residencias pendientes 🎉</td></tr>'}
         </tbody>
       </table>
     </div>
     <div class="section-card" style="margin:0;">
-      <h3>Por mes</h3>
+      <h3>Por despachante (mes en curso: ${_mesActualDash})</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Mes</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th></tr></thead>
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
-          ${Object.entries(byMes).sort((a,b)=>b[0].localeCompare(a[0])).map(([k,v]) =>
-            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
-          ).join('')}
+          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
+            const pagadoMes = pagos.filter(p => p.despachante === k && (p.fecha||'').startsWith(_mesActualDash)).reduce((a,b)=>a+(b.monto||0),0);
+            const saldoMes = v.bruto - pagadoMes;
+            const colorSaldo = saldoMes > 0.005 ? '#dc2626' : (saldoMes < -0.005 ? '#059669' : '#64748b');
+            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldoMes)}</td></tr>`;
+          }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">Sin operaciones este mes</td></tr>'}
         </tbody>
       </table>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 Pagado/Saldo acá es solo del mes en curso. El saldo histórico acumulado de cada despachante se ve en la pestaña Saldos.</div>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>📦 Mudanzas por cliente</h3>
