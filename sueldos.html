@@ -101,6 +101,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center;padding:20px;}
 .modal-bg.open{display:flex;}
 .modal{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:480px;max-height:90vh;overflow-y:auto;}
+.modal.wide{max-width:1050px;}
 .modal-title{font-size:16px;font-weight:700;color:#1e3a8a;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;}
 .modal-close{background:none;border:none;font-size:22px;cursor:pointer;color:#888;line-height:1;}
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
@@ -113,6 +114,18 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .notif.show{transform:translateY(0);opacity:1;}
 .notif.error{background:#dc2626;}
 .notif.success{background:#16a34a;}
+.hist-periodo{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;overflow:hidden;}
+.hist-periodo-header{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:10px;flex-wrap:wrap;}
+.hist-periodo-header:hover{background:#f0f4f8;}
+.hist-periodo-label{font-weight:700;color:#1e3a8a;font-size:13px;min-width:110px;}
+.hist-periodo-totales{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#555;}
+.hist-periodo-totales b{color:#1a1a2e;}
+.hist-periodo-toggle{font-size:16px;color:#94a3b8;transition:transform .2s;}
+.hist-periodo-toggle.open{transform:rotate(180deg);}
+.hist-periodo-body{display:none;padding:0 14px 14px;}
+.hist-periodo-body.open{display:block;}
+.hist-empty{text-align:center;color:#94a3b8;padding:24px;font-size:13px;}
+.hist-loading{text-align:center;color:#94a3b8;padding:24px;font-size:13px;}
 @media(max-width:700px){.cards{grid-template-columns:1fr 1fr;}td input[type=number]{width:85px;}.form-grid{grid-template-columns:1fr;}}
 </style>
 </head>
@@ -165,6 +178,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
         Liquidación mensual
         <div class="btn-row">
           <button class="btn btn-outline" onclick="abrirModalEmp()">👤 Empleados</button>
+          <button class="btn btn-outline" onclick="abrirHistorial()">🕘 Historial</button>
           <button class="btn btn-success" onclick="guardarLiquidacion()">💾 Guardar</button>
           <button class="btn btn-outline" onclick="exportarExcel()">📊 Excel</button>
         </div>
@@ -240,6 +254,16 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
   </div>
 </div>
 
+<div class="modal-bg" id="modalHistorial">
+  <div class="modal wide">
+    <div class="modal-title">🕘 Historial mensual de sueldos <button class="modal-close" onclick="cerrarHistorial()">✕</button></div>
+    <div class="btn-row" style="margin-bottom:14px;">
+      <button class="btn btn-outline" onclick="exportarHistorialExcel()">📊 Exportar historial completo (Excel)</button>
+    </div>
+    <div id="historialCont"><div class="hist-loading">Cargando historial...</div></div>
+  </div>
+</div>
+
 <div class="notif" id="notif"></div>
 
 <script type="module">
@@ -294,6 +318,8 @@ let tablaLista = false;        // flag: la tabla ya fue construida
 let dividendoPorSocio = 0, periodoDividendo = '';
 let saving = false;
 let empleadosAnterior = {};   // liquidación del mes anterior (para precargar bruto/autónomo por defecto)
+let historialData = [];       // cache del historial de liquidaciones (docs de 'sueldos')
+let historialCargado = false;
 
 function fmt(v){ return '$ '+Math.round(v||0).toLocaleString('es-AR'); }
 function periodoLabel(val){
@@ -683,6 +709,7 @@ window.guardarLiquidacion=async function(){
     await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre});
     document.getElementById('badgeGuardado').style.display='inline-block';
     toast('Liquidación guardada ✓','success');
+    historialCargado=false; // invalida cache del historial para reflejar el nuevo guardado
   } catch(e){toast('Error: '+e.message,'error');}
   saving=false;
 };
@@ -707,6 +734,102 @@ window.exportarExcel=function(){
   XLSX.utils.book_append_sheet(wb,ws2,'Dividendo '+periodoLabel(periodoDividendo));
   XLSX.writeFile(wb,`Sueldos_${periodo}.xlsx`);
   toast('Excel exportado ✓','success');
+};
+
+// ── HISTORIAL MENSUAL DE LIQUIDACIONES ────────────────────────────────
+// Lee todos los docs de la colección 'sueldos' (uno por período ya guardado)
+// y arma un historial mes a mes con el detalle de todos los empleados.
+window.abrirHistorial=async function(){
+  document.getElementById('modalHistorial').classList.add('open');
+  if(!historialCargado){
+    document.getElementById('historialCont').innerHTML='<div class="hist-loading">Cargando historial...</div>';
+    try {
+      const snap=await getDocs(collection(db,'sueldos'));
+      historialData=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.periodo.localeCompare(a.periodo));
+      historialCargado=true;
+    } catch(e){
+      document.getElementById('historialCont').innerHTML='<div class="hist-empty">Error al cargar el historial: '+e.message+'</div>';
+      return;
+    }
+  }
+  renderHistorial();
+};
+window.cerrarHistorial=function(){ document.getElementById('modalHistorial').classList.remove('open'); };
+
+function renderHistorial(){
+  const cont=document.getElementById('historialCont');
+  if(!historialData.length){ cont.innerHTML='<div class="hist-empty">Todavía no hay liquidaciones guardadas.<br>Usá el botón "💾 Guardar" en cada período para que empiecen a aparecer acá.</div>'; return; }
+  cont.innerHTML=historialData.map((liq,idx)=>{
+    const emps=liq.empleados||{};
+    let tBruto=0,tAuto=0,tMov=0,tFS=0,tDesc=0,tNeto=0;
+    const filas=EMPLEADOS.map(e=>{
+      const d=emps[e.nombre];
+      if(!d) return null;
+      tBruto+=d.bruto||0; tAuto+=d.autonomo||0; tMov+=d.movilidad||0; tFS+=d.finesdesemana||0; tDesc+=d.descuentos||0; tNeto+=d.neto||0;
+      return `<tr>
+        <td><div class="emp-cell"><div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:26px;height:26px;font-size:10px;">${e.iniciales}</div><div class="emp-name" style="font-size:12px;">${e.nombre}</div></div></td>
+        <td style="text-align:right;">${fmt(d.bruto)}</td>
+        <td style="text-align:right;">${e.esSocio?fmt(d.autonomo):'—'}</td>
+        <td style="text-align:right;">${fmt(d.movilidad)}</td>
+        <td style="text-align:right;">${fmt(d.finesdesemana)}</td>
+        <td style="text-align:right;color:${(d.descuentos||0)>0?'#dc2626':'#d1d5db'};font-weight:600;">${fmt(d.descuentos)}</td>
+        <td style="text-align:right;font-weight:700;color:${(d.neto||0)>=0?'#16a34a':'#dc2626'};">${fmt(d.neto)}</td>
+      </tr>`;
+    }).filter(Boolean).join('');
+    return `<div class="hist-periodo">
+      <div class="hist-periodo-header" onclick="toggleHistPeriodo(${idx})">
+        <div class="hist-periodo-label">${periodoLabel(liq.periodo)}${liq.periodo===periodoActual()?' <span class="badge badge-activo">actual</span>':''}</div>
+        <div class="hist-periodo-totales">
+          <span>Bruto: <b>${fmt(tBruto)}</b></span>
+          <span>Descuentos: <b style="color:${tDesc>0?'#dc2626':'inherit'}">${fmt(tDesc)}</b></span>
+          <span>Dividendos: <b>${fmt(liq.dividendoPorSocio? liq.dividendoPorSocio*6:0)}</b></span>
+          <span>Total neto pagado: <b style="color:#16a34a">${fmt(tNeto)}</b></span>
+        </div>
+        <span class="hist-periodo-toggle" id="histTog-${idx}">▾</span>
+      </div>
+      <div class="hist-periodo-body" id="histBody-${idx}">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Empleado</th><th>Bruto</th><th>Autónomo</th><th>Movilidad</th><th>Fin sem.</th><th>Descuentos</th><th>Neto pagado</th></tr></thead>
+            <tbody>${filas}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.toggleHistPeriodo=function(idx){
+  const body=document.getElementById('histBody-'+idx),tog=document.getElementById('histTog-'+idx);
+  body.classList.toggle('open'); tog.classList.toggle('open',body.classList.contains('open'));
+};
+
+// Exporta TODO el historial a un único Excel: una fila por empleado y por período,
+// para poder filtrar/pivotear libremente (por mes, por empleado, etc.)
+window.exportarHistorialExcel=async function(){
+  if(!historialCargado){
+    try {
+      const snap=await getDocs(collection(db,'sueldos'));
+      historialData=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>b.periodo.localeCompare(a.periodo));
+      historialCargado=true;
+    } catch(e){ toast('Error: '+e.message,'error'); return; }
+  }
+  if(!historialData.length){ toast('No hay liquidaciones guardadas todavía','error'); return; }
+  const filas=[['Período','Empleado','Tipo','Bruto','Autónomo','Movilidad','Fin de Semana','Descuentos','Neto Pagado','Dividendo (info)']];
+  historialData.slice().sort((a,b)=>a.periodo.localeCompare(b.periodo)).forEach(liq=>{
+    const emps=liq.empleados||{};
+    EMPLEADOS.forEach(e=>{
+      const d=emps[e.nombre];
+      if(!d) return;
+      filas.push([periodoLabel(liq.periodo),e.nombre,e.esSocio?'Socio':'Empleado',d.bruto||0,d.autonomo||0,d.movilidad||0,d.finesdesemana||0,d.descuentos||0,d.neto||0,d.dividendo||0]);
+    });
+  });
+  const ws=XLSX.utils.aoa_to_sheet(filas);
+  ws['!cols']=[14,22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Historial sueldos');
+  XLSX.writeFile(wb,`Historial_Sueldos_GLOBALCOMINT.xlsx`);
+  toast('Historial exportado ✓','success');
 };
 
 // ── GESTIÓN DE EMPLEADOS ─────────────────────────────────────────────
