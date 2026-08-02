@@ -37,6 +37,7 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .periodo-row input[type=month]{padding:9px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:#fff;}
 .badge-periodo{background:#eff6ff;color:#1e3a8a;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;}
 .badge-guardado{background:#dcfce7;color:#166534;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
+.badge-caja-cargado{background:#dbeafe;color:#1e40af;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
 .div-info{background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#5b21b6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .div-info strong{color:#4c1d95;}
 .btn{padding:9px 16px;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
@@ -161,6 +162,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
       <input type="month" id="periodo" onchange="cargarPeriodo()">
       <span class="badge-periodo" id="badgePeriodo"></span>
       <span class="badge-guardado" id="badgeGuardado">✓ Guardado</span>
+      <span class="badge-caja-cargado" id="badgeCajaCargado">📤 Ya cargado a Banco</span>
     </div>
     <div class="cards">
       <div class="card"><div class="card-label">Total Bruto</div><div class="card-value" id="totBruto">$ 0</div></div>
@@ -190,6 +192,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
           <button class="btn btn-outline" onclick="abrirModalEmp()">👤 Empleados</button>
           <button class="btn btn-outline" onclick="abrirHistorial()">🕘 Historial</button>
           <button class="btn btn-success" onclick="guardarLiquidacion()">💾 Guardar</button>
+          <button class="btn btn-primary" onclick="cargarACaja()">📤 Cargar a Caja</button>
           <button class="btn btn-outline" onclick="exportarExcel()">📊 Excel</button>
         </div>
       </div>
@@ -278,7 +281,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc }
+import { getFirestore, collection, onSnapshot, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc, query, where }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -330,6 +333,7 @@ let saving = false;
 let empleadosAnterior = {};   // liquidación del mes anterior (para precargar bruto/autónomo por defecto)
 let historialData = [];       // cache del historial de liquidaciones (docs de 'sueldos')
 let historialCargado = false;
+let liqActualDoc = null;      // doc completo de 'sueldos/{periodo}' cargado actualmente (para saber si ya se cargó a Caja)
 
 function fmt(v){ return '$ '+Math.round(v||0).toLocaleString('es-AR'); }
 function periodoLabel(val){
@@ -413,7 +417,7 @@ function initApp(){
     calcDiv();
     if(typeof window.recalc==='function') window.recalc();
   });
-  // ── NUEVO: sincronización en tiempo real de movilidad y fines de semana ──
+  // ── sincronización en tiempo real de movilidad y fines de semana ──
   onSnapshot(collection(db,'movilidad'), snap=>{
     allMov=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
@@ -422,7 +426,7 @@ function initApp(){
     allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
   });
-  // ── NUEVO: sincronización en tiempo real de la lista de empleados ──
+  // ── sincronización en tiempo real de la lista de empleados ──
   onSnapshot(doc(db,'config','empleados'), snap=>{
     if(snap.exists()){
       const lista=snap.data().lista||[];
@@ -493,6 +497,7 @@ window.cargarPeriodo = async function(){
   const periodo=periodoActual();
   document.getElementById('badgePeriodo').textContent=periodoLabel(periodo);
   document.getElementById('badgeGuardado').style.display='none';
+  document.getElementById('badgeCajaCargado').style.display='none';
   // Fallback: si los snapshots aún no dispararon, hago getDocs para tener datos
   if(allMov.length===0){
     try {
@@ -509,9 +514,18 @@ window.cargarPeriodo = async function(){
   // Recalcula movData/fsData desde el cache en memoria
   window.actualizarMovFS();
   let guardada={};
+  liqActualDoc=null;
   try {
     const liqDoc=await getDoc(doc(db,'sueldos',periodo));
-    if(liqDoc.exists()){ guardada=liqDoc.data().empleados||{}; document.getElementById('badgeGuardado').style.display='inline-block'; }
+    if(liqDoc.exists()){
+      liqActualDoc=liqDoc.data();
+      guardada=liqActualDoc.empleados||{};
+      document.getElementById('badgeGuardado').style.display='inline-block';
+      if(liqActualDoc.cargadoACaja){
+        document.getElementById('badgeCajaCargado').style.display='inline-block';
+        document.getElementById('badgeCajaCargado').textContent='📤 Ya cargado a Banco ('+(liqActualDoc.cargadoACajaFecha?liqActualDoc.cargadoACajaFecha.split('-').reverse().join('/'):'')+')';
+      }
+    }
   } catch(e){ console.warn('sueldos:',e); }
   // Trae la liquidación del mes anterior, para precargar bruto/autónomo como sugerencia editable
   empleadosAnterior={};
@@ -524,7 +538,7 @@ window.cargarPeriodo = async function(){
   ocultarSpinner();
 };
 
-// ── NUEVO: recalcula movData/fsData para el período actual y actualiza las celdas in-place ──
+// ── recalcula movData/fsData para el período actual y actualiza las celdas in-place ──
 // Se invoca desde los onSnapshot de movilidad/finesdesemana y desde cargarPeriodo.
 // No reconstruye toda la tabla => NO pisa los inputs bruto/autónomo que el usuario esté editando.
 window.actualizarMovFS = function(){
@@ -716,12 +730,119 @@ window.guardarLiquidacion=async function(){
     empleados[emp.nombre]={bruto,autonomo:auto,movilidad:mov,finesdesemana:fs,dividendo:div,descuentos:desc,neto:bruto+auto+mov+fs-desc};
   });
   try {
-    await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre});
+    await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre},{merge:true});
     document.getElementById('badgeGuardado').style.display='inline-block';
     toast('Liquidación guardada ✓','success');
     historialCargado=false; // invalida cache del historial para reflejar el nuevo guardado
+    // refresca el doc en memoria (para que "Cargar a Caja" tenga los netos recién guardados)
+    const liqDoc=await getDoc(doc(db,'sueldos',periodo));
+    if(liqDoc.exists()) liqActualDoc=liqDoc.data();
   } catch(e){toast('Error: '+e.message,'error');}
   saving=false;
+};
+
+// ── CARGA DE SUELDOS A CAJA (Banco) ─────────────────────────────────
+// Los sueldos siempre salen de la cuenta Banco. Crea un Egreso por cada
+// empleado con neto > 0, usando el mismo formato de fecha (dd/mm/aaaa) que
+// usa caja.html. Es re-ejecutable (por si hay que corregir un importe y
+// recargar), pero SIEMPRE pide confirmación explícita si ya se había cargado
+// antes, para evitar duplicar egresos en Caja sin querer.
+window.cargarACaja=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const periodo=periodoActual();
+
+  // Aseguramos tener la liquidación guardada más reciente de Firestore
+  let liqSnap;
+  try {
+    liqSnap = await getDoc(doc(db,'sueldos',periodo));
+  } catch(e){ toast('Error al leer la liquidación: '+e.message,'error'); return; }
+
+  if(!liqSnap.exists()){
+    toast('Primero guardá la liquidación de este período (💾 Guardar)','error');
+    return;
+  }
+  const liqData = liqSnap.data();
+  const empleados = liqData.empleados||{};
+  const netos = Object.entries(empleados).filter(([,d])=>(d.neto||0)>0);
+  if(!netos.length){ toast('No hay netos positivos para cargar en este período','error'); return; }
+
+  const yaCargado = !!liqData.cargadoACaja;
+  const fechaSugerida = new Date().toISOString().split('T')[0];
+  const fechaPago = prompt('Fecha de pago de los sueldos (yyyy-mm-dd):', fechaSugerida);
+  if(!fechaPago) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fechaPago)){ toast('Formato de fecha inválido. Usá yyyy-mm-dd','error'); return; }
+
+  const totalNeto = netos.reduce((s,[,d])=>s+(d.neto||0),0);
+  const mensaje = yaCargado
+    ? `⚠️ Este período (${periodoLabel(periodo)}) ya se cargó a Banco el ${liqData.cargadoACajaFecha?liqData.cargadoACajaFecha.split('-').reverse().join('/'):'(fecha desconocida)'}.\n\nSi continuás, se van a crear ${netos.length} egresos NUEVOS en Caja (podrían quedar DUPLICADOS si los anteriores siguen ahí).\n\n¿Seguro que querés continuar?`
+    : `Se van a cargar ${netos.length} egresos en BANCO por un total de ${fmt(totalNeto)}, con fecha ${fechaPago.split('-').reverse().join('/')}.\n\n¿Confirmar?`;
+  if(!confirm(mensaje)) return;
+
+  const fechaAR = fechaPago.split('-').reverse().join('/'); // caja.html usa dd/mm/aaaa
+  const idsCreados = [];
+  let count=0;
+
+  try {
+    for(const [nombre, d] of netos){
+      const ref = await addDoc(collection(db,'movimientos'),{
+        tipo:'Egreso',
+        cuenta:'Banco',
+        factura:'',
+        cliente:nombre,
+        detalle:'Sueldo '+periodoLabel(periodo),
+        importe:d.neto||0,
+        observaciones:'Cargado automáticamente desde Sueldos',
+        fecha:fechaAR,
+        ts:Date.now(),
+        creadoPor:currentUser.nombre,
+        origenSueldos:true,
+        periodoSueldos:periodo
+      });
+      idsCreados.push(ref.id);
+      count++;
+    }
+
+    await updateDoc(doc(db,'sueldos',periodo),{
+      cargadoACaja:true,
+      cargadoACajaFecha:fechaPago,
+      cargadoACajaPor:currentUser.nombre,
+      cargadoACajaTs:Date.now(),
+      // Guardamos los ids de los movimientos generados en esta pasada, para
+      // poder revertir (borrar) puntualmente si hace falta corregir algo.
+      cargadoACajaMovIds: [...(liqData.cargadoACajaMovIds||[]), ...idsCreados]
+    });
+
+    liqActualDoc = { ...liqData, cargadoACaja:true, cargadoACajaFecha:fechaPago, cargadoACajaMovIds:[...(liqData.cargadoACajaMovIds||[]),...idsCreados] };
+    document.getElementById('badgeCajaCargado').style.display='inline-block';
+    document.getElementById('badgeCajaCargado').textContent='📤 Ya cargado a Banco ('+fechaAR+')';
+    toast(`✅ ${count} sueldos cargados a Banco por ${fmt(totalNeto)}`,'success');
+  } catch(e){
+    toast('❌ Error al cargar a Caja: '+e.message,'error');
+  }
+};
+
+// ── REVERTIR CARGA A CAJA ────────────────────────────────────────────
+// Borra únicamente los movimientos de Caja que se generaron automáticamente
+// desde esta liquidación (usando los ids guardados en cargadoACajaMovIds),
+// y limpia el flag para poder recargar limpio.
+window.revertirCargaCaja=async function(){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const periodo=periodoActual();
+  let liqSnap;
+  try { liqSnap = await getDoc(doc(db,'sueldos',periodo)); } catch(e){ toast('Error: '+e.message,'error'); return; }
+  if(!liqSnap.exists()){ toast('No hay liquidación guardada para este período','error'); return; }
+  const liqData = liqSnap.data();
+  const ids = liqData.cargadoACajaMovIds||[];
+  if(!ids.length){ toast('No hay movimientos registrados para revertir en este período','error'); return; }
+  if(!confirm(`¿Eliminar los ${ids.length} egresos en Banco generados por la carga de sueldos de ${periodoLabel(periodo)}? Esta acción no se puede deshacer.`)) return;
+
+  let eliminados=0;
+  for(const id of ids){
+    try { await deleteDoc(doc(db,'movimientos',id)); eliminados++; } catch(e){ /* puede que ya no exista */ }
+  }
+  await updateDoc(doc(db,'sueldos',periodo),{ cargadoACaja:false, cargadoACajaMovIds:[] });
+  document.getElementById('badgeCajaCargado').style.display='none';
+  toast(`↩️ ${eliminados} movimientos eliminados de Caja. Podés recargar cuando quieras.`,'success');
 };
 
 window.exportarExcel=function(){
@@ -801,9 +922,12 @@ function renderHistorial(){
       }).filter(Boolean).join('');
       const divTotal=liq.dividendoPorSocio? liq.dividendoPorSocio*6:0;
       aBruto+=tBruto; aDesc+=tDesc; aNeto+=tNeto; aDiv+=divTotal;
+      const cajaBadge = liq.cargadoACaja
+        ? ` <span class="badge badge-activo" style="background:#dbeafe;color:#1e40af;">📤 en Banco</span>`
+        : '';
       return `<div class="hist-periodo">
         <div class="hist-periodo-header" onclick="toggleHistPeriodo(${idx})">
-          <div class="hist-periodo-label">${periodoLabel(liq.periodo)}${liq.periodo===periodoActual()?' <span class="badge badge-activo">actual</span>':''}</div>
+          <div class="hist-periodo-label">${periodoLabel(liq.periodo)}${liq.periodo===periodoActual()?' <span class="badge badge-activo">actual</span>':''}${cajaBadge}</div>
           <div class="hist-periodo-totales">
             <span>Bruto: <b>${fmt(tBruto)}</b></span>
             <span>Descuentos: <b style="color:${tDesc>0?'#dc2626':'inherit'}">${fmt(tDesc)}</b></span>
