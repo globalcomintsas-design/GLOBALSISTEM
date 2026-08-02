@@ -2215,7 +2215,8 @@ window.renderDashboard = function(){
   `;
 
   // "Por despachante" siempre muestra el MES EN CURSO (no depende del selector de mes del
-  // dashboard). El saldo/pagado de cada despachante se ve en la pestaña Saldos, acá solo el total.
+  // dashboard). El saldo mostrado es el saldo HISTÓRICO real (incluye deuda de meses
+  // anteriores), igual al de la pestaña Saldos.
   const _mesActualDash = new Date().toISOString().slice(0,7);
   const opsMesActual = operaciones.filter(o => o.fecha?.startsWith(_mesActualDash) && (!filtCorr || o.despachante === filtCorr));
 
@@ -2224,6 +2225,11 @@ window.renderDashboard = function(){
     if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
     byCorr[o.despachante].ops++;
     byCorr[o.despachante].bruto += o.bruto||0;
+  });
+  // Incluir también a los despachantes que tuvieron un PAGO este mes aunque no
+  // hayan cargado ninguna operación este mes (para que no desaparezcan de la tabla).
+  pagos.filter(p => (p.fecha||'').startsWith(_mesActualDash)).forEach(p => {
+    if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
   });
 
   // Mudanzas por cliente (siempre se muestra, filtrado solo por mes)
@@ -2250,13 +2256,13 @@ window.renderDashboard = function(){
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
             const pagadoMes = pagos.filter(p => p.despachante === k && (p.fecha||'').startsWith(_mesActualDash)).reduce((a,b)=>a+(b.monto||0),0);
-            const saldoMes = v.bruto - pagadoMes;
-            const colorSaldo = saldoMes > 0.005 ? '#dc2626' : (saldoMes < -0.005 ? '#059669' : '#64748b');
-            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldoMes)}</td></tr>`;
-          }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">Sin operaciones este mes</td></tr>'}
+            const { saldo } = calcularSaldoDespachante(k); // saldo histórico real (incluye deuda de meses anteriores)
+            const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
+            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
+          }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">Sin operaciones ni pagos este mes</td></tr>'}
         </tbody>
       </table>
-      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 Pagado/Saldo acá es solo del mes en curso. El saldo histórico acumulado de cada despachante se ve en la pestaña Saldos.</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Total" y "Pagado" son del mes en curso. "Saldo" es el saldo histórico real (incluye deuda de operaciones de meses anteriores), igual al que ves en la pestaña Saldos.</div>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>🏠 Residencia pendiente</h3>
