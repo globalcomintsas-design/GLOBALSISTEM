@@ -1175,7 +1175,7 @@ window.renderDashboard = function(){
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;grid-column:span 1;">
       <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
       <div class="kpi-val" style="color:#dc2626;font-size:30px;">$${fmt2(deudaTotalHoy)}</div>
-      <div class="kpi-sub">Histórico completo${filtCorr?` — solo ${filtCorr}`:' — todos los despachantes'}${!filtCorr?' (incl. mudanzas sin cobrar)':''}</div>
+      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaDespachantesHoy)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}</div>
     </div>
     ${!incluirMudEnTotales && mudFiltradas.length ? `
     <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
@@ -2447,4 +2447,3 @@ window.eliminarRecibo = async function(id){
 // ── INIT ──
 recalcularFormulario();
 recalcMudanza();
-
