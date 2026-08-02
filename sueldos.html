@@ -114,6 +114,16 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 .notif.show{transform:translateY(0);opacity:1;}
 .notif.error{background:#dc2626;}
 .notif.success{background:#16a34a;}
+.hist-anio{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;margin-bottom:12px;overflow:hidden;}
+.hist-anio-header{padding:14px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:10px;flex-wrap:wrap;}
+.hist-anio-header:hover{background:#e0edff;}
+.hist-anio-label{font-weight:700;color:#1e3a8a;font-size:16px;min-width:70px;}
+.hist-anio-totales{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:#555;}
+.hist-anio-totales b{color:#1a1a2e;}
+.hist-anio-toggle{font-size:18px;color:#1e3a8a;transition:transform .2s;}
+.hist-anio-toggle.open{transform:rotate(180deg);}
+.hist-anio-body{display:none;padding:10px 12px 12px;background:#fff;}
+.hist-anio-body.open{display:block;}
 .hist-periodo{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:10px;overflow:hidden;}
 .hist-periodo-header{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;gap:10px;flex-wrap:wrap;}
 .hist-periodo-header:hover{background:#f0f4f8;}
@@ -759,45 +769,80 @@ window.cerrarHistorial=function(){ document.getElementById('modalHistorial').cla
 function renderHistorial(){
   const cont=document.getElementById('historialCont');
   if(!historialData.length){ cont.innerHTML='<div class="hist-empty">Todavía no hay liquidaciones guardadas.<br>Usá el botón "💾 Guardar" en cada período para que empiecen a aparecer acá.</div>'; return; }
-  cont.innerHTML=historialData.map((liq,idx)=>{
-    const emps=liq.empleados||{};
-    let tBruto=0,tAuto=0,tMov=0,tFS=0,tDesc=0,tNeto=0;
-    const filas=EMPLEADOS.map(e=>{
-      const d=emps[e.nombre];
-      if(!d) return null;
-      tBruto+=d.bruto||0; tAuto+=d.autonomo||0; tMov+=d.movilidad||0; tFS+=d.finesdesemana||0; tDesc+=d.descuentos||0; tNeto+=d.neto||0;
-      return `<tr>
-        <td><div class="emp-cell"><div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:26px;height:26px;font-size:10px;">${e.iniciales}</div><div class="emp-name" style="font-size:12px;">${e.nombre}</div></div></td>
-        <td style="text-align:right;">${fmt(d.bruto)}</td>
-        <td style="text-align:right;">${e.esSocio?fmt(d.autonomo):'—'}</td>
-        <td style="text-align:right;">${fmt(d.movilidad)}</td>
-        <td style="text-align:right;">${fmt(d.finesdesemana)}</td>
-        <td style="text-align:right;color:${(d.descuentos||0)>0?'#dc2626':'#d1d5db'};font-weight:600;">${fmt(d.descuentos)}</td>
-        <td style="text-align:right;font-weight:700;color:${(d.neto||0)>=0?'#16a34a':'#dc2626'};">${fmt(d.neto)}</td>
-      </tr>`;
-    }).filter(Boolean).join('');
-    return `<div class="hist-periodo">
-      <div class="hist-periodo-header" onclick="toggleHistPeriodo(${idx})">
-        <div class="hist-periodo-label">${periodoLabel(liq.periodo)}${liq.periodo===periodoActual()?' <span class="badge badge-activo">actual</span>':''}</div>
-        <div class="hist-periodo-totales">
-          <span>Bruto: <b>${fmt(tBruto)}</b></span>
-          <span>Descuentos: <b style="color:${tDesc>0?'#dc2626':'inherit'}">${fmt(tDesc)}</b></span>
-          <span>Dividendos: <b>${fmt(liq.dividendoPorSocio? liq.dividendoPorSocio*6:0)}</b></span>
-          <span>Total neto pagado: <b style="color:#16a34a">${fmt(tNeto)}</b></span>
+
+  // Agrupa los períodos guardados por año (extraído de "YYYY-MM")
+  const porAnio={};
+  historialData.forEach((liq,idx)=>{
+    const anio=liq.periodo.split('-')[0];
+    if(!porAnio[anio]) porAnio[anio]=[];
+    porAnio[anio].push({liq,idx});
+  });
+  const anios=Object.keys(porAnio).sort((a,b)=>b.localeCompare(a));
+  const anioActual=periodoActual().split('-')[0];
+
+  cont.innerHTML=anios.map(anio=>{
+    let aBruto=0,aDesc=0,aNeto=0,aDiv=0;
+    const mesesHtml=porAnio[anio].map(({liq,idx})=>{
+      const emps=liq.empleados||{};
+      let tBruto=0,tAuto=0,tMov=0,tFS=0,tDesc=0,tNeto=0;
+      const filas=EMPLEADOS.map(e=>{
+        const d=emps[e.nombre];
+        if(!d) return null;
+        tBruto+=d.bruto||0; tAuto+=d.autonomo||0; tMov+=d.movilidad||0; tFS+=d.finesdesemana||0; tDesc+=d.descuentos||0; tNeto+=d.neto||0;
+        return `<tr>
+          <td><div class="emp-cell"><div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:26px;height:26px;font-size:10px;">${e.iniciales}</div><div class="emp-name" style="font-size:12px;">${e.nombre}</div></div></td>
+          <td style="text-align:right;">${fmt(d.bruto)}</td>
+          <td style="text-align:right;">${e.esSocio?fmt(d.autonomo):'—'}</td>
+          <td style="text-align:right;">${fmt(d.movilidad)}</td>
+          <td style="text-align:right;">${fmt(d.finesdesemana)}</td>
+          <td style="text-align:right;color:${(d.descuentos||0)>0?'#dc2626':'#d1d5db'};font-weight:600;">${fmt(d.descuentos)}</td>
+          <td style="text-align:right;font-weight:700;color:${(d.neto||0)>=0?'#16a34a':'#dc2626'};">${fmt(d.neto)}</td>
+        </tr>`;
+      }).filter(Boolean).join('');
+      const divTotal=liq.dividendoPorSocio? liq.dividendoPorSocio*6:0;
+      aBruto+=tBruto; aDesc+=tDesc; aNeto+=tNeto; aDiv+=divTotal;
+      return `<div class="hist-periodo">
+        <div class="hist-periodo-header" onclick="toggleHistPeriodo(${idx})">
+          <div class="hist-periodo-label">${periodoLabel(liq.periodo)}${liq.periodo===periodoActual()?' <span class="badge badge-activo">actual</span>':''}</div>
+          <div class="hist-periodo-totales">
+            <span>Bruto: <b>${fmt(tBruto)}</b></span>
+            <span>Descuentos: <b style="color:${tDesc>0?'#dc2626':'inherit'}">${fmt(tDesc)}</b></span>
+            <span>Dividendos: <b>${fmt(divTotal)}</b></span>
+            <span>Total neto pagado: <b style="color:#16a34a">${fmt(tNeto)}</b></span>
+          </div>
+          <span class="hist-periodo-toggle" id="histTog-${idx}">▾</span>
         </div>
-        <span class="hist-periodo-toggle" id="histTog-${idx}">▾</span>
-      </div>
-      <div class="hist-periodo-body" id="histBody-${idx}">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Empleado</th><th>Bruto</th><th>Autónomo</th><th>Movilidad</th><th>Fin sem.</th><th>Descuentos</th><th>Neto pagado</th></tr></thead>
-            <tbody>${filas}</tbody>
-          </table>
+        <div class="hist-periodo-body" id="histBody-${idx}">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Empleado</th><th>Bruto</th><th>Autónomo</th><th>Movilidad</th><th>Fin sem.</th><th>Descuentos</th><th>Neto pagado</th></tr></thead>
+              <tbody>${filas}</tbody>
+            </table>
+          </div>
         </div>
+      </div>`;
+    }).join('');
+    const abierto=anio===anioActual;
+    return `<div class="hist-anio">
+      <div class="hist-anio-header" onclick="toggleHistAnio('${anio}')">
+        <div class="hist-anio-label">📅 ${anio}</div>
+        <div class="hist-anio-totales">
+          <span>${porAnio[anio].length} mes${porAnio[anio].length>1?'es':''} guardado${porAnio[anio].length>1?'s':''}</span>
+          <span>Bruto: <b>${fmt(aBruto)}</b></span>
+          <span>Descuentos: <b style="color:${aDesc>0?'#dc2626':'inherit'}">${fmt(aDesc)}</b></span>
+          <span>Total neto pagado: <b style="color:#16a34a">${fmt(aNeto)}</b></span>
+        </div>
+        <span class="hist-anio-toggle${abierto?' open':''}" id="histAnioTog-${anio}">▾</span>
       </div>
+      <div class="hist-anio-body${abierto?' open':''}" id="histAnioBody-${anio}">${mesesHtml}</div>
     </div>`;
   }).join('');
 }
+
+window.toggleHistAnio=function(anio){
+  const body=document.getElementById('histAnioBody-'+anio),tog=document.getElementById('histAnioTog-'+anio);
+  body.classList.toggle('open'); tog.classList.toggle('open',body.classList.contains('open'));
+};
 
 window.toggleHistPeriodo=function(idx){
   const body=document.getElementById('histBody-'+idx),tog=document.getElementById('histTog-'+idx);
