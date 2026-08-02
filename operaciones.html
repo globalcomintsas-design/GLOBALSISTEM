@@ -2171,19 +2171,28 @@ window.renderDashboard = function(){
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
-  // Pagado / Saldo pendiente de los despachantes presentes en el filtro actual (valores exactos)
+  // ── "Cobrado" y "Pendiente" son del PERÍODO filtrado (mes elegido arriba), no históricos ──
   const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
-  let totPagadoDash = despFiltrados.reduce((a,n) => a + calcularSaldoDespachante(n).pagado, 0);
-  let totSaldoDash  = despFiltrados.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
+  let totCobradoPeriodo = pagos
+    .filter(p => despFiltrados.includes(p.despachante) && (!filtMes || (p.fecha||'').startsWith(filtMes)))
+    .reduce((a,b) => a + (b.monto||0), 0);
 
-  // Mudanzas: se suman al pagado (cobradas) y al saldo pendiente (sin cobrar) cuando
-  // no hay un despachante puntual seleccionado (las mudanzas no tienen despachante).
+  // Mudanzas: cobradas/sin cobrar ya vienen filtradas por el mismo período (mudFiltradas)
   const mudPagado    = mudFiltradas.filter(m => m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
   const mudPendiente = mudFiltradas.filter(m => !m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
   if(incluirMudEnTotales){
-    totPagadoDash += mudPagado;
-    totSaldoDash  += mudPendiente;
+    totCobradoPeriodo += mudPagado;
   }
+
+  // Pendiente del período = lo facturado en el período menos lo cobrado en ese mismo período
+  const totPendientePeriodo = totBruto - totCobradoPeriodo;
+
+  // ── "Deuda total pendiente HOY" es SIEMPRE histórica y total, ignora el filtro de mes ──
+  // (solo respeta el filtro de despachante, si eligió uno puntual)
+  const nombresParaDeuda = filtCorr ? [filtCorr] : [...new Set(clientes.map(c => c.nombre))];
+  const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
+  const mudPendienteHoy = filtCorr ? 0 : mudanzas.filter(m => !m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
+  const deudaTotalHoy = deudaDespachantesHoy + mudPendienteHoy;
 
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
@@ -2192,19 +2201,24 @@ window.renderDashboard = function(){
       <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}${incluirMudEnTotales?` · Mudanzas: ${mudFiltradas.length}`:''}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Total bruto facturado</div>
+      <div class="kpi-label">Facturado (este período)</div>
       <div class="kpi-val">$${fmt2(totBruto)}</div>
       <div class="kpi-sub">Neto: $${fmt2(totNeto)}${incluirMudEnTotales&&mudFiltradas.length?` (incl. mudanzas)`:''}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
-      <div class="kpi-label">💰 Total pagado</div>
-      <div class="kpi-val" style="color:#059669;">$${fmt2(totPagadoDash)}</div>
+      <div class="kpi-label">💰 Cobrado (este período)</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt2(totCobradoPeriodo)}</div>
       <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas cobradas: $${fmt2(mudPagado)}`:''}</div>
     </div>
-    <div class="kpi" style="border-color:${totSaldoDash>0.005?'#fca5a5':'#86efac'};background:${totSaldoDash>0.005?'#fef2f2':'#f0fdf4'};">
-      <div class="kpi-label">⚖️ Saldo pendiente</div>
-      <div class="kpi-val" style="color:${totSaldoDash>0.005?'#dc2626':'#059669'};">$${fmt2(totSaldoDash)}</div>
-      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas sin cobrar: $${fmt2(mudPendiente)}`:''}</div>
+    <div class="kpi" style="border-color:${totPendientePeriodo>0.005?'#fca5a5':'#86efac'};background:${totPendientePeriodo>0.005?'#fef2f2':'#f0fdf4'};">
+      <div class="kpi-label">⚖️ Pendiente (este período)</div>
+      <div class="kpi-val" style="color:${totPendientePeriodo>0.005?'#dc2626':'#059669'};">$${fmt2(totPendientePeriodo)}</div>
+      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas sin cobrar: $${fmt2(mudPendiente)}`:'Facturado − cobrado del período'}</div>
+    </div>
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;grid-column:span 1;">
+      <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
+      <div class="kpi-val" style="color:#dc2626;font-size:30px;">$${fmt2(deudaTotalHoy)}</div>
+      <div class="kpi-sub">Histórico completo${filtCorr?` — solo ${filtCorr}`:' — todos los despachantes'}${!filtCorr?' (incl. mudanzas sin cobrar)':''}</div>
     </div>
     ${!incluirMudEnTotales && mudFiltradas.length ? `
     <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
@@ -2250,7 +2264,7 @@ window.renderDashboard = function(){
 
   document.getElementById('dash-detalle').innerHTML = `
     <div class="section-card" style="margin:0;">
-      <h3>Por despachante (mes en curso: ${_mesActualDash})</h3>
+      <h3>Despachantes — mes en curso (${_mesActualDash})</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
