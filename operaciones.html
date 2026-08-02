@@ -1104,6 +1104,9 @@ let datosCargados = false;
 let listadoPage = 1;
 const LISTADO_PAGE_SIZE = 15;
 
+// Para que el selector de mes del Dashboard arranque en el mes en curso (no en blanco)
+let dashMesInicializado = false;
+
 // ── UTILS ──
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
 window.fmt = fmt;
@@ -2140,6 +2143,12 @@ function renderFiltros(){
     sel.innerHTML = '<option value="">Todos los meses</option>';
     meses.forEach(m => { const opt = document.createElement('option'); opt.value=m; opt.textContent=m; sel.appendChild(opt); });
     sel.value = v;
+    // El selector de mes del Dashboard arranca en el mes en curso (no queda en blanco ni pegado a lo último elegido)
+    if(sel === mesSelD && !dashMesInicializado){
+      const mesActual = new Date().toISOString().slice(0,7);
+      sel.value = meses.includes(mesActual) ? mesActual : (meses[0] || '');
+      dashMesInicializado = true;
+    }
   });
 }
 
