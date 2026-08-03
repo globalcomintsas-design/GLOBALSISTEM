@@ -590,6 +590,8 @@ window.actualizarMovFS = function(){
   window.recalc();
 };
 
+let exEmpleadosPeriodoActual = []; // [{nombre, d}] congelados del período que se está viendo
+
 function buildTable(guardada){
   const tbody=document.getElementById('tbody'); tbody.innerHTML='';
   tablaLista=false;
@@ -617,6 +619,34 @@ function buildTable(guardada){
     `;
     tbody.appendChild(tr);
   });
+
+  // Empleados dados de baja que igual tienen datos guardados para ESTE
+  // período (ej: trabajó en julio y se lo eliminó de Empleados después).
+  // Se muestran de solo lectura (no se pueden editar hacia adelante) y sus
+  // montos SÍ se suman a los totales / a lo que carga "Cargar a Caja", para
+  // que la tabla nunca muestre menos de lo que realmente se va a pagar.
+  const nombresActivos = new Set(EMPLEADOS.map(e=>e.nombre));
+  exEmpleadosPeriodoActual = Object.keys(guardada)
+    .filter(n=>!nombresActivos.has(n))
+    .map(n=>({nombre:n, d:guardada[n]}));
+
+  exEmpleadosPeriodoActual.forEach(({nombre,d})=>{
+    const iniciales = nombre.split(/\s+/).map(p=>p[0]||'').join('').substring(0,3).toUpperCase()||'?';
+    const tr=document.createElement('tr');
+    tr.style.opacity='.7';
+    tr.innerHTML=`
+      <td><div class="emp-cell"><div class="avatar av-purple">${iniciales}</div><div><div class="emp-name">${nombre}</div><div class="emp-tipo">Ex-empleado · solo lectura</div></div></div></td>
+      <td style="text-align:right;">${fmt(d.bruto)}</td>
+      <td style="text-align:right;">${d.autonomo?fmt(d.autonomo):'—'}</td>
+      <td><div class="auto-val">${fmt(d.movilidad)}</div></td>
+      <td><div class="auto-val">${fmt(d.finesdesemana)}</div></td>
+      <td><div class="adel-val${(d.descuentos||0)===0?' cero':''}">${fmt(d.descuentos)}</div></td>
+      <td><div class="neto-val${(d.neto||0)<0?' neto-neg':''}">${fmt(d.neto)}</div></td>
+      <td><div class="${d.dividendo?'div-val':'dash-cell'}">${d.dividendo?fmt(d.dividendo):'—'}</div></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
   tablaLista=true;   // la tabla está construida: a partir de acá actualizarMovFS puede tocar celdas in-place
   window.recalc();
 }
@@ -639,6 +669,11 @@ window.recalc = function(){
     const netoEl=document.getElementById('neto-'+i);
     if(netoEl){netoEl.textContent=fmt(neto);netoEl.classList.toggle('neto-neg',neto<0);}
     tBruto+=bruto;tAuto+=auto;tMov+=mov;tFS+=fs;tAdel+=desc;tDiv+=div;tNeto+=neto;
+  });
+  // Suma los ex-empleados con datos congelados de este período (ver buildTable)
+  exEmpleadosPeriodoActual.forEach(({d})=>{
+    tBruto+=d.bruto||0; tAuto+=d.autonomo||0; tMov+=d.movilidad||0; tFS+=d.finesdesemana||0;
+    tAdel+=d.descuentos||0; tDiv+=d.dividendo||0; tNeto+=d.neto||0;
   });
   document.getElementById('totBruto').textContent=fmt(tBruto);
   document.getElementById('totAuto').textContent=fmt(tAuto);
@@ -741,7 +776,10 @@ window.eliminarAdel=async function(id){if(!confirm('¿Eliminar este adelanto/pr�
 // números — nunca puede quedar guardado algo distinto de lo que se ve.
 function construirEmpleadosActual(){
   const periodo=periodoActual();
-  const empleados={};
+  // Partimos de lo que YA estaba guardado para este período (si lo hay),
+  // así preservamos los datos de empleados que después fueron dados de baja
+  // (ya no están en EMPLEADOS) y evitamos borrarlos al reguardar/autoguardar.
+  const empleados = { ...((liqActualDoc && liqActualDoc.periodo===periodo && liqActualDoc.empleados) || {}) };
   EMPLEADOS.forEach((emp,i)=>{
     const bruto=parseFloat(document.getElementById('bruto-'+i)?.value)||0;
     const auto=emp.esSocio?(parseFloat(document.getElementById('auto-'+i)?.value)||0):0;
@@ -978,12 +1016,22 @@ function renderHistorial(){
     const mesesHtml=porAnio[anio].map(({liq,idx})=>{
       const emps=liq.empleados||{};
       let tBruto=0,tAuto=0,tMov=0,tFS=0,tDesc=0,tNeto=0;
-      const filas=EMPLEADOS.map(e=>{
+      // Unión de la lista de empleados ACTUAL + cualquier nombre guardado en
+      // este período que ya no esté en la lista (ej: alguien dado de baja).
+      // Así el histórico nunca "pierde" a quien trabajó ese mes, aunque
+      // después se lo haya eliminado de Empleados.
+      const nombresEnLista = new Set(EMPLEADOS.map(e=>e.nombre));
+      const exEmpleados = Object.keys(emps).filter(n=>!nombresEnLista.has(n));
+      const listaParaMostrar = [
+        ...EMPLEADOS,
+        ...exEmpleados.map(n=>({nombre:n, iniciales:n.split(/\s+/).map(p=>p[0]||'').join('').substring(0,3).toUpperCase()||'?', esSocio:false, exEmpleado:true}))
+      ];
+      const filas=listaParaMostrar.map(e=>{
         const d=emps[e.nombre];
         if(!d) return null;
         tBruto+=d.bruto||0; tAuto+=d.autonomo||0; tMov+=d.movilidad||0; tFS+=d.finesdesemana||0; tDesc+=d.descuentos||0; tNeto+=d.neto||0;
         return `<tr>
-          <td><div class="emp-cell"><div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:26px;height:26px;font-size:10px;">${e.iniciales}</div><div class="emp-name" style="font-size:12px;">${e.nombre}</div></div></td>
+          <td><div class="emp-cell"><div class="avatar ${e.esSocio?'av-blue':'av-purple'}" style="width:26px;height:26px;font-size:10px;">${e.iniciales}</div><div class="emp-name" style="font-size:12px;">${e.nombre}${e.exEmpleado?' <span class="badge" style="background:#f1f5f9;color:#64748b;">Ex-empleado</span>':''}</div></div></td>
           <td style="text-align:right;">${fmt(d.bruto)}</td>
           <td style="text-align:right;">${e.esSocio?fmt(d.autonomo):'—'}</td>
           <td style="text-align:right;">${fmt(d.movilidad)}</td>
