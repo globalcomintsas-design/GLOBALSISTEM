@@ -36,7 +36,7 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .periodo-row label{font-size:12px;font-weight:600;color:#666;text-transform:uppercase;letter-spacing:.05em;}
 .periodo-row input[type=month]{padding:9px 12px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;background:#fff;}
 .badge-periodo{background:#eff6ff;color:#1e3a8a;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;}
-.badge-guardado{background:#dcfce7;color:#166534;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
+.badge-guardado{padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
 .badge-caja-cargado{background:#dbeafe;color:#1e40af;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600;display:none;}
 .div-info{background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#5b21b6;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .div-info strong{color:#4c1d95;}
@@ -191,7 +191,6 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
         <div class="btn-row">
           <button class="btn btn-outline" onclick="abrirModalEmp()">👤 Empleados</button>
           <button class="btn btn-outline" onclick="abrirHistorial()">🕘 Historial</button>
-          <button class="btn btn-success" onclick="guardarLiquidacion()">💾 Guardar</button>
           <button class="btn btn-primary" onclick="cargarACaja()">📤 Cargar a Caja</button>
           <button class="btn btn-outline" onclick="exportarExcel()">📊 Excel</button>
         </div>
@@ -329,7 +328,6 @@ let allAdelanto = [], allMovGlobal = [];
 let allMov = [], allFS = [];   // caches en memoria para movilidad y fines de semana
 let tablaLista = false;        // flag: la tabla ya fue construida
 let dividendoPorSocio = 0, periodoDividendo = '';
-let saving = false;
 let empleadosAnterior = {};   // liquidación del mes anterior (para precargar bruto/autónomo por defecto)
 let historialData = [];       // cache del historial de liquidaciones (docs de 'sueldos')
 let historialCargado = false;
@@ -371,12 +369,31 @@ function calcularNetoPesos(periodo){
   return ing-egr;
 }
 function cuotaParaPeriodo(adel,periodo){
-  if(adel.estado==='saldado') return 0;
+  // "Adelanto" (pago único): siempre descuenta en su mes de inicio, sin
+  // importar si autoMarcarSaldados ya lo marcó "saldado" por el paso del
+  // tiempo (eso es solo un estado visual/histórico, no debe borrar el
+  // descuento del mes al que realmente corresponde).
   if(adel.tipo==='adelanto') return adel.inicio===periodo?adel.monto:0;
+
+  // "Préstamo" (en cuotas): la cuota de cada mes se calcula siempre igual,
+  // en base a inicio/cuotas — así los meses ya transcurridos conservan su
+  // descuento histórico aunque el préstamo se haya marcado saldado después.
   const [yi,mi]=adel.inicio.split('-').map(Number);
   const [yp,mp]=periodo.split('-').map(Number);
   const diff=(yp-yi)*12+(mp-mi);
-  return (diff>=0&&diff<adel.cuotas)?Math.round(adel.monto/adel.cuotas):0;
+  if(diff<0||diff>=adel.cuotas) return 0;
+
+  // Si se marcó "saldado" manualmente (ej: el empleado pagó el resto por
+  // afuera, en efectivo, antes de terminar las cuotas), no se siguen
+  // descontando cuotas de MESES FUTUROS a partir de hoy. Los meses pasados
+  // o el mes actual mantienen su cuota ya calculada/aplicada.
+  if(adel.estado==='saldado'){
+    const hoy=new Date();
+    const phHoy=hoy.getFullYear()+'-'+String(hoy.getMonth()+1).padStart(2,'0');
+    if(periodo>phHoy) return 0;
+  }
+
+  return Math.round(adel.monto/adel.cuotas);
 }
 function cuotasPagadas(adel,periodo){
   if(adel.tipo==='adelanto') return adel.inicio<periodo?1:0;
@@ -495,8 +512,9 @@ async function autoMarcarSaldados(){
 
 window.cargarPeriodo = async function(){
   const periodo=periodoActual();
+  if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } // cancela autoguardado pendiente del período anterior
   document.getElementById('badgePeriodo').textContent=periodoLabel(periodo);
-  document.getElementById('badgeGuardado').style.display='none';
+  ocultarBadgeGuardado();
   document.getElementById('badgeCajaCargado').style.display='none';
   // Fallback: si los snapshots aún no dispararon, hago getDocs para tener datos
   if(allMov.length===0){
@@ -520,7 +538,7 @@ window.cargarPeriodo = async function(){
     if(liqDoc.exists()){
       liqActualDoc=liqDoc.data();
       guardada=liqActualDoc.empleados||{};
-      document.getElementById('badgeGuardado').style.display='inline-block';
+      marcarGuardado();
       if(liqActualDoc.cargadoACaja){
         document.getElementById('badgeCajaCargado').style.display='inline-block';
         document.getElementById('badgeCajaCargado').textContent='📤 Ya cargado a Banco ('+(liqActualDoc.cargadoACajaFecha?liqActualDoc.cargadoACajaFecha.split('-').reverse().join('/'):'')+')';
@@ -631,6 +649,7 @@ window.recalc = function(){
   const netoEl=document.getElementById('totNeto');
   netoEl.textContent=fmt(tNeto);
   netoEl.className='card-value '+(tNeto>=0?'green':'red');
+  programarAutoguardado();
 };
 
 window.toggleAdelantos=function(){
@@ -716,9 +735,11 @@ window.guardarAdel=async function(){
 window.marcarSaldado=async function(id){await updateDoc(doc(db,'adelantos',id),{estado:'saldado'});toast('Marcado como saldado ✓','success');};
 window.eliminarAdel=async function(id){if(!confirm('¿Eliminar este adelanto/préstamo?'))return;await deleteDoc(doc(db,'adelantos',id));toast('Eliminado','error');};
 
-window.guardarLiquidacion=async function(){
-  if(currentUser?.rol==='viewer'){toast('Sin permiso','error');return;}
-  if(saving)return; saving=true;
+// Construye el objeto "empleados" a partir de los valores ACTUALES en pantalla
+// (mismos inputs que ve el usuario en este momento). Se usa tanto para
+// Guardar como para Cargar a Caja, así los dos SIEMPRE usan los mismos
+// números — nunca puede quedar guardado algo distinto de lo que se ve.
+function construirEmpleadosActual(){
   const periodo=periodoActual();
   const empleados={};
   EMPLEADOS.forEach((emp,i)=>{
@@ -729,17 +750,63 @@ window.guardarLiquidacion=async function(){
     const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
     empleados[emp.nombre]={bruto,autonomo:auto,movilidad:mov,finesdesemana:fs,dividendo:div,descuentos:desc,neto:bruto+auto+mov+fs-desc};
   });
-  try {
-    await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre},{merge:true});
-    document.getElementById('badgeGuardado').style.display='inline-block';
-    toast('Liquidación guardada ✓','success');
-    historialCargado=false; // invalida cache del historial para reflejar el nuevo guardado
-    // refresca el doc en memoria (para que "Cargar a Caja" tenga los netos recién guardados)
-    const liqDoc=await getDoc(doc(db,'sueldos',periodo));
-    if(liqDoc.exists()) liqActualDoc=liqDoc.data();
-  } catch(e){toast('Error: '+e.message,'error');}
-  saving=false;
-};
+  return empleados;
+}
+
+// Guarda en Firestore el objeto "empleados" ya construido, sin volver a leer
+// el DOM (evita recalcular dos veces y asegura que se persista EXACTAMENTE
+// lo que se acaba de mostrar/usar en pantalla).
+async function guardarEmpleadosEnFirestore(periodo, empleados){
+  await setDoc(doc(db,'sueldos',periodo),{periodo,empleados,periodoDividendo,dividendoPorSocio,updatedAt:new Date().toISOString(),updatedBy:currentUser.nombre},{merge:true});
+  historialCargado=false; // invalida cache del historial para reflejar el nuevo guardado
+}
+
+// ── AUTOGUARDADO ──────────────────────────────────────────────────────
+// La liquidación se guarda sola: cada cambio que afecta los números
+// (tipear un bruto/autónomo, que cambie movilidad/FS, que se cargue un
+// adelanto, o simplemente abrir un período) dispara un guardado con un
+// pequeño retraso (debounce), para no escribir en Firestore en cada tecla.
+let autosaveTimer=null;
+
+function marcarGuardando(){
+  const b=document.getElementById('badgeGuardado');
+  if(!b) return;
+  b.style.display='inline-block';
+  b.style.background='#fef9c3'; b.style.color='#854d0e';
+  b.textContent='💾 Guardando...';
+}
+function marcarGuardado(){
+  const b=document.getElementById('badgeGuardado');
+  if(!b) return;
+  b.style.display='inline-block';
+  b.style.background='#dcfce7'; b.style.color='#166534';
+  b.textContent='✓ Guardado automáticamente';
+}
+function ocultarBadgeGuardado(){
+  const b=document.getElementById('badgeGuardado');
+  if(b) b.style.display='none';
+}
+
+function programarAutoguardado(){
+  if(currentUser?.rol==='viewer') return;  // viewer no guarda nada
+  if(!tablaLista) return;                  // todavía no se construyó la tabla
+  marcarGuardando();
+  if(autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer=setTimeout(()=>{ guardarAhora().catch(e=>toast('Error al autoguardar: '+e.message,'error')); }, 1200);
+}
+
+// Guarda YA MISMO (sin esperar el debounce) los valores actuales en
+// pantalla. La usan tanto el temporizador de autoguardado como
+// "Cargar a Caja" (que necesita la certeza de que lo guardado = lo que se ve).
+async function guardarAhora(){
+  const periodo=periodoActual();
+  const empleados=construirEmpleadosActual();
+  await guardarEmpleadosEnFirestore(periodo, empleados);
+  marcarGuardado();
+  const liqDoc=await getDoc(doc(db,'sueldos',periodo));
+  if(liqDoc.exists()) liqActualDoc=liqDoc.data();
+  return empleados;
+}
 
 // ── CARGA DE SUELDOS A CAJA (Banco) ─────────────────────────────────
 // Los sueldos siempre salen de la cuenta Banco. Crea un Egreso por cada
@@ -751,20 +818,25 @@ window.cargarACaja=async function(){
   if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
   const periodo=periodoActual();
 
-  // Aseguramos tener la liquidación guardada más reciente de Firestore
-  let liqSnap;
+  // Fuerza un guardado INMEDIATO con los valores actuales en pantalla,
+  // cancelando cualquier autoguardado pendiente. Así "Cargar a Caja" nunca
+  // depende del timing del debounce: lo que se ve en pantalla es
+  // exactamente lo que se guarda y lo que se manda a Banco.
+  if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; }
+  let empleados;
   try {
-    liqSnap = await getDoc(doc(db,'sueldos',periodo));
-  } catch(e){ toast('Error al leer la liquidación: '+e.message,'error'); return; }
+    empleados = await guardarAhora();
+  } catch(e){ toast('Error al guardar antes de cargar a Caja: '+e.message,'error'); return; }
 
-  if(!liqSnap.exists()){
-    toast('Primero guardá la liquidación de este período (💾 Guardar)','error');
-    return;
-  }
-  const liqData = liqSnap.data();
-  const empleados = liqData.empleados||{};
   const netos = Object.entries(empleados).filter(([,d])=>(d.neto||0)>0);
   if(!netos.length){ toast('No hay netos positivos para cargar en este período','error'); return; }
+
+  // Solo para saber si este período ya se había cargado antes (evitar duplicar)
+  let liqData={};
+  try {
+    const liqSnap = await getDoc(doc(db,'sueldos',periodo));
+    if(liqSnap.exists()) liqData = liqSnap.data();
+  } catch(e){ toast('Error al leer la liquidación: '+e.message,'error'); return; }
 
   const yaCargado = !!liqData.cargadoACaja;
   const fechaSugerida = new Date().toISOString().split('T')[0];
