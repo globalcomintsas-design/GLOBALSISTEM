@@ -188,7 +188,7 @@ window.manejarTecladoAC = function(e, listId){
     e.preventDefault();
     state.activeIndex = state.activeIndex > 0 ? state.activeIndex - 1 : state.items.length - 1;
     renderAC(listId);
-  } else if(e.key === 'Enter'){
+  } else if(e.key === 'Enter' || e.key === 'Tab'){
     if(state.activeIndex >= 0){
       e.preventDefault();
       seleccionarACIndex(listId, state.activeIndex);
