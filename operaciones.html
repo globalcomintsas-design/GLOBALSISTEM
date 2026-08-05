@@ -500,6 +500,30 @@
       </div>
     </div>
 
+    <div class="section-card">
+      <h3>🔗 Vinculaciones automáticas desde Caja</h3>
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">
+        Registro de lo que el sistema vinculó (o no pudo vincular) automáticamente cuando se cargó un ingreso en Caja. Incluye pagos por factura, pagos genéricos por despachante y mudanzas marcadas como cobradas — y también los casos donde hubo ambigüedad o el monto no coincidió y por eso no se tocó nada.
+      </div>
+      <div class="tabla-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Cliente</th>
+              <th>Factura</th>
+              <th>Importe</th>
+              <th>Qué hizo el sistema</th>
+              <th>Cargado por</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-log-vinculaciones">
+            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin registros</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
   <!-- ═══════════════ TAB: CLIENTES ═══════════════ -->
