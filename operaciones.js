@@ -119,7 +119,7 @@ window.switchTab = function(tab){
   });
   if(tab==='listado')   renderTabla();
   if(tab==='dashboard') renderDashboard();
-  if(tab==='saldos')    renderSaldos();
+  if(tab==='saldos'){ renderSaldos(); renderLogVinculaciones(); }
   if(tab==='clientes')  renderTablaClientesFinales();
   if(tab==='ramiro')    renderRamiro();
   if(tab==='remitos')   renderRemitos();
@@ -265,6 +265,43 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
   window.pagos = pagos;
   renderSaldos();
 });
+
+// ── Log de vinculaciones automáticas desde Caja ──
+// Se alimenta desde caja.html (colección 'log_vinculaciones_caja') cada vez que se carga
+// un Ingreso y el sistema intenta vincularlo con Operaciones (pago por factura, pago
+// genérico por despachante, o marcar una mudanza como cobrada). Se muestra en la
+// pestaña Saldos, junto al historial de pagos, para poder auditar qué hizo el sistema.
+let logVinculaciones = [];
+onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc')), snap => {
+  logVinculaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderLogVinculaciones();
+});
+
+function renderLogVinculaciones(){
+  const tbody = document.getElementById('tbody-log-vinculaciones');
+  if(!tbody) return;
+  if(!logVinculaciones.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin registros</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logVinculaciones.map(l => {
+    const huboAlerta = (l.acciones||[]).some(a => a.startsWith('⚠️'));
+    const accionesHtml = (l.acciones||[]).map(a =>
+      a.startsWith('⚠️')
+        ? `<div style="color:#dc2626;font-weight:600;">${a}</div>`
+        : `<div style="color:#059669;">${a}</div>`
+    ).join('');
+    return `<tr style="${huboAlerta ? 'background:#fef2f2;' : ''}">
+      <td>${l.fecha||''}</td>
+      <td><strong>${l.cliente||''}</strong></td>
+      <td class="mono">${l.factura||'-'}</td>
+      <td style="text-align:right;font-weight:600;">$${fmt2(l.importe)}</td>
+      <td style="font-size:11px;max-width:340px;">${accionesHtml}</td>
+      <td style="font-size:11px;color:#64748b;">${l.cargadoPor||''}</td>
+    </tr>`;
+  }).join('');
+}
+window.renderLogVinculaciones = renderLogVinculaciones;
 
 // Clientes: colección chica y estática, sin filtro
 onSnapshot(collection(db,'corresponsales_clientes'), snap => {
