@@ -649,9 +649,21 @@ window.guardarMovimiento = async function() {
 };
 
 // ── Vincula un ingreso de Caja con el módulo Operaciones (despachantees_ops / mudanzas) ──
+// FIX (ago-2026): antes esta función marcaba "cobrada" la PRIMERA mudanza pendiente que
+// encontraba para el cliente, sin chequear el monto. Si un cliente tenía más de una mudanza
+// pendiente, podía marcar la mudanza equivocada. Ahora:
+//   1) Solo auto-marca "cobrada" si hay UNA sola mudanza pendiente de ese cliente Y el monto
+//      coincide (tolerancia $1).
+//   2) Si hay ambigüedad (más de una candidata) o el monto no coincide, NO toca nada y avisa.
+//   3) Cada decisión queda registrada en la colección 'log_vinculaciones_caja' para poder
+//      auditar después qué hizo el sistema con cada ingreso (se ve en Operaciones > Saldos).
 async function vincularIngresoConOperaciones({ cliente, factura, importe, detalle }) {
   const clienteUpper = (cliente||'').trim().toUpperCase();
   const facturaKey = (factura||'').trim().toUpperCase();
+  const logEntry = {
+    cliente: clienteUpper, factura: facturaKey, importe, detalle: detalle||'',
+    fecha: today(), ts: Date.now(), cargadoPor: currentUser.nombre, acciones: []
+  };
 
   // 1 - Si tiene N° de factura y esa factura está asignada a operaciones → pago exacto por factura
   if (facturaKey && opsPorFactura[facturaKey]) {
@@ -666,6 +678,7 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
       ts: Date.now()
     });
     toast('🔗 Vinculado a Operaciones por factura ' + facturaKey, 'success');
+    logEntry.acciones.push('Pago vinculado a Operaciones por factura ' + facturaKey);
   }
   // 2 - Si no vino con factura (o no matcheó) pero el cliente es un despachante conocido → pago genérico (se aplica FIFO en Operaciones)
   else if (despachantesOp.includes(clienteUpper)) {
@@ -679,18 +692,36 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
       ts: Date.now()
     });
     toast('🔗 Vinculado a Operaciones (saldo por despachante)', 'success');
+    logEntry.acciones.push('Pago vinculado a Operaciones (saldo FIFO, sin factura)');
   }
 
-  // 3 - Marcar mudanza como cobrada si el cliente coincide con una mudanza pendiente de cobro
-  const mud = mudanzasPend.find(m => (m.cliente||'').toUpperCase() === clienteUpper && !m.cobrado);
-  if (mud) {
-    await updateDoc(doc(db,'corresponsales_mudanzas', mud.id), {
-      cobrado: true,
-      fechaCobro: today(),
-      montoCobrado: importe
-    });
-    toast('📦 Mudanza de ' + clienteUpper + ' marcada como cobrada', 'success');
+  // 3 - Mudanzas: SOLO auto-marcar cobrada si hay UNA candidata y el monto coincide
+  const candidatas = mudanzasPend.filter(m => (m.cliente||'').toUpperCase() === clienteUpper && !m.cobrado);
+  if (candidatas.length === 1) {
+    const mud = candidatas[0];
+    const coincideMonto = Math.abs((mud.bruto||0) - importe) < 1;
+    if (coincideMonto) {
+      await updateDoc(doc(db,'corresponsales_mudanzas', mud.id), {
+        cobrado: true,
+        fechaCobro: today(),
+        montoCobrado: importe
+      });
+      toast('📦 Mudanza de ' + clienteUpper + ' marcada como cobrada', 'success');
+      logEntry.acciones.push(`Mudanza ${mud.id} marcada COBRADA automáticamente (monto OK: $${importe})`);
+    } else {
+      toast('⚠️ Mudanza pendiente de ' + clienteUpper + ' pero el monto NO coincide — revisar', 'error');
+      logEntry.acciones.push(`⚠️ Mudanza ${mud.id} de ${clienteUpper}: monto NO coincide (mudanza $${mud.bruto} vs pago $${importe}) — NO se marcó cobrada`);
+    }
+  } else if (candidatas.length > 1) {
+    toast('⚠️ Hay ' + candidatas.length + ' mudanzas pendientes de ' + clienteUpper + ' — revisar manual', 'error');
+    logEntry.acciones.push(`⚠️ AMBIGUO: ${candidatas.length} mudanzas pendientes de ${clienteUpper} — ninguna marcada, revisar manualmente`);
   }
+
+  if (logEntry.acciones.length === 0) {
+    logEntry.acciones.push('Sin vinculación automática (no matchea factura, despachante ni mudanza)');
+  }
+
+  await addDoc(collection(db,'log_vinculaciones_caja'), logEntry);
 }
 
 window.limpiarForm = function() {
