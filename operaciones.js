@@ -907,6 +907,9 @@ function renderTablaClientesFinales(){
 window.renderTablaClientesFinales = renderTablaClientesFinales;
 
 // ── CALCULAR COBERTURA FIFO (pagos sin factura asignada se aplican a las operaciones más viejas) ──
+// NOTA: esto sigue funcionando exactamente igual que antes (se usa para pintar la columna
+// "Cobertura" del Listado, operación por operación) y compara contra o.bruto — no se toca,
+// porque el pedido fue no modificar el Listado. Es un concepto distinto del saldo total.
 function calcularCoberturaFIFO(nombre){
   const { pagado } = calcularSaldoDespachante(nombre);
   const ops = operaciones.filter(o => o.despachante === nombre).sort((a,b)=>(a.ts||0)-(b.ts||0));
@@ -1270,7 +1273,7 @@ window.renderDashboard = function(){
           }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">Sin operaciones ni pagos este mes</td></tr>'}
         </tbody>
       </table>
-      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Total" y "Pagado" son del mes en curso. "Saldo" es el saldo histórico real (incluye deuda de operaciones de meses anteriores), igual al que ves en la pestaña Saldos.</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Total" y "Pagado" son del mes en curso. "Saldo" es el saldo histórico real (Neto de operaciones sin factura + Neto+IVA de operaciones ya facturadas, menos pagos), igual al que ves en la pestaña Saldos.</div>
     </div>
     <div class="section-card" style="margin:0;">
       <h3>🏠 Residencia pendiente</h3>
@@ -1334,11 +1337,37 @@ window.migrarEtiquetasAdicionales = async function(){
   }
 };
 
+// ── MONTO EXIGIBLE POR OPERACIÓN (usado SOLO para calcular saldos) ──
+// Mientras la operación NO tenga N° de factura cargado (numFactura vacío), el IVA es
+// puramente informativo: lo único que se le puede reclamar al despachante es el NETO,
+// porque todavía no existe factura de ARCA que respalde ese IVA. Recién cuando se carga
+// el N° de factura (asignarFactura / lote / al facturar por ARCA), la operación pasa a
+// estar "Facturada" y el IVA se incorpora al monto exigible (Neto + IVA = Bruto).
+//
+// OJO: esto NO toca neto/iva/bruto en ningún lado. Esos tres valores se siguen calculando
+// igual que siempre (getTarifas / construirDatosOperacion) y se siguen mostrando igual en
+// la carga, el Listado, el Dashboard, las planillas Excel y los recibos. Esta función se
+// usa exclusivamente adentro de calcularSaldoDespachante, para no confundir "lo facturado"
+// (bruto, informativo) con "lo que hoy se le puede cobrar" (exigible).
+function montoExigible(o){
+  const facturada = !!(o.numFactura && String(o.numFactura).trim());
+  return facturada ? (o.bruto||0) : (o.neto||0);
+}
+window.montoExigible = montoExigible;
+
 // ── PAGOS Y SALDOS POR DESPACHANTE ──
 function calcularSaldoDespachante(nombre){
-  const facturado = operaciones.filter(o => o.despachante === nombre).reduce((a,b) => a + (b.bruto||0), 0);
+  const ops = operaciones.filter(o => o.despachante === nombre);
+  // "facturado" se mantiene igual que siempre: total bruto histórico (neto+IVA de todas las
+  // operaciones, tengan o no factura cargada). Es un dato informativo, no cambia.
+  const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  // "exigible" es el monto nuevo que se usa para el saldo: neto en operaciones sin factura,
+  // neto+IVA (bruto) en las que ya tienen N° de factura cargado.
+  const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
   const pagado    = pagos.filter(p => p.despachante === nombre).reduce((a,b) => a + (b.monto||0), 0);
-  return { facturado, pagado, saldo: facturado - pagado };
+  // El saldo pendiente ahora se calcula contra lo exigible, NO contra el bruto total.
+  // Mientras no haya factura: saldo = neto - pagos. Facturada: saldo = neto + iva - pagos.
+  return { facturado, exigible, pagado, saldo: exigible - pagado };
 }
 window.calcularSaldoDespachante = calcularSaldoDespachante;
 
@@ -1396,14 +1425,33 @@ function renderSaldos(){
         const { facturado, pagado, saldo } = calcularSaldoDespachante(n);
         const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
         const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
+        // Indicador: ¿tiene este despachante operaciones sin factura aún (IVA no exigible)?
+        const opsDelDesp = operaciones.filter(o => o.despachante === n);
+        const tieneSinFacturar = opsDelDesp.some(o => !(o.numFactura && String(o.numFactura).trim()));
+        const ivaNoExigible = opsDelDesp
+          .filter(o => !(o.numFactura && String(o.numFactura).trim()))
+          .reduce((a,b) => a + (b.iva||0), 0);
+        const notaIva = tieneSinFacturar && ivaNoExigible > 0.005
+          ? ` <span class="tag" style="background:#fef9c3;color:#92400e;" title="IVA aún no exigible (sin factura emitida) — no está incluido en el saldo">IVA s/facturar: $${fmt2(ivaNoExigible)}</span>`
+          : '';
         return `<tr>
           <td><strong>${n}</strong></td>
           <td>$${fmt2(facturado)}</td>
           <td style="color:#059669;">$${fmt2(pagado)}</td>
-          <td style="font-weight:700;color:${colorSaldo};">$${fmt2(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span></td>
+          <td style="font-weight:700;color:${colorSaldo};">$${fmt2(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span>${notaIva}</td>
         </tr>`;
       }).join('');
     }
+  }
+
+  // Nota explicativa fija debajo de la tabla de Saldos (se agrega una sola vez)
+  const tablaSaldosCard = tbodySaldos ? tbodySaldos.closest('.section-card') : null;
+  if(tablaSaldosCard && !document.getElementById('nota-saldo-iva')){
+    const nota = document.createElement('div');
+    nota.id = 'nota-saldo-iva';
+    nota.style.cssText = 'font-size:11px;color:#94a3b8;margin-top:8px;';
+    nota.innerHTML = '💡 El <strong>Saldo pendiente</strong> se calcula sobre el <strong>Neto</strong> mientras la operación no tenga N° de factura cargado (el IVA es informativo hasta ese momento). Cuando se carga el N° de factura en el Listado, esa operación pasa a "Facturada" y su IVA se suma al saldo exigible.';
+    tablaSaldosCard.appendChild(nota);
   }
 
   // Historial de pagos
