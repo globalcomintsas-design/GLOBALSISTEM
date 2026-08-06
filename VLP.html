@@ -1848,7 +1848,12 @@ window.renderFechasFaltantes=function() {
   const filtTipo=document.getElementById('filtroTipoFF')?.value||'';
   const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
 
-  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&o.estado_sim!=='ANUL'&&(o.estado||'').toUpperCase()!=='OFI');
+  // Solo entran al reporte las operaciones cuyo Estado SIM es AUTO o CANC:
+  // son las únicas que ya están en condiciones de tener fecha operativa
+  // cargada (mercadería a bordo para EXPO / cumplido en plaza para el resto)
+  // y a las que realmente les falta ese dato en DUX. SALI, PRES, vacío u
+  // otros estados no se muestran acá.
+  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&(o.estado_sim==='AUTO'||o.estado_sim==='CANC')&&(o.estado||'').toUpperCase()!=='OFI');
 
   document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
   document.getElementById('ffExpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='EXPORTACION').length;
