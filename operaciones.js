@@ -41,6 +41,45 @@ let datosCargados = false;
 let listadoPage = 1;
 const LISTADO_PAGE_SIZE = 15;
 
+// ── Paginación genérica (para tablas que no tenían paginación propia) ──
+// Se usa para: Historial de pagos, Vinculaciones automáticas (Saldos), Cuenta Ramiro,
+// Historial de recibos y las tablas de Clientes/Clientes finales. Cada tabla se identifica
+// por una "key" propia y mantiene su propio número de página en paginaGenerica.
+const PAGE_SIZE_GENERICO = 15;
+const paginaGenerica = {}; // { key: numeroDePagina }
+
+function getPaginaGenerica(key){ return paginaGenerica[key] || 1; }
+
+function paginarArray(key, arr, pageSize){
+  const totalPaginas = Math.max(1, Math.ceil(arr.length / pageSize));
+  let page = getPaginaGenerica(key);
+  if(page > totalPaginas) page = totalPaginas;
+  if(page < 1) page = 1;
+  paginaGenerica[key] = page;
+  const inicio = (page - 1) * pageSize;
+  return { pagina: arr.slice(inicio, inicio + pageSize), page, totalPaginas };
+}
+
+function htmlPaginacionGenerica(page, totalPaginas, key){
+  return `<div class="pagin-bar">
+      <button onclick="cambiarPaginaGenerica('${key}',-1)" ${page<=1?'disabled':''}>‹ Anterior</button>
+      <span>${page}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaGenerica('${key}',1)" ${page>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
+}
+
+window.cambiarPaginaGenerica = function(key, delta){
+  paginaGenerica[key] = Math.max(1, getPaginaGenerica(key) + delta);
+  switch(key){
+    case 'pagos':           renderSaldos(); break;
+    case 'vinculaciones':   renderLogVinculaciones(); break;
+    case 'ramiro':          renderRamiro(); break;
+    case 'remitosHist':     renderHistorialRemitos(); break;
+    case 'clientesDesp':    renderTablaClientes(); break;
+    case 'clientesFinales': renderTablaClientesFinales(); break;
+  }
+};
+
 // Para que el selector de mes del Dashboard arranque en el mes en curso (no en blanco)
 // y no quede pegado a un mes viejo por una carga inicial incompleta de Firestore.
 let usuarioEligioMesDash = false;
@@ -279,12 +318,16 @@ onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc')),
 
 function renderLogVinculaciones(){
   const tbody = document.getElementById('tbody-log-vinculaciones');
+  const paginacionEl = document.getElementById('vinculaciones-paginacion');
   if(!tbody) return;
   if(!logVinculaciones.length){
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin registros</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  tbody.innerHTML = logVinculaciones.map(l => {
+  // logVinculaciones ya viene ordenado del más nuevo al más viejo (orderBy ts desc)
+  const { pagina, page, totalPaginas } = paginarArray('vinculaciones', logVinculaciones, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(l => {
     const huboAlerta = (l.acciones||[]).some(a => a.startsWith('⚠️'));
     const accionesHtml = (l.acciones||[]).map(a =>
       a.startsWith('⚠️')
@@ -300,6 +343,7 @@ function renderLogVinculaciones(){
       <td style="font-size:11px;color:#64748b;">${l.cargadoPor||''}</td>
     </tr>`;
   }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'vinculaciones');
 }
 window.renderLogVinculaciones = renderLogVinculaciones;
 
@@ -888,13 +932,16 @@ window.eliminarClienteFinal = async function(id){
 
 function renderTablaClientesFinales(){
   const tbody = document.getElementById('tbody-clientes-finales');
+  const paginacionEl = document.getElementById('clientesfinales-paginacion');
   if(!tbody) return;
   if(!clientesFinalesDocs.length){
     tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
   const ordenados = [...clientesFinalesDocs].sort((a,b) => a.nombre.localeCompare(b.nombre));
-  tbody.innerHTML = ordenados.map(c => {
+  const { pagina, page, totalPaginas } = paginarArray('clientesFinales', ordenados, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(c => {
     const cantOps  = operaciones.filter(o => o.cliente === c.nombre).length;
     const cantMud  = mudanzas.filter(m => m.cliente === c.nombre).length;
     return `<tr>
@@ -903,6 +950,7 @@ function renderTablaClientesFinales(){
       <td><button class="btn-danger" onclick="eliminarClienteFinal('${c.id}')">✕</button></td>
     </tr>`;
   }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesFinales');
 }
 window.renderTablaClientesFinales = renderTablaClientesFinales;
 
@@ -1004,6 +1052,9 @@ function renderTabla(){
   if(filtMes)   ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+
+  // Más nueva primero: la última operación cargada arriba de todo, y así hacia atrás.
+  ops.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
 
   if(!ops.length){
     tbody.innerHTML = '<tr><td colspan="18" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
@@ -1456,12 +1507,16 @@ function renderSaldos(){
 
   // Historial de pagos
   const tbodyHist = document.getElementById('tbody-pagos-hist');
+  const pagosPaginacionEl = document.getElementById('pagos-paginacion');
   if(tbodyHist){
     if(!pagos.length){
       tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>';
+      if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = '';
     } else {
+      // Más nuevo primero (último pago cargado arriba de todo)
       const ordenados = [...pagos].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
-      tbodyHist.innerHTML = ordenados.map(p => `
+      const { pagina, page, totalPaginas } = paginarArray('pagos', ordenados, PAGE_SIZE_GENERICO);
+      tbodyHist.innerHTML = pagina.map(p => `
         <tr>
           <td>${p.fecha||''}</td>
           <td><strong>${p.despachante||''}</strong>${p.numFactura?` <span class="tag" style="background:#dbeafe;color:#1e40af;">Fact. ${p.numFactura}</span>`:(p.origenCaja?' <span class="tag" style="background:#dcfce7;color:#166534;">Auto Caja</span>':'')}</td>
@@ -1470,6 +1525,7 @@ function renderSaldos(){
           <td><button class="btn-danger" onclick="eliminarPago('${p.id}')">✕</button></td>
         </tr>
       `).join('');
+      if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'pagos');
     }
   }
 }
@@ -1478,11 +1534,15 @@ window.renderSaldos = renderSaldos;
 // ── RENDER TABLA CLIENTES (DESPACHANTES) ──
 function renderTablaClientes(){
   const tbody = document.getElementById('tbody-clientes');
+  const paginacionEl = document.getElementById('clientes-paginacion');
   if(!clientes.length){
     tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  tbody.innerHTML = clientes.map(c => {
+  const ordenados = [...clientes].sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''));
+  const { pagina, page, totalPaginas } = paginarArray('clientesDesp', ordenados, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(c => {
     const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
     const et = etiquetaTipoDespachante(c.tipo);
     return `<tr>
@@ -1495,6 +1555,7 @@ function renderTablaClientes(){
       <td><button class="btn-danger" onclick="eliminarCliente('${c.id}')">✕</button></td>
     </tr>`;
   }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesDesp');
 }
 
 // ── EXPORTAR EXCEL ──
@@ -1916,6 +1977,8 @@ function filtrarMudanzas(){
   if(filtMes)      out = out.filter(m => m.fecha && m.fecha.startsWith(filtMes));
   if(filtDesde)    out = out.filter(m => (m.fecha||'') >= filtDesde);
   if(filtHasta)    out = out.filter(m => (m.fecha||'') <= filtHasta);
+  // Más nueva primero: la última mudanza cargada arriba de todo, y así hacia atrás.
+  out.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
   return out;
 }
 window.filtrarMudanzas = filtrarMudanzas;
@@ -2200,8 +2263,19 @@ window.renderRamiro = function(){
     </div>
   `;
 
-  document.getElementById('tbody-ramiro').innerHTML = filtrados.length
-    ? filtrados.map(i => `
+  const tbodyRamiro = document.getElementById('tbody-ramiro');
+  const ramiroPaginacionEl = document.getElementById('ramiro-paginacion');
+
+  if(!filtrados.length){
+    tbodyRamiro.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+    if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = '';
+    return;
+  }
+
+  // filtrados ya viene ordenado del más nuevo al más viejo (itemsTodos se ordena por fecha desc)
+  const { pagina, page, totalPaginas } = paginarArray('ramiro', filtrados, PAGE_SIZE_GENERICO);
+
+  tbodyRamiro.innerHTML = pagina.map(i => `
       <tr>
         <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
         <td>${i.fecha||''}</td>
@@ -2223,8 +2297,9 @@ window.renderRamiro = function(){
           <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
         </td>
       </tr>
-    `).join('')
-    : '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+    `).join('');
+
+  if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'ramiro');
 };
 
 // ── EDITAR (revertir a pendiente) un item de Ramiro por si se marcó pagado por error ──
@@ -2372,12 +2447,16 @@ function actualizarTotalRemito(){
 
 function renderHistorialRemitos(){
   const tbody = document.getElementById('tbody-remitos-hist');
+  const paginacionEl = document.getElementById('remitos-paginacion');
   if(!tbody) return;
   if(!remitos.length){
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  tbody.innerHTML = remitos.map(r => `
+  // remitos ya viene ordenado del más nuevo al más viejo (sort por numero desc al cargar)
+  const { pagina, page, totalPaginas } = paginarArray('remitosHist', remitos, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(r => `
     <tr>
       <td class="mono">${r.numero||''}</td>
       <td>${r.fecha||''}</td>
@@ -2387,6 +2466,7 @@ function renderHistorialRemitos(){
       <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button> <button class="btn-danger" onclick="eliminarRecibo('${r.id}')">✕</button></td>
     </tr>
   `).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'remitosHist');
 }
 
 function construirHtmlRemito(numero, despachante, fecha, opsData, total){
