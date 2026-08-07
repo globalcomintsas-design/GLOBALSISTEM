@@ -50,6 +50,7 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .field input:focus,.field select:focus,.field textarea:focus{border-color:#1e3a8a;background:#fff;}
 .field textarea{min-height:70px;resize:vertical;}
 .field.full{grid-column:1/-1;}
+.field .hint{font-size:10px;color:#94a3b8;margin-top:3px;}
 .cheque-fields-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;grid-column:1/-1;background:#eff6ff;border-radius:10px;padding:12px;border:1px solid #bfdbfe;}
 .cheque-fields-title{font-size:11px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;grid-column:1/-1;}
 .btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
@@ -164,7 +165,11 @@ tr:hover td{background:#fafbff;}
           <div class="field"><label>N° Factura</label><input type="text" id="factura" placeholder="0001-00000123" /></div>
           <div class="field"><label>Cliente / Proveedor</label><input type="text" id="cliente" placeholder="Nombre..." /></div>
           <div class="field"><label>Detalle</label><input type="text" id="detalle" placeholder="Descripción..." /></div>
-          <div class="field"><label>Importe</label><input type="number" id="importe" placeholder="0" inputmode="numeric" /></div>
+          <div class="field">
+            <label>Importe</label>
+            <input type="text" id="importe" placeholder="Ej: 912977 o 912.977" inputmode="decimal" onblur="previsualizarImporte('importe','importePreview')" />
+            <div class="hint" id="importePreview"></div>
+          </div>
           <div class="field full"><label>Observaciones</label><textarea id="observaciones" placeholder="Notas adicionales..."></textarea></div>
           <div class="field full" id="chequeFieldsWrap" style="display:none">
             <div class="cheque-fields-grid">
@@ -285,7 +290,7 @@ tr:hover td{background:#fafbff;}
         <div class="form-grid">
           <div class="field"><label>Descripción</label><input type="text" id="vencDesc" placeholder="Ej: IVA, IIBB, Alquiler..." /></div>
           <div class="field"><label>Fecha de vencimiento</label><input type="date" id="vencFecha" /></div>
-          <div class="field"><label>Monto estimado ($)</label><input type="number" id="vencMonto" placeholder="0" /></div>
+          <div class="field"><label>Monto estimado ($)</label><input type="text" id="vencMonto" placeholder="0" inputmode="decimal" /></div>
           <div class="field"><label>Categoría</label><select id="vencCateg"><option>Impuesto</option><option>Alquiler</option><option>Servicio</option><option>Proveedor</option><option>Otro</option></select></div>
         </div>
         <button class="btn btn-primary" onclick="guardarVencimiento()">💾 Guardar</button>
@@ -394,7 +399,11 @@ tr:hover td{background:#fafbff;}
       <div class="field"><label>N° Factura</label><input type="text" id="eFactura" /></div>
       <div class="field"><label>Cliente / Proveedor</label><input type="text" id="eCliente" /></div>
       <div class="field"><label>Detalle</label><input type="text" id="eDetalle" /></div>
-      <div class="field"><label>Importe</label><input type="number" id="eImporte" /></div>
+      <div class="field">
+        <label>Importe</label>
+        <input type="text" id="eImporte" inputmode="decimal" onblur="previsualizarImporte('eImporte','eImportePreview')" />
+        <div class="hint" id="eImportePreview"></div>
+      </div>
       <div class="field full"><label>Observaciones</label><textarea id="eObservaciones"></textarea></div>
       <div class="field full" id="eChequeFieldsWrap" style="display:none">
         <div class="cheque-fields-grid">
@@ -494,6 +503,61 @@ function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
 function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function today() { return new Date().toLocaleDateString('es-AR'); }
+
+// ── PARSEO DE MONTOS EN FORMATO ARGENTINO ──────────────────────────────────
+// BUG QUE SOLUCIONA ESTO: un <input type="number"> de HTML SIEMPRE interpreta
+// el punto como separador DECIMAL (nunca como separador de miles), sin importar
+// el idioma del navegador. Si alguien tipeaba "912.977" (con el punto "a la
+// argentina", para indicar $912.977) el sistema lo guardaba como 912,977 pesos
+// -> se veía después como "$912,98" en vez de "$912.977". Eso fue lo que le
+// pasó al pago de Víctor Martínez.
+//
+// Ahora los campos de importe son texto libre (type="text") y se procesan acá,
+// aceptando CUALQUIERA de estas formas y devolviendo siempre el número correcto:
+//   "912977"        -> 912977
+//   "912.977"       -> 912977   (punto = miles, sin coma -> se asume separador de miles
+//                                 si el último grupo tiene exactamente 3 dígitos)
+//   "912.977,50"    -> 912977.5 (formato completo argentino: puntos=miles, coma=decimal)
+//   "912977,50"     -> 912977.5
+//   "912977.50"     -> 912977.5 (decimal suelto, 2 dígitos después del punto)
+//   "1.234.567"     -> 1234567  (varios puntos = siempre miles)
+function parsearMontoAR(valorCrudo){
+  if(valorCrudo === null || valorCrudo === undefined) return NaN;
+  let s = String(valorCrudo).trim().replace(/\s/g,'');
+  if(!s) return NaN;
+  const tieneComa  = s.includes(',');
+  const tienePunto = s.includes('.');
+
+  if(tieneComa){
+    // Formato argentino completo: los puntos son de miles, la coma es el decimal.
+    s = s.replace(/\./g,'').replace(',', '.');
+  } else if(tienePunto){
+    const partes = s.split('.');
+    const ultimoGrupo = partes[partes.length-1];
+    // Más de un punto (ej "1.234.567") o el grupo final tiene 3 dígitos (ej "912.977")
+    // -> son separadores de miles, no un decimal. Si el grupo final tiene 1 o 2 dígitos
+    // (ej "912.5" o "912.50") se respeta como decimal normal.
+    const esSeparadorDeMiles = partes.length > 2 || ultimoGrupo.length === 3;
+    if(esSeparadorDeMiles) s = s.replace(/\./g,'');
+  }
+
+  const n = parseFloat(s);
+  return isNaN(n) ? NaN : n;
+}
+window.parsearMontoAR = parsearMontoAR;
+
+// Muestra debajo del campo cómo se va a interpretar el importe, para que se note
+// antes de guardar si algo se entendió mal (ej: tipeaste de más o de menos).
+window.previsualizarImporte = function(inputId, hintId){
+  const el = document.getElementById(inputId);
+  const hint = document.getElementById(hintId);
+  if(!el || !hint) return;
+  const raw = el.value.trim();
+  if(!raw){ hint.textContent=''; return; }
+  const n = parsearMontoAR(raw);
+  hint.textContent = isNaN(n) ? '⚠️ No se pudo interpretar el importe' : ('= ' + fmtMoney(n));
+  hint.style.color = isNaN(n) ? '#dc2626' : '#16a34a';
+};
 
 function toast(msg, type='') {
   const el = document.getElementById('notif');
@@ -624,7 +688,7 @@ window.guardarMovimiento = async function() {
   const factura = document.getElementById('factura').value.trim();
   const cliente = document.getElementById('cliente').value.trim();
   const detalle = document.getElementById('detalle').value.trim();
-  const importe = parseFloat(document.getElementById('importe').value);
+  const importe = parsearMontoAR(document.getElementById('importe').value);
   const observaciones = document.getElementById('observaciones').value.trim();
   if (!cliente || isNaN(importe) || importe<=0) { toast('Completá cliente e importe','error'); return; }
   const data = { tipo, cuenta, factura, cliente, detalle, importe, observaciones, fecha:today(), ts:Date.now(), creadoPor:currentUser.nombre };
@@ -645,7 +709,7 @@ window.guardarMovimiento = async function() {
   }
 
   limpiarForm();
-  toast('Movimiento guardado ✓','success');
+  toast('Movimiento guardado ✓ (' + fmtMoney(importe) + ')','success');
 };
 
 // ── Vincula un ingreso de Caja con el módulo Operaciones (despachantees_ops / mudanzas) ──
@@ -726,6 +790,7 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
 
 window.limpiarForm = function() {
   ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const ip=document.getElementById('importePreview'); if(ip) ip.textContent='';
   const ec=document.getElementById('estadoCheque');if(ec)ec.value='En cartera';
   document.getElementById('chequeFieldsWrap').style.display='none';
   document.getElementById('cuenta').value='Caja';
@@ -784,6 +849,7 @@ window.abrirEditar=function(id){
   document.getElementById('eCliente').value=m.cliente;
   document.getElementById('eDetalle').value=m.detalle||'';
   document.getElementById('eImporte').value=m.importe;
+  const eip=document.getElementById('eImportePreview'); if(eip) eip.textContent='';
   document.getElementById('eObservaciones').value=m.observaciones||'';
   const wrap=document.getElementById('eChequeFieldsWrap');
   if(m.cuenta==='Cheque'){wrap.style.display='';document.getElementById('eNumeroCheque').value=m.numeroCheque||'';document.getElementById('eBancoCheque').value=m.bancoCheque||'';document.getElementById('eFechaVencCheque').value=m.fechaVencCheque||'';document.getElementById('ePagadorCheque').value=m.pagadorCheque||'';document.getElementById('eEstadoCheque').value=m.estadoCheque||'En cartera';}
@@ -794,10 +860,12 @@ window.cerrarModal=function(){document.getElementById('modalEditar').classList.r
 window.guardarEdicion=async function(){
   if(!editandoId)return;
   const cuenta=document.getElementById('eCuenta').value;
-  const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:document.getElementById('eCliente').value,detalle:document.getElementById('eDetalle').value,importe:parseFloat(document.getElementById('eImporte').value),observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
+  const importeEditado = parsearMontoAR(document.getElementById('eImporte').value);
+  if(isNaN(importeEditado) || importeEditado<=0){ toast('Importe inválido','error'); return; }
+  const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:document.getElementById('eCliente').value,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
   if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;}
   await updateDoc(doc(db,'movimientos',editandoId),data);
-  cerrarModal();toast('Actualizado ✓','success');
+  cerrarModal();toast('Actualizado ✓ (' + fmtMoney(importeEditado) + ')','success');
 };
 
 // CHEQUES
@@ -866,7 +934,7 @@ window.exportarCCExcel=function(){
 
 // VENCIMIENTOS
 window.guardarVencimiento=async function(){
-  const desc=document.getElementById('vencDesc').value.trim();const fecha=document.getElementById('vencFecha').value;const monto=parseFloat(document.getElementById('vencMonto').value)||0;const categ=document.getElementById('vencCateg').value;
+  const desc=document.getElementById('vencDesc').value.trim();const fecha=document.getElementById('vencFecha').value;const monto=parsearMontoAR(document.getElementById('vencMonto').value)||0;const categ=document.getElementById('vencCateg').value;
   if(!desc||!fecha){toast('Completá descripción y fecha','error');return;}
   await addDoc(collection(db,'vencimientos'),{desc,fecha,monto,categ,pagado:false,ts:Date.now()});
   document.getElementById('vencDesc').value='';document.getElementById('vencFecha').value='';document.getElementById('vencMonto').value='';
