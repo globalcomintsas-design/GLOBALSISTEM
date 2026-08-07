@@ -85,6 +85,12 @@ window.cambiarPaginaGenerica = function(key, delta){
 let usuarioEligioMesDash = false;
 window.marcarMesDashElegidoPorUsuario = function(){ usuarioEligioMesDash = true; };
 
+// Igual que el de arriba pero para el filtro de mes del Listado: arranca siempre en el
+// mes en curso, y una vez que el usuario lo cambia a mano (incluido "Todos los meses"),
+// se respeta esa elección y no se lo pisa más.
+let usuarioEligioMesListado = false;
+window.marcarMesListadoElegidoPorUsuario = function(){ usuarioEligioMesListado = true; };
+
 // ── UTILS ──
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
 window.fmt = fmt;
@@ -1173,20 +1179,22 @@ function renderFiltros(){
     sel.innerHTML = '<option value="">Todos los meses</option>';
     meses.forEach(m => { const opt = document.createElement('option'); opt.value=m; opt.textContent=m; sel.appendChild(opt); });
     sel.value = v;
-    // El selector de mes del Dashboard: se asegura de tener el mes actual como opción
-    // (aunque todavía no haya operaciones cargadas ese mes) y se recalcula en CADA
-    // render de filtros -no solo una vez- hasta que el usuario elija otro mes a mano.
-    if(sel === mesSelD){
-      const mesActual = new Date().toISOString().slice(0,7);
-      if(![...sel.options].some(o => o.value === mesActual)){
-        const opt = document.createElement('option');
-        opt.value = mesActual;
-        opt.textContent = mesActual;
-        sel.insertBefore(opt, sel.options[1] || null);
-      }
-      if(!usuarioEligioMesDash){
-        sel.value = mesActual;
-      }
+    // Tanto el mes del Dashboard como el del Listado: se aseguran de tener el mes actual
+    // como opción (aunque todavía no haya operaciones cargadas ese mes) y arrancan
+    // seleccionados en el mes en curso hasta que el usuario elija otro mes a mano
+    // (incluido "Todos los meses"). Se recalcula en CADA render de filtros, no solo una vez.
+    const mesActual = new Date().toISOString().slice(0,7);
+    if(![...sel.options].some(o => o.value === mesActual)){
+      const opt = document.createElement('option');
+      opt.value = mesActual;
+      opt.textContent = mesActual;
+      sel.insertBefore(opt, sel.options[1] || null);
+    }
+    if(sel === mesSelD && !usuarioEligioMesDash){
+      sel.value = mesActual;
+    }
+    if(sel === mesSel && !usuarioEligioMesListado){
+      sel.value = mesActual;
     }
   });
 }
