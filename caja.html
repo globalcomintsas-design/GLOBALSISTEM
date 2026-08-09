@@ -106,6 +106,10 @@ tr:hover td{background:#fafbff;}
 .cheque-detalle-box .val{font-weight:600;color:#1e3a8a;}
 .dolar-badge{background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;}
 .destino-pill input{width:70px;padding:4px 6px;border-radius:6px;border:1px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;}
+.pagin-bar{display:flex;align-items:center;justify-content:center;gap:14px;margin:14px 0;padding-top:14px;border-top:1px solid #f1f5f9;}
+.pagin-bar button{background:#eff6ff;color:#1e3a8a;border:1.5px solid #bfdbfe;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
+.pagin-bar button:disabled{opacity:.4;cursor:not-allowed;}
+.pagin-bar span{font-size:13px;font-weight:700;color:#1e3a8a;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -203,12 +207,13 @@ tr:hover td{background:#fafbff;}
             <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
           </div>
         </div>
-        <div class="search-bar"><input type="text" id="buscar" placeholder="Buscar por cliente, detalle, factura..." oninput="filtrar()" /></div>
+        <div class="search-bar"><input type="text" id="buscar" placeholder="Buscar por cliente, detalle, factura..." oninput="resetPaginaMovimientos()" /></div>
         <div class="filtros">
-          <div><label>Desde</label><input type="date" id="filtroDesde" onchange="filtrar()" /></div>
-          <div><label>Hasta</label><input type="date" id="filtroHasta" onchange="filtrar()" /></div>
-          <div><label>Tipo</label><select id="filtroTipo" onchange="filtrar()"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></div>
-          <div><label>Cuenta</label><select id="filtroCuenta" onchange="filtrar()"><option value="">Todas</option><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
+          <div><label>Mes</label><select id="filtroMes" onchange="marcarMesMovimientosElegidoPorUsuario();resetPaginaMovimientos()"><option value="">Todos los meses</option></select></div>
+          <div><label>Desde</label><input type="date" id="filtroDesde" onchange="resetPaginaMovimientos()" /></div>
+          <div><label>Hasta</label><input type="date" id="filtroHasta" onchange="resetPaginaMovimientos()" /></div>
+          <div><label>Tipo</label><select id="filtroTipo" onchange="resetPaginaMovimientos()"><option value="">Todos</option><option>Ingreso</option><option>Egreso</option></select></div>
+          <div><label>Cuenta</label><select id="filtroCuenta" onchange="resetPaginaMovimientos()"><option value="">Todas</option><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltros()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div class="table-wrap">
@@ -217,6 +222,7 @@ tr:hover td{background:#fafbff;}
             <tbody id="tablaMovimientos"></tbody>
           </table>
         </div>
+        <div id="movimientos-paginacion"></div>
         <div id="resumenFiltro" style="margin-top:10px;font-size:12px;color:#666;display:flex;gap:16px;flex-wrap:wrap;"></div>
       </div>
     </div>
@@ -232,11 +238,11 @@ tr:hover td{background:#fafbff;}
       <div class="section">
         <div class="section-title">Cartera de Cheques <button class="btn btn-success btn-sm" onclick="exportarChequesExcel()">📊 Excel</button></div>
         <div class="filtros">
-          <div><label>Estado</label><select id="filtroChEstado" onchange="renderCheques()"><option value="">Todos</option><option>En cartera</option><option>Depositado</option><option>Acreditado</option><option>Rechazado</option></select></div>
-          <div><label>Banco</label><input type="text" id="filtroChBanco" placeholder="Banco..." oninput="renderCheques()" /></div>
-          <div><label>Cliente</label><input type="text" id="filtroChCliente" placeholder="Cliente..." oninput="renderCheques()" /></div>
-          <div><label>Venc. desde</label><input type="date" id="filtroChDesde" onchange="renderCheques()" /></div>
-          <div><label>Venc. hasta</label><input type="date" id="filtroChHasta" onchange="renderCheques()" /></div>
+          <div><label>Estado</label><select id="filtroChEstado" onchange="resetPaginaCheques()"><option value="">Todos</option><option>En cartera</option><option>Depositado</option><option>Acreditado</option><option>Rechazado</option></select></div>
+          <div><label>Banco</label><input type="text" id="filtroChBanco" placeholder="Banco..." oninput="resetPaginaCheques()" /></div>
+          <div><label>Cliente</label><input type="text" id="filtroChCliente" placeholder="Cliente..." oninput="resetPaginaCheques()" /></div>
+          <div><label>Venc. desde</label><input type="date" id="filtroChDesde" onchange="resetPaginaCheques()" /></div>
+          <div><label>Venc. hasta</label><input type="date" id="filtroChHasta" onchange="resetPaginaCheques()" /></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosCheques()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div class="table-wrap">
@@ -245,6 +251,7 @@ tr:hover td{background:#fafbff;}
             <tbody id="tablaCheques"></tbody>
           </table>
         </div>
+        <div id="cheques-paginacion"></div>
       </div>
       <div class="section" id="seccionRechazados" style="display:none">
         <div class="section-title" style="color:#dc2626">⚠️ Cheques Rechazados</div>
@@ -516,6 +523,15 @@ let allUsuarios = {};
 let editandoId = null;
 let editandoUsuario = null;
 
+// ── Paginación (misma dinámica que Operaciones: 15 por página, más nuevo primero) ──
+let movimientosPage = 1;
+const MOVIMIENTOS_PAGE_SIZE = 15;
+let usuarioEligioMesMovimientos = false;
+window.marcarMesMovimientosElegidoPorUsuario = function(){ usuarioEligioMesMovimientos = true; };
+
+let chequesPage = 1;
+const CHEQUES_PAGE_SIZE = 15;
+
 // ── Vinculación con módulo Operaciones (corresponsales) ──
 let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html
 let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobrado")
@@ -639,7 +655,7 @@ function initFirestore() {
     allMovimientos = snap.docs.map(d=>({id:d.id,...d.data()}));
     allMovimientos.sort((a,b)=>(b.ts||0)-(a.ts||0));
     procesarVencimientosCheques();
-    renderSaldos(); filtrar(); renderCC(); renderReportes(); renderCheques();
+    renderSaldos(); renderFiltroMesMovimientos(); filtrar(); renderCC(); renderReportes(); renderCheques();
     ocultarSpinner();
   });
   onSnapshot(collection(db,'vencimientos'), snap => {
@@ -818,8 +834,27 @@ window.limpiarForm = function() {
   document.getElementById('cuenta').value='Caja';
 };
 
+// ── Filtro de mes para Movimientos (misma dinámica que "filtro_mes" de Operaciones) ──
+// Arranca siempre en el mes en curso; una vez que el usuario lo cambia a mano (incluido
+// "Todos los meses") se respeta esa elección y no se lo pisa más.
+function renderFiltroMesMovimientos(){
+  const sel = document.getElementById('filtroMes');
+  if(!sel) return;
+  const prevVal = sel.value;
+  const meses = [...new Set(allMovimientos.map(m=>{
+    const p=(m.fecha||'').split('/'); // fecha guardada como dd/mm/yyyy
+    return p.length===3 ? (p[2]+'-'+p[1].padStart(2,'0')) : null;
+  }).filter(Boolean))].sort().reverse();
+  const mesActual = new Date().toISOString().slice(0,7);
+  if(!meses.includes(mesActual)) meses.unshift(mesActual);
+  sel.innerHTML = '<option value="">Todos los meses</option>' + meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+  sel.value = usuarioEligioMesMovimientos ? prevVal : mesActual;
+}
+window.renderFiltroMesMovimientos = renderFiltroMesMovimientos;
+
 window.filtrar = function() {
   const buscar=document.getElementById('buscar').value.toLowerCase();
+  const mes=document.getElementById('filtroMes')?.value||'';
   const desde=document.getElementById('filtroDesde').value;
   const hasta=document.getElementById('filtroHasta').value;
   const tipo=document.getElementById('filtroTipo').value;
@@ -829,11 +864,24 @@ window.filtrar = function() {
     if(buscar&&!txt.includes(buscar))return false;
     if(tipo&&m.tipo!==tipo)return false;
     if(cuenta&&m.cuenta!==cuenta)return false;
+    if(mes){
+      const p=(m.fecha||'').split('/');
+      const ym=p.length===3?(p[2]+'-'+p[1].padStart(2,'0')):'';
+      if(ym!==mes)return false;
+    }
     if(desde||hasta){const p=(m.fecha||'').split('/');if(p.length===3){const d=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');if(desde&&d<desde)return false;if(hasta&&d>hasta)return false;}}
     return true;
   });
+  // f ya viene ordenado más nuevo primero (allMovimientos se ordena por ts desc al cargar)
+
+  const totalPaginas = Math.max(1, Math.ceil(f.length / MOVIMIENTOS_PAGE_SIZE));
+  if(movimientosPage > totalPaginas) movimientosPage = totalPaginas;
+  if(movimientosPage < 1) movimientosPage = 1;
+  const inicio = (movimientosPage - 1) * MOVIMIENTOS_PAGE_SIZE;
+  const fPagina = f.slice(inicio, inicio + MOVIMIENTOS_PAGE_SIZE);
+
   const esAdmin=currentUser?.rol==='admin';
-  document.getElementById('tablaMovimientos').innerHTML=f.map(m=>{
+  document.getElementById('tablaMovimientos').innerHTML=fPagina.map(m=>{
     let extra='';
     if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
     const isDolar=m.cuenta==='Dólares';
@@ -850,6 +898,8 @@ window.filtrar = function() {
       <td>${esAdmin?`<button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="9" style="text-align:center;color:#888;padding:20px">Sin resultados</td></tr>';
+
+  // Totales / resumen: siempre sobre TODO lo filtrado, no solo la página visible
   const tI=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
   const tE=f.filter(m=>m.tipo==='Egreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
   const tIusd=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta==='Dólares').reduce((s,m)=>s+Number(m.importe),0);
@@ -857,9 +907,32 @@ window.filtrar = function() {
   let resumen=`<span>📄 ${f.length} mov.</span><span style="color:#16a34a">Ing: ${fmtMoney(tI)}</span><span style="color:#dc2626">Egr: ${fmtMoney(tE)}</span><span style="color:#1e3a8a">Neto: ${fmtMoney(tI-tE)}</span>`;
   if(tIusd||tEusd) resumen+=`<span style="color:#0284c7">USD Ing: ${fmtUSD(tIusd)} / Egr: ${fmtUSD(tEusd)}</span>`;
   document.getElementById('resumenFiltro').innerHTML=resumen;
+
+  document.getElementById('movimientos-paginacion').innerHTML = totalPaginas>1 ? `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaMovimientos(-1)" ${movimientosPage<=1?'disabled':''}>‹ Ver más nuevos</button>
+      <span>Página ${movimientosPage}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaMovimientos(1)" ${movimientosPage>=totalPaginas?'disabled':''}>Ver más viejos ›</button>
+    </div>` : '';
 };
 
-window.limpiarFiltros=function(){['buscar','filtroDesde','filtroHasta'].forEach(id=>document.getElementById(id).value='');document.getElementById('filtroTipo').value='';document.getElementById('filtroCuenta').value='';filtrar();};
+window.cambiarPaginaMovimientos = function(delta){
+  movimientosPage += delta;
+  filtrar();
+};
+window.resetPaginaMovimientos = function(){
+  movimientosPage = 1;
+  filtrar();
+};
+
+window.limpiarFiltros=function(){
+  ['buscar','filtroDesde','filtroHasta'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('filtroTipo').value='';
+  document.getElementById('filtroCuenta').value='';
+  const selMes=document.getElementById('filtroMes'); if(selMes) selMes.value='';
+  usuarioEligioMesMovimientos = true; // "Todos los meses" queda como elección explícita
+  resetPaginaMovimientos();
+};
 window.eliminar=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movimientos',id));toast('Eliminado','error');};
 
 window.abrirEditar=function(id){
@@ -907,19 +980,36 @@ window.renderCheques=function(){
   const fil=cheques.filter(m=>{const e=m.estadoCheque||'En cartera';if(fE&&e!==fE)return false;if(fB&&!(m.bancoCheque||'').toLowerCase().includes(fB))return false;if(fC&&!(m.cliente||'').toLowerCase().includes(fC))return false;if(fD&&m.fechaVencCheque&&m.fechaVencCheque<fD)return false;if(fH&&m.fechaVencCheque&&m.fechaVencCheque>fH)return false;return true;}).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   const esAdmin=currentUser?.rol==='admin';
   const hoy=new Date();hoy.setHours(0,0,0,0);
-  document.getElementById('tablaCheques').innerHTML=fil.map(m=>{
+
+  const totalPaginasCh = Math.max(1, Math.ceil(fil.length / CHEQUES_PAGE_SIZE));
+  if(chequesPage > totalPaginasCh) chequesPage = totalPaginasCh;
+  if(chequesPage < 1) chequesPage = 1;
+  const inicioCh = (chequesPage - 1) * CHEQUES_PAGE_SIZE;
+  const filPagina = fil.slice(inicioCh, inicioCh + CHEQUES_PAGE_SIZE);
+
+  document.getElementById('tablaCheques').innerHTML=filPagina.map(m=>{
     const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');
     let di='';if(m.fechaVencCheque){const fv=new Date(m.fechaVencCheque+'T00:00:00');const d=Math.round((fv-hoy)/(1000*60*60*24));di=d>=0?`<br><span style="font-size:10px;color:#888">Vence en ${d} días</span>`:`<br><span style="font-size:10px;color:#dc2626">Venció hace ${Math.abs(d)} días</span>`;}
     return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td><span class="badge ${bc}">${e}</span></td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
   }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">Sin cheques</td></tr>';
+
+  document.getElementById('cheques-paginacion').innerHTML = totalPaginasCh>1 ? `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaCheques(-1)" ${chequesPage<=1?'disabled':''}>‹ Anterior</button>
+      <span>Página ${chequesPage}/${totalPaginasCh} · ${fil.length} cheque(s)</span>
+      <button onclick="cambiarPaginaCheques(1)" ${chequesPage>=totalPaginasCh?'disabled':''}>Siguiente ›</button>
+    </div>` : '';
+
   const rl=cheques.filter(m=>(m.estadoCheque||'')==='Rechazado');
   const sr=document.getElementById('seccionRechazados');
   if(rl.length>0){sr.style.display='';document.getElementById('tablaRechazados').innerHTML=rl.map(m=>`<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</td><td><strong style="color:#dc2626">${fmtMoney(m.importe)}</strong></td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td>${m.observaciones||'-'}</td></tr>`).join('');}
   else sr.style.display='none';
 };
+window.cambiarPaginaCheques=function(delta){ chequesPage += delta; renderCheques(); };
+window.resetPaginaCheques=function(){ chequesPage = 1; renderCheques(); };
 window.verDetalleCheque=function(id){const m=allMovimientos.find(x=>x.id===id);if(!m)return;const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div><div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;document.getElementById('modalDetalleCheque').classList.add('open');};
 window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque').classList.remove('open');};
-window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');renderCheques();};
+window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');resetPaginaCheques();};
 
 // ── EXPORTAR EXCEL: estilo unificado (Arial 7) — mismo criterio que usa operaciones.js ──
 // Bordes finos en toda la grilla, encabezado azul con letra blanca, fila TOTAL destacada
