@@ -1566,6 +1566,57 @@ function renderTablaClientes(){
   if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesDesp');
 }
 
+// ── EXPORTAR EXCEL: estilo unificado (Arial 7) usado por TODAS las planillas del módulo ──
+// Aplica bordes finos a toda la grilla, encabezado azul con letra blanca, fila TOTAL
+// destacada en rojo, y fuente Arial tamaño 7 en todo (encabezado, datos y total).
+function estilizarHojaExcel(ws, opts){
+  const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const formatoDecimal = '#,##0.00';
+  const totalRowIdx = 1 + numDataRows; // fila 0-index de la fila TOTAL
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R = range.s.r; R <= range.e.r; R++){
+    for(let C = range.s.c; C <= range.e.c; C++){
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].z = formatoDecimal;
+      }
+
+      if(R === 0){
+        // Encabezado: negrita, fondo azul, letra blanca, Arial 7
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1E3A8A' } },
+          border: bordeTodo,
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      } else if(R === totalRowIdx){
+        // Fila TOTAL: negrita y destacada en rojo, Arial 7
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'DC2626' } },
+          fill: { fgColor: { rgb: 'FEF2F2' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else {
+        // Filas de datos, Arial 7
+        ws[addr].s = {
+          font: { sz: 7, name: 'Arial' },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      }
+    }
+  }
+}
+window.estilizarHojaExcel = estilizarHojaExcel;
+
 // ── EXPORTAR EXCEL ──
 window.exportarExcel = function(){
   const filtCorr = document.getElementById('filtro_despachante').value;
@@ -1633,16 +1684,23 @@ window.exportarExcel = function(){
     {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:32}
   ];
 
-  // Autofiltro (flechitas de filtro) en la fila de encabezados, como en tu planilla
+  // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
+  // las filas de datos (sin incluir la fila TOTAL). Si el rango es solo la fila de
+  // encabezado, Excel no sabe hasta dónde llega la tabla y el SUBTOTAL de abajo no
+  // se recalcula bien al filtrar.
   const lastCol = XLSX.utils.encode_col(header.length - 1);
-  ws['!autofilter'] = { ref: `A1:${lastCol}1` };
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
 
-  // ── TOTAL con fórmula SUBTOTAL: al filtrar en Excel (autofiltro), estas celdas
-  // recalculan solas y muestran la suma SOLO de las filas visibles/filtradas ──
+  // ── TOTAL con fórmulas: al filtrar en Excel (autofiltro), estas celdas
+  // recalculan solas y muestran la suma / cantidad SOLO de las filas visibles ──
   {
-    const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
-    const firstDataRow = 2;
-    const lastDataRow  = 1 + rows.length;
+    // Cantidad de operaciones visibles (columna B, junto al rótulo TOTAL)
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} op(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" op(s)"` };
+
     [6,7,8].forEach(c => { // VALOR, IVA, SUB TOTAL
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
@@ -1650,53 +1708,13 @@ window.exportarExcel = function(){
     });
   }
 
-  // ── Estilo tipo planilla: recuadros en todas las celdas + encabezado destacado ──
-  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
-  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
-  const colsNumericas = [6,7,8,9,10]; // VALOR, IVA, SUB TOTAL, TC, VALOR USD
-  const colsDecimal2  = [6,7,8]; // columnas que siempre llevan 2 decimales exactos (sin redondeo a entero)
-  const formatoDecimal = '#,##0.00';
-  const totalRowIdx = 1 + rows.length; // fila 0-index del TOTAL
-
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for(let R = range.s.r; R <= range.e.r; R++){
-    for(let C = range.s.c; C <= range.e.c; C++){
-      const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
-
-      // VALOR, IVA, SUB TOTAL siempre con 2 decimales exactos
-      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
-        ws[addr].z = formatoDecimal;
-      }
-
-      if(R === 0){
-        // Encabezado: negrita, más grande, fondo azul, letra blanca
-        ws[addr].s = {
-          font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
-          fill: { fgColor: { rgb: '1E3A8A' } },
-          border: bordeTodo,
-          alignment: { horizontal: 'center', vertical: 'center' }
-        };
-      } else if(R === totalRowIdx){
-        // Fila TOTAL: negrita y destacada, con la suma de cada columna
-        ws[addr].s = {
-          font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
-          fill: { fgColor: { rgb: 'FEF2F2' } },
-          border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
-        };
-      } else {
-        // Filas de datos (operaciones)
-        ws[addr].s = {
-          font: { sz: 10 },
-          border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
-        };
-      }
-    }
-  }
+  // ── Estilo unificado (bordes, encabezado azul, TOTAL en rojo, Arial 7) ──
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [6,7,8],       // VALOR, IVA, SUB TOTAL
+    colsNumericas: [6,7,8,9,10]  // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+  });
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
@@ -2101,522 +2119,4 @@ window.exportarMudanzas = function(){
 
   const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
   const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
-  const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
-  const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
-  const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
-
-  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', '', '', '', ''];
-
-  const aoa = [header, ...rows, totalRow];
-  const ws  = XLSX.utils.aoa_to_sheet(aoa);
-
-  ws['!cols'] = [
-    {wch:11},{wch:20},{wch:20},{wch:16},{wch:8},{wch:8},
-    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
-  ];
-
-  const lastCol = XLSX.utils.encode_col(header.length - 1);
-  ws['!autofilter'] = { ref: `A1:${lastCol}1` };
-
-  // ── TOTAL con fórmula SUBTOTAL: al filtrar en Excel (autofiltro), estas celdas
-  // recalculan solas y muestran la suma SOLO de las filas visibles/filtradas ──
-  {
-    const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
-    const firstDataRow = 2;
-    const lastDataRow  = 1 + rows.length;
-    [6,7,8,9,10].forEach(c => { // HONOR. NETO, IVA, BRUTO, GASTOS, NOS QUEDA
-      const colLetter = XLSX.utils.encode_col(c);
-      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
-      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
-    });
-  }
-
-  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
-  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
-  const colsNumericas = [4,5,6,7,8,9,10];
-  const colsDecimal2  = [6,7,8,9,10];
-  const formatoDecimal = '#,##0.00';
-  const totalRowIdx = 1 + rows.length;
-
-  const range = XLSX.utils.decode_range(ws['!ref']);
-  for(let R = range.s.r; R <= range.e.r; R++){
-    for(let C = range.s.c; C <= range.e.c; C++){
-      const addr = XLSX.utils.encode_cell({ r: R, c: C });
-      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
-
-      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
-        ws[addr].z = formatoDecimal;
-      }
-
-      if(R === 0){
-        ws[addr].s = {
-          font: { bold: true, sz: 12, color: { rgb: 'FFFFFF' } },
-          fill: { fgColor: { rgb: '1E3A8A' } },
-          border: bordeTodo,
-          alignment: { horizontal: 'center', vertical: 'center' }
-        };
-      } else if(R === totalRowIdx){
-        ws[addr].s = {
-          font: { bold: true, sz: 11, color: { rgb: 'DC2626' } },
-          fill: { fgColor: { rgb: 'FEF2F2' } },
-          border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
-        };
-      } else {
-        ws[addr].s = {
-          font: { sz: 10 },
-          border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
-        };
-      }
-    }
-  }
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Mudanzas');
-
-  const filtCliente = document.getElementById('mud_filtro_cliente')?.value || 'todos';
-  const filtMes     = document.getElementById('mud_filtro_mes')?.value || 'todos';
-  const nombreArchivo = `mudanzas_${filtCliente}_${filtMes}.xlsx`.replace(/\s+/g,'_');
-
-  XLSX.writeFile(wb, nombreArchivo);
-};
-
-// ── CUENTA RAMIRO ──
-window.renderRamiro = function(){
-  const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
-  const filtMes     = document.getElementById('ramiro_filtro_mes')?.value || '';
-  const filtFecha   = document.getElementById('ramiro_filtro_fecha')?.value || '';
-  const tc = 1440;
-
-  const itemsTodos = [];
-
-  operaciones.filter(o => o.esKotinya).forEach(o => {
-    itemsTodos.push({
-      tipo: 'Kotinya',
-      fecha: o.fecha,
-      cliente: o.cliente || '',
-      detalle: o.destinacion || '',
-      ramiroUsd: o.ramiroDeuda || 30,
-      pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
-      estado: o.ramiroOPagado || 'no',
-      cobrado: true, // las operaciones normales no dependen de "cobrado", solo las mudanzas
-      id: o.id,
-      col: 'ops'
-    });
-  });
-
-  mudanzas.forEach(m => {
-    itemsTodos.push({
-      tipo: 'Mudanza',
-      fecha: m.fecha,
-      cliente: m.cliente || '',
-      detalle: m.obs || '',
-      ramiroUsd: m.ramiroUsd || 190,
-      pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
-      estado: m.ramiroPagado || 'no',
-      cobrado: !!m.cobrado,
-      id: m.id,
-      col: 'mudanzas'
-    });
-  });
-
-  itemsTodos.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
-
-  // Poblar el selector de meses en base a todos los registros
-  const selMes = document.getElementById('ramiro_filtro_mes');
-  if(selMes){
-    const vActual = selMes.value;
-    const meses = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
-    selMes.innerHTML = '<option value="">Todos los meses</option>' +
-      meses.map(m => `<option value="${m}">${m}</option>`).join('');
-    selMes.value = vActual;
-  }
-
-  let items = [...itemsTodos];
-  if(filtMes)   items = items.filter(i => i.fecha && i.fecha.startsWith(filtMes));
-  if(filtFecha) items = items.filter(i => i.fecha === filtFecha);
-
-  const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
-
-  const totalUsd      = items.reduce((a,b) => a + b.ramiroUsd, 0);
-  const totalPesos    = items.reduce((a,b) => a + b.pesos, 0);
-  const pendienteUsd  = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.ramiroUsd, 0);
-  const pagadoUsd     = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.ramiroUsd, 0);
-  const pagadoPesos   = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.pesos, 0);
-  const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.pesos, 0);
-
-  document.getElementById('ramiro-kpis').innerHTML = `
-    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
-      <div class="kpi-label">Total a pagar (histórico)</div>
-      <div class="kpi-val" style="color:#dc2626;">$${fmt(totalPesos)}</div>
-      <div class="kpi-sub">≈ USD ${fmt(totalUsd)}</div>
-    </div>
-    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
-      <div class="kpi-label">⚠️ Pendiente de pago</div>
-      <div class="kpi-val" style="color:#dc2626;">$${fmt(pendientePesos)}</div>
-      <div class="kpi-sub">≈ USD ${fmt(pendienteUsd)}</div>
-    </div>
-    <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
-      <div class="kpi-label">✅ Ya pagado</div>
-      <div class="kpi-val" style="color:#059669;">$${fmt(pagadoPesos)}</div>
-      <div class="kpi-sub">≈ USD ${fmt(pagadoUsd)}</div>
-    </div>
-    <div class="kpi">
-      <div class="kpi-label">Mudanzas</div>
-      <div class="kpi-val">${items.filter(i=>i.tipo==='Mudanza').length}</div>
-      <div class="kpi-sub">Kotinya: ${items.filter(i=>i.tipo==='Kotinya').length}</div>
-    </div>
-  `;
-
-  const tbodyRamiro = document.getElementById('tbody-ramiro');
-  const ramiroPaginacionEl = document.getElementById('ramiro-paginacion');
-
-  if(!filtrados.length){
-    tbodyRamiro.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
-    if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = '';
-    return;
-  }
-
-  // filtrados ya viene ordenado del más nuevo al más viejo (itemsTodos se ordena por fecha desc)
-  const { pagina, page, totalPaginas } = paginarArray('ramiro', filtrados, PAGE_SIZE_GENERICO);
-
-  tbodyRamiro.innerHTML = pagina.map(i => `
-      <tr>
-        <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
-        <td>${i.fecha||''}</td>
-        <td><strong>${i.cliente}</strong></td>
-        <td style="font-size:12px;color:#64748b;">${i.detalle}</td>
-        <td style="font-weight:700;color:#dc2626;">USD ${i.ramiroUsd}</td>
-        <td>$${fmt(i.pesos)}</td>
-        <td>
-          ${i.estado === 'si'
-            ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
-            : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}
-        </td>
-        <td style="display:flex;gap:6px;flex-wrap:wrap;">
-          ${i.estado === 'no'
-            ? (i.col === 'mudanzas' && !i.cobrado
-                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar</span>'
-                : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
-            : `<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="editarRamiroItem('${i.id}','${i.col}')">✏️ Editar</button>`}
-          <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
-        </td>
-      </tr>
-    `).join('');
-
-  if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'ramiro');
-};
-
-// ── EDITAR (revertir a pendiente) un item de Ramiro por si se marcó pagado por error ──
-window.editarRamiroItem = async function(id, col){
-  if(!confirm('¿Volver a marcar este pago de Ramiro como PENDIENTE?')) return;
-  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
-  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
-  await updateDoc(doc(db, colName, id), { [campo]: 'no' });
-  toast('↩️ Revertido a pendiente');
-};
-
-// ── ELIMINAR un item de Ramiro ──
-// Si es Kotinya (col='ops') elimina la operación completa (así se cargó la deuda a Ramiro).
-// Si es Mudanza (col='mudanzas') elimina la mudanza completa.
-window.eliminarRamiroItem = async function(id, col, tipo){
-  const msg = tipo === 'Mudanza'
-    ? '¿Eliminar esta mudanza? Se borra el registro completo, no solo la deuda de Ramiro.'
-    : '¿Eliminar esta operación Kotinya? Se borra el registro completo, no solo la deuda de Ramiro.';
-  if(!confirm(msg)) return;
-  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
-  await deleteDoc(doc(db, colName, id));
-  toast('Registro eliminado');
-};
-
-window.pagarRamiroItem = async function(id, col){
-  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
-  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
-  await updateDoc(doc(db, colName, id), { [campo]: 'si' });
-  toast('✅ Marcado como pagado');
-};
-
-window.marcarTodoPagadoRamiro = async function(){
-  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas ya cobradas)')) return;
-  const pending = [
-    ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
-    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && m.cobrado).map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
-  ];
-  for(const p of pending){
-    await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
-  }
-  toast(`✅ ${pending.length} registros marcados como pagados`);
-};
-
-// ── RECIBOS ──
-// Datos de la empresa para el membrete del recibo.
-// ⚠️ No pude confirmar la dirección/CUIT exactos buscando en la web (el sitio no aparece bien
-// indexado). Completá o corregí estos datos si hace falta, quedaron todos juntos acá:
-const EMPRESA_REMITO = {
-  nombre: 'GLOBALCOMINT SAS',
-  subtitulo: 'Despachante de Aduana',
-  direccion: 'Mendoza, Argentina', // TODO: confirmar (Ej: PTM Of. 14 / Puerto Seco Of. A4)
-  telefono: '261 701-6488',
-  cuit: '30-71614367-4'
-};
-
-let remitos = [];
-let remitoSeleccionadas = new Set();
-
-onSnapshot(collection(db,'despachantees_remitos'), snap => {
-  remitos = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (b.numero||0)-(a.numero||0));
-  renderHistorialRemitos();
-});
-
-function poblarSelectRemitoDespachante(){
-  const sel = document.getElementById('remito_despachante');
-  if(!sel) return;
-  const v = sel.value;
-  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
-  sel.innerHTML = '<option value="">Seleccioná un despachante...</option>' +
-    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
-  sel.value = v;
-}
-
-window.renderRemitos = function(){
-  poblarSelectRemitoDespachante();
-  const desp = document.getElementById('remito_despachante').value;
-  const desde = document.getElementById('remito_fecha_desde').value;
-  const hasta = document.getElementById('remito_fecha_hasta').value;
-  const filtroEstado = document.getElementById('remito_filtro_estado').value;
-  const card = document.getElementById('remito-lista-card');
-
-  if(!desp){
-    card.style.display = 'none';
-    return;
-  }
-  card.style.display = 'block';
-  document.getElementById('remito-desp-nombre').textContent = desp;
-
-  let ops = operaciones.filter(o => o.despachante === desp);
-  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
-  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
-  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
-  ops = ops.sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
-
-  // Limpiar selección de operaciones que ya no están visibles con estos filtros
-  const idsVisibles = new Set(ops.map(o => o.id));
-  [...remitoSeleccionadas].forEach(id => { if(!idsVisibles.has(id)) remitoSeleccionadas.delete(id); });
-
-  const tbody = document.getElementById('tbody-remito-ops');
-  if(!ops.length){
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px;">Sin operaciones con esos filtros</td></tr>';
-  } else {
-    tbody.innerHTML = ops.map(o => `
-      <tr>
-        <td><input type="checkbox" ${remitoSeleccionadas.has(o.id)?'checked':''} onchange="toggleRemitoOp('${o.id}', this.checked)"></td>
-        <td>${o.fecha||''}</td>
-        <td>${o.cliente||'-'}</td>
-        <td class="mono">${o.destinacion||'-'}</td>
-        <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='ADICIONALES') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
-        <td style="font-weight:700;color:#059669;">$${fmt2(o.bruto)}</td>
-        <td>${o.numRemito ? `<span class="tag" style="background:#fef9c3;color:#92400e;">N° ${o.numRemito}</span>` : '<span class="tag" style="background:#f1f5f9;color:#64748b;">Sin recibo</span>'}</td>
-      </tr>
-    `).join('');
-  }
-
-  document.getElementById('remito_chk_todas').checked = ops.length > 0 && ops.every(o => remitoSeleccionadas.has(o.id));
-  actualizarTotalRemito();
-};
-
-window.toggleRemitoOp = function(id, checked){
-  if(checked) remitoSeleccionadas.add(id);
-  else remitoSeleccionadas.delete(id);
-  actualizarTotalRemito();
-};
-
-window.toggleRemitoTodas = function(checked){
-  const desp = document.getElementById('remito_despachante').value;
-  const desde = document.getElementById('remito_fecha_desde').value;
-  const hasta = document.getElementById('remito_fecha_hasta').value;
-  const filtroEstado = document.getElementById('remito_filtro_estado').value;
-  let ops = operaciones.filter(o => o.despachante === desp);
-  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
-  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
-  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
-  ops.forEach(o => { if(checked) remitoSeleccionadas.add(o.id); else remitoSeleccionadas.delete(o.id); });
-  renderRemitos();
-};
-
-function actualizarTotalRemito(){
-  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
-  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
-  document.getElementById('remito-total-sel').textContent =
-    seleccionadas.length ? `${seleccionadas.length} operación(es) seleccionada(s) — Total $${fmt2(total)}` : 'Ninguna operación seleccionada';
-}
-
-function renderHistorialRemitos(){
-  const tbody = document.getElementById('tbody-remitos-hist');
-  const paginacionEl = document.getElementById('remitos-paginacion');
-  if(!tbody) return;
-  if(!remitos.length){
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>';
-    if(paginacionEl) paginacionEl.innerHTML = '';
-    return;
-  }
-  // remitos ya viene ordenado del más nuevo al más viejo (sort por numero desc al cargar)
-  const { pagina, page, totalPaginas } = paginarArray('remitosHist', remitos, PAGE_SIZE_GENERICO);
-  tbody.innerHTML = pagina.map(r => `
-    <tr>
-      <td class="mono">${r.numero||''}</td>
-      <td>${r.fecha||''}</td>
-      <td><strong>${r.despachante||''}</strong></td>
-      <td style="text-align:center;">${(r.ops||[]).length}</td>
-      <td style="font-weight:700;color:#059669;">$${fmt2(r.total)}</td>
-      <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button> <button class="btn-danger" onclick="eliminarRecibo('${r.id}')">✕</button></td>
-    </tr>
-  `).join('');
-  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'remitosHist');
-}
-
-function construirHtmlRemito(numero, despachante, fecha, opsData, total){
-  const filas = opsData.map(o => `
-    <tr>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.fecha||''}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.cliente||'-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-family:monospace;">${o.destinacion||'-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;">${o.canal||'-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;">${o.tc||'-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b;">${o.obs||'-'}</td>
-      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${fmt2(o.bruto)}</td>
-    </tr>
-  `).join('');
-
-  return `<!DOCTYPE html>
-<html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero} - ${despachante}</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
-  *{box-sizing:border-box;}
-  body{font-family:'DM Sans',sans-serif;color:#1e293b;padding:40px;max-width:800px;margin:0 auto;}
-  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px;}
-  .empresa-nombre{font-size:22px;font-weight:700;color:#1e3a8a;}
-  .empresa-sub{font-size:12px;color:#64748b;margin-top:2px;}
-  .empresa-datos{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;}
-  .recibo-titulo{text-align:right;}
-  .recibo-titulo .tag{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:15px;padding:6px 16px;border-radius:8px;display:inline-block;}
-  .recibo-num{font-size:12px;color:#64748b;margin-top:6px;}
-  .datos-recibo{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px;}
-  table{width:100%;border-collapse:collapse;margin-top:10px;}
-  thead tr{background:#1e3a8a;color:#fff;}
-  th{padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
-  .total-row{font-weight:700;font-size:15px;color:#1e3a8a;}
-  .firma-box{display:flex;justify-content:space-between;margin-top:60px;}
-  .firma{width:220px;border-top:1px solid #94a3b8;text-align:center;padding-top:6px;font-size:11px;color:#64748b;}
-  @media print{ body{padding:20px;} }
-</style></head>
-<body>
-  <div class="header">
-    <div>
-      <div class="empresa-nombre">${EMPRESA_REMITO.nombre}</div>
-      <div class="empresa-sub">${EMPRESA_REMITO.subtitulo}</div>
-      <div class="empresa-datos">
-        ${EMPRESA_REMITO.direccion}<br>
-        Tel: ${EMPRESA_REMITO.telefono}${EMPRESA_REMITO.cuit ? '<br>CUIT: '+EMPRESA_REMITO.cuit : ''}
-      </div>
-    </div>
-    <div class="recibo-titulo">
-      <span class="tag">RECIBO</span>
-      <div class="recibo-num">N° ${String(numero).padStart(5,'0')}</div>
-    </div>
-  </div>
-
-  <div class="datos-recibo">
-    <div><strong>Despachante:</strong> ${despachante}</div>
-    <div><strong>Fecha de emisión:</strong> ${fecha}</div>
-  </div>
-
-  <table>
-    <thead>
-      <tr><th>Fecha</th><th>Cliente</th><th>Destinación</th><th>Canal</th><th>TC</th><th>Obs</th><th style="text-align:right;">Valor $</th></tr>
-    </thead>
-    <tbody>${filas}</tbody>
-    <tfoot>
-      <tr class="total-row">
-        <td colspan="6" style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">TOTAL</td>
-        <td style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">$${fmt2(total)}</td>
-      </tr>
-    </tfoot>
-  </table>
-
-  <div class="firma-box">
-    <div class="firma">Recibí conforme</div>
-    <div class="firma">Aclaración / DNI</div>
-  </div>
-
-  <script>window.onload = () => window.print();<\/script>
-</body></html>`;
-}
-
-window.generarRemito = async function(){
-  const despachante = document.getElementById('remito_despachante').value;
-  if(!despachante){ toast('Seleccioná un despachante'); return; }
-  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
-  if(!seleccionadas.length){ toast('⚠️ Tildá al menos una operación'); return; }
-
-  const numero = remitos.length + 1;
-  const fechaHoy = new Date().toISOString().split('T')[0];
-  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
-
-  const opsData = seleccionadas
-    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''))
-    .map(o => ({ id:o.id, fecha:o.fecha||'', cliente:o.cliente||'', destinacion:o.destinacion||'', canal:o.canal||'', tc:o.tc||'', obs:o.obs||'', bruto:o.bruto||0 }));
-
-  try {
-    await addDoc(collection(db,'despachantees_remitos'), {
-      numero, despachante, fecha: fechaHoy, ops: opsData, total,
-      generadoPor: user.username, ts: Date.now()
-    });
-    // Marca cada operación con el N° de recibo emitido
-    for(const o of seleccionadas){
-      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: numero });
-    }
-
-    const html = construirHtmlRemito(numero, despachante, fechaHoy, opsData, total);
-    const w = window.open('', '_blank');
-    w.document.write(html);
-    w.document.close();
-
-    remitoSeleccionadas.clear();
-    toast('✅ Recibo N° ' + numero + ' generado');
-    renderRemitos();
-  } catch(e){
-    toast('❌ Error al generar el recibo: ' + e.message);
-  }
-};
-
-window.reimprimirRemito = function(id){
-  const r = remitos.find(x => x.id === id);
-  if(!r) return;
-  const html = construirHtmlRemito(r.numero, r.despachante, r.fecha, r.ops||[], r.total||0);
-  const w = window.open('', '_blank');
-  w.document.write(html);
-  w.document.close();
-};
-
-window.eliminarRecibo = async function(id){
-  const r = remitos.find(x => x.id === id);
-  if(!r) return;
-  if(!confirm(`¿Eliminar el recibo N° ${r.numero} de ${r.despachante}? Las operaciones incluidas quedarán marcadas como "Sin recibo" y se van a poder volver a incluir en uno nuevo.`)) return;
-  try {
-    for(const o of (r.ops||[])){
-      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: null });
-    }
-    await deleteDoc(doc(db,'despachantees_remitos', id));
-    toast('Recibo eliminado');
-    renderRemitos();
-  } catch(e){
-    toast('❌ Error al eliminar el recibo: ' + e.message);
-  }
-};
-
-// ── INIT ──
-recalcularFormulario();
-recalcMudanza();
+  const totBruto
