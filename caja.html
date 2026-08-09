@@ -158,7 +158,6 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Cheques</div><div class="card-value" id="saldoCheque">$ 0</div></div>
         <div class="card"><div class="card-label">Mercado Pago</div><div class="card-value" id="saldoMP">$ 0</div></div>
         <div class="card"><div class="card-label">Dólares</div><div class="card-value blue" id="saldoDolar">U$D 0</div></div>
-        <div class="card"><div class="card-label">🏦 Débitos bancarios</div><div class="card-value red" id="saldoImpBancario">$ 0</div></div>
         <div class="card"><div class="card-label">Total Pesos</div><div class="card-value green" id="saldoTotal">$ 0</div></div>
       </div>
 
@@ -336,6 +335,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Egresos del mes</div><div class="card-value red" id="repEgrMes">$ 0</div></div>
         <div class="card"><div class="card-label">Neto del mes</div><div class="card-value" id="repNetoMes">$ 0</div></div>
         <div class="card"><div class="card-label">Mov. este mes</div><div class="card-value" id="repCantMes">0</div></div>
+        <div class="card"><div class="card-label">🏦 Imp. bancario (mes)</div><div class="card-value red" id="repImpMes">$ 0</div></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -373,6 +373,7 @@ tr:hover td{background:#fafbff;}
           <div class="card"><div class="card-label">Egresos del año</div><div class="card-value red" id="repEgrAnio">$ 0</div></div>
           <div class="card"><div class="card-label">Neto del año</div><div class="card-value" id="repNetoAnio">$ 0</div></div>
           <div class="card"><div class="card-label">Mov. este año</div><div class="card-value" id="repCantAnio">0</div></div>
+          <div class="card"><div class="card-label">🏦 Imp. bancario (año)</div><div class="card-value red" id="repImpAnio">$ 0</div></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -733,9 +734,7 @@ async function procesarVencimientosCheques() {
 // SALDOS
 function renderSaldos() {
   const c = { Caja:0, Banco:0, Cheque:0, 'Mercado Pago':0, Dolares:0 };
-  let totalImpBancario = 0;
   for (const m of allMovimientos) {
-    if (m.esImpuestoBancario) totalImpBancario += Number(m.importe)||0;
     const v = Number(m.importe)||0;
     if (m.cuenta === 'Dólares') {
       m.tipo==='Ingreso' ? c.Dolares+=v : c.Dolares-=v;
@@ -755,7 +754,6 @@ function renderSaldos() {
   document.getElementById('saldoCheque').textContent = fmtMoney(c.Cheque);
   document.getElementById('saldoMP').textContent = fmtMoney(c['Mercado Pago']);
   document.getElementById('saldoDolar').textContent = fmtUSD(c.Dolares);
-  document.getElementById('saldoImpBancario').textContent = fmtMoney(totalImpBancario);
   const total = c.Caja + c.Banco + c.Cheque + c['Mercado Pago'];
   document.getElementById('saldoTotal').textContent = fmtMoney(total);
   document.getElementById('saldoTotal').className = 'card-value '+(total>=0?'green':'red');
@@ -1291,6 +1289,8 @@ window.renderReportes=function(){
   document.getElementById('repEgrMes').textContent=fmtMoney(egrMes);
   const neto=ingMes-egrMes;const netoEl=document.getElementById('repNetoMes');netoEl.textContent=fmtMoney(neto);netoEl.className='card-value '+(neto>=0?'green':'red');
   document.getElementById('repCantMes').textContent=delMes.length;
+  const impMes=delMes.filter(m=>m.esImpuestoBancario).reduce((s,m)=>s+Number(m.importe),0);
+  document.getElementById('repImpMes').textContent=fmtMoney(impMes);
 
   // ── Resumen Anual (selector de año + desglose mes a mes) ──
   const selAnio=document.getElementById('repAnio');
@@ -1316,6 +1316,8 @@ window.renderReportes=function(){
   netoAnioEl.textContent=fmtMoney(netoAnio);
   netoAnioEl.className='card-value '+(netoAnio>=0?'green':'red');
   document.getElementById('repCantAnio').textContent=delAnio.length;
+  const impAnio=delAnio.filter(m=>m.esImpuestoBancario).reduce((s,m)=>s+Number(m.importe),0);
+  document.getElementById('repImpAnio').textContent=fmtMoney(impAnio);
 
   const nombresMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const porMes=Array.from({length:12},()=>({ing:0,egr:0,cant:0}));
