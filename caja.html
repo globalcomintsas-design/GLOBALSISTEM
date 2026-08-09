@@ -158,7 +158,23 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Cheques</div><div class="card-value" id="saldoCheque">$ 0</div></div>
         <div class="card"><div class="card-label">Mercado Pago</div><div class="card-value" id="saldoMP">$ 0</div></div>
         <div class="card"><div class="card-label">Dólares</div><div class="card-value blue" id="saldoDolar">U$D 0</div></div>
+        <div class="card"><div class="card-label">🏦 Débitos bancarios</div><div class="card-value red" id="saldoImpBancario">$ 0</div></div>
         <div class="card"><div class="card-label">Total Pesos</div><div class="card-value green" id="saldoTotal">$ 0</div></div>
+      </div>
+
+      <div class="section" style="padding:12px 16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <div>
+            <strong style="color:#1e3a8a;font-size:13px;">🏦 Impuesto a los Créditos y Débitos Bancarios (Ley 25.413)</strong>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Se genera un movimiento de Egreso automático por cada movimiento en Banco, y por cada cheque cuando pasa a Acreditado.</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <label style="font-size:12px;color:#666;">Alícuota</label>
+            <input type="number" id="alicuotaInput" value="0.6" step="0.05" min="0" style="width:70px;padding:6px 8px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right;" />
+            <span style="font-size:12px;color:#666;">%</span>
+            <button class="btn btn-outline btn-sm" id="btnGuardarAlicuota" onclick="guardarAlicuota()">💾 Guardar</button>
+          </div>
+        </div>
       </div>
 
       <div class="section">
@@ -532,6 +548,9 @@ window.marcarMesMovimientosElegidoPorUsuario = function(){ usuarioEligioMesMovim
 let chequesPage = 1;
 const CHEQUES_PAGE_SIZE = 15;
 
+// ── Impuesto a los Créditos y Débitos Bancarios (Ley 25.413) ──
+let alicuotaImpBancario = 0.6; // % - editable por admin, se guarda en Firestore (config/impuestoBancario)
+
 // ── Vinculación con módulo Operaciones (corresponsales) ──
 let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html
 let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobrado")
@@ -614,6 +633,12 @@ window.cerrarSesion = function() { localStorage.removeItem('gc_user'); location.
 document.getElementById('sistema').style.display = 'block';
 document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
 if (currentUser.rol === 'admin') document.getElementById('tabUsuarios').style.display = '';
+if (currentUser.rol !== 'admin') {
+  const alicInp = document.getElementById('alicuotaInput');
+  if (alicInp) alicInp.disabled = true;
+  const alicBtn = document.getElementById('btnGuardarAlicuota');
+  if (alicBtn) alicBtn.style.display = 'none';
+}
 document.getElementById('spinnerOverlay').style.display = 'flex';
 initFirestore();
 
@@ -677,6 +702,17 @@ function initFirestore() {
       if (o.numFactura) opsPorFactura[o.numFactura.trim().toUpperCase()] = true;
     });
   });
+
+  // ── Alícuota del Impuesto a los Créditos y Débitos Bancarios (configurable) ──
+  onSnapshot(doc(db,'config','impuestoBancario'), snap => {
+    if (snap.exists() && snap.data().alicuota !== undefined) {
+      alicuotaImpBancario = Number(snap.data().alicuota) || 0.6;
+    }
+    const inp = document.getElementById('alicuotaInput');
+    if (inp && document.activeElement !== inp) inp.value = alicuotaImpBancario;
+    renderSaldos();
+    filtrar();
+  });
 }
 
 // CHEQUES VENCIMIENTOS
@@ -686,14 +722,20 @@ async function procesarVencimientosCheques() {
     if (m.cuenta !== 'Cheque' || !m.fechaVencCheque) continue;
     if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado') continue;
     const fv = new Date(m.fechaVencCheque+'T00:00:00');
-    if (fv <= hoy) await updateDoc(doc(db,'movimientos',m.id), { estadoCheque: 'Acreditado' });
+    if (fv <= hoy) {
+      await updateDoc(doc(db,'movimientos',m.id), { estadoCheque: 'Acreditado' });
+      try { await sincronizarImpuestoBancario(m.id, { ...m, estadoCheque: 'Acreditado' }); }
+      catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
+    }
   }
 }
 
 // SALDOS
 function renderSaldos() {
   const c = { Caja:0, Banco:0, Cheque:0, 'Mercado Pago':0, Dolares:0 };
+  let totalImpBancario = 0;
   for (const m of allMovimientos) {
+    if (m.esImpuestoBancario) totalImpBancario += Number(m.importe)||0;
     const v = Number(m.importe)||0;
     if (m.cuenta === 'Dólares') {
       m.tipo==='Ingreso' ? c.Dolares+=v : c.Dolares-=v;
@@ -713,6 +755,7 @@ function renderSaldos() {
   document.getElementById('saldoCheque').textContent = fmtMoney(c.Cheque);
   document.getElementById('saldoMP').textContent = fmtMoney(c['Mercado Pago']);
   document.getElementById('saldoDolar').textContent = fmtUSD(c.Dolares);
+  document.getElementById('saldoImpBancario').textContent = fmtMoney(totalImpBancario);
   const total = c.Caja + c.Banco + c.Cheque + c['Mercado Pago'];
   document.getElementById('saldoTotal').textContent = fmtMoney(total);
   document.getElementById('saldoTotal').className = 'card-value '+(total>=0?'green':'red');
@@ -738,7 +781,11 @@ window.guardarMovimiento = async function() {
     data.estadoCheque = document.getElementById('estadoCheque').value;
     if (!data.numeroCheque) { toast('Completá el número de cheque','error'); return; }
   }
-  await addDoc(collection(db,'movimientos'), data);
+  const nuevoRef = await addDoc(collection(db,'movimientos'), data);
+
+  // ── Impuesto a los Créditos y Débitos Bancarios (automático) ──
+  try { await sincronizarImpuestoBancario(nuevoRef.id, data); }
+  catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
 
   // ── Vinculación automática con Operaciones (solo Ingresos) ──
   if (tipo === 'Ingreso') {
@@ -826,6 +873,61 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
   await addDoc(collection(db,'log_vinculaciones_caja'), logEntry);
 }
 
+// ── Impuesto a los Créditos y Débitos Bancarios: cálculo y sincronización automática ──
+// Se aplica sobre cualquier movimiento en cuenta "Banco" (Ingreso o Egreso), y sobre los
+// cheques en el momento en que pasan a estado "Acreditado" (que es cuando realmente
+// impactan en la cuenta bancaria). Genera/actualiza/borra un movimiento de Egreso
+// vinculado (esImpuestoBancario:true, vinculadoA:idOriginal) para que quede trazable
+// en la tabla, en Cta. Corriente y en los Excel — no se descuenta "de forma invisible".
+function calcularImpuestoBancario(importe){
+  return Math.round((Number(importe||0) * (alicuotaImpBancario/100) + Number.EPSILON) * 100) / 100;
+}
+window.calcularImpuestoBancario = calcularImpuestoBancario;
+
+async function crearMovimientoImpuesto(idOriginal, data, monto){
+  const ref = await addDoc(collection(db,'movimientos'), {
+    tipo: 'Egreso',
+    cuenta: 'Banco',
+    factura: '',
+    cliente: 'Imp. Déb./Créd. Bancarios',
+    detalle: `Ley 25.413 (${alicuotaImpBancario}%) s/ ${data.cliente||''}`,
+    importe: monto,
+    observaciones: '',
+    fecha: data.fecha || today(),
+    ts: Date.now(),
+    creadoPor: currentUser.nombre,
+    esImpuestoBancario: true,
+    vinculadoA: idOriginal
+  });
+  await updateDoc(doc(db,'movimientos', idOriginal), { impuestoMovId: ref.id });
+}
+
+async function sincronizarImpuestoBancario(id, data){
+  if (data.esImpuestoBancario) return; // nunca se autogenera impuesto sobre un impuesto
+  const aplica = data.cuenta === 'Banco' || (data.cuenta === 'Cheque' && data.estadoCheque === 'Acreditado');
+  const monto = calcularImpuestoBancario(data.importe);
+
+  if (aplica) {
+    if (data.impuestoMovId) {
+      try { await updateDoc(doc(db,'movimientos', data.impuestoMovId), { importe: monto }); }
+      catch(e){ await crearMovimientoImpuesto(id, data, monto); } // el vinculado se había borrado a mano
+    } else {
+      await crearMovimientoImpuesto(id, data, monto);
+    }
+  } else if (data.impuestoMovId) {
+    try { await deleteDoc(doc(db,'movimientos', data.impuestoMovId)); } catch(e){}
+    await updateDoc(doc(db,'movimientos', id), { impuestoMovId: null });
+  }
+}
+
+window.guardarAlicuota = async function(){
+  if (currentUser?.rol !== 'admin') { toast('Solo el admin puede cambiar la alícuota','error'); return; }
+  const v = parseFloat(document.getElementById('alicuotaInput').value);
+  if (isNaN(v) || v < 0) { toast('Alícuota inválida','error'); return; }
+  await setDoc(doc(db,'config','impuestoBancario'), { alicuota: v });
+  toast('Alícuota actualizada ✓ (' + v + '%)','success');
+};
+
 window.limpiarForm = function() {
   ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const ip=document.getElementById('importePreview'); if(ip) ip.textContent='';
@@ -883,7 +985,8 @@ window.filtrar = function() {
   const esAdmin=currentUser?.rol==='admin';
   document.getElementById('tablaMovimientos').innerHTML=fPagina.map(m=>{
     let extra='';
-    if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
+    if(m.esImpuestoBancario){extra+=`<br><span style="font-size:10px;color:#dc2626;font-weight:600">🏦 Imp. ${alicuotaImpBancario}% autom.</span>`;}
+    if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra+=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
     const isDolar=m.cuenta==='Dólares';
     const montoStr=isDolar?`<span class="dolar-badge">${fmtUSD(m.importe)}</span>`:`<strong>${fmtMoney(m.importe)}</strong>`;
     return `<tr>
@@ -933,7 +1036,20 @@ window.limpiarFiltros=function(){
   usuarioEligioMesMovimientos = true; // "Todos los meses" queda como elección explícita
   resetPaginaMovimientos();
 };
-window.eliminar=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movimientos',id));toast('Eliminado','error');};
+window.eliminar=async function(id){
+  if(!confirm('¿Eliminar?'))return;
+  const m = allMovimientos.find(x=>x.id===id);
+  // Si el movimiento tiene un impuesto bancario vinculado, se borra en cascada
+  if(m?.impuestoMovId){
+    try { await deleteDoc(doc(db,'movimientos', m.impuestoMovId)); } catch(e){}
+  }
+  // Si el movimiento ES el impuesto vinculado a otro, se limpia la referencia en el original
+  if(m?.vinculadoA){
+    try { await updateDoc(doc(db,'movimientos', m.vinculadoA), { impuestoMovId: null }); } catch(e){}
+  }
+  await deleteDoc(doc(db,'movimientos',id));
+  toast('Eliminado','error');
+};
 
 window.abrirEditar=function(id){
   const m=allMovimientos.find(x=>x.id===id);if(!m)return;
@@ -959,7 +1075,13 @@ window.guardarEdicion=async function(){
   if(isNaN(importeEditado) || importeEditado<=0){ toast('Importe inválido','error'); return; }
   const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:document.getElementById('eCliente').value,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
   if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;}
+  const originalMov = allMovimientos.find(x=>x.id===editandoId) || {};
   await updateDoc(doc(db,'movimientos',editandoId),data);
+
+  // ── Impuesto a los Créditos y Débitos Bancarios (automático) ──
+  try { await sincronizarImpuestoBancario(editandoId, { ...originalMov, ...data }); }
+  catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
+
   cerrarModal();toast('Actualizado ✓ (' + fmtMoney(importeEditado) + ')','success');
 };
 
