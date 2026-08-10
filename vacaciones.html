@@ -245,7 +245,7 @@ tr:hover td{background:#fafbff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc, getDoc }
+import { getFirestore, collection, addDoc, getDocs, onSnapshot, deleteDoc, doc, setDoc, getDoc }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -277,7 +277,7 @@ let EMPLEADOS = [
 
 // Estado en memoria
 let currentUser = null;
-let allVac = [];           // todos los registros de vacaciones
+let allVac = [];           // todos los registros de vacaciones (cargados UNA vez, actualizados localmente después)
 let topePorEmpleado = {};  // { 'Bruno Cola': 14, 'María Angeles': 10, ... }
 const TOPE_DEFAULT = 14;   // tope por defecto si no hay config
 
@@ -313,6 +313,9 @@ function diasTomadosEnAnio(empleado, anio){
 // Saldo acumulado de años anteriores (días no tomados que se arrastran al año actual).
 // Recorre desde el primer año con registro hasta el año anterior al actual,
 // sumando (tope_del_empleado - dias_tomados) de cada año. Si el resultado es negativo, se ignora (no se puede deber).
+// NOTA: este cálculo necesita el historial COMPLETO de allVac (no solo un
+// período puntual), por eso esta pantalla carga toda la colección de una
+// vez en memoria en vez de filtrar por mes como en movilidad/sueldos.
 function saldoAcumulado(empleado, anioActual){
   // Encontrar el primer año con vacaciones registradas para este empleado
   let primerAnio = anioActual;
@@ -362,18 +365,17 @@ document.addEventListener('DOMContentLoaded', function(){
 function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
 
 // ── FIRESTORE ────────────────────────────────────────────
-function initFirestore(){
-  // Snapshot de vacaciones
-  onSnapshot(collection(db,'vacaciones'), snap=>{
-    allVac=snap.docs.map(d=>({id:d.id,...d.data()}));
-    allVac.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    renderVacaciones();
-  });
-  // Snapshot de topes por empleado (config/topes-vacaciones)
+async function initFirestore(){
+  // Vacaciones: se carga UNA sola vez (getDocs), no con listener en vivo.
+  // Después de guardar/eliminar se actualiza el array local directamente,
+  // sin volver a leer toda la colección.
+  await cargarVacaciones();
+
+  // Topes y lista de empleados son documentos ÚNICOS y chicos: el listener
+  // en vivo acá no pesa y da comodidad de verlos actualizados al toque.
   onSnapshot(doc(db,'config','topes-vacaciones'), snap=>{
     if(snap.exists()){
       const data=snap.data();
-      // data.topes es { 'Bruno Cola': 14, 'María Angeles': 10, ... }
       topePorEmpleado = data.topes && typeof data.topes==='object' ? data.topes : {};
     } else {
       topePorEmpleado = {};
@@ -381,7 +383,6 @@ function initFirestore(){
     renderTopes();
     renderVacaciones();
   });
-  // Snapshot de la lista de empleados (compartida con sueldos)
   onSnapshot(doc(db,'config','empleados'), snap=>{
     if(snap.exists()){
       const lista=snap.data().lista||[];
@@ -398,6 +399,17 @@ function initFirestore(){
     renderVacaciones();
   });
   refrescarSelectsEmpleados();
+}
+
+async function cargarVacaciones(){
+  try{
+    const snap = await getDocs(collection(db,'vacaciones'));
+    allVac = snap.docs.map(d=>({id:d.id,...d.data()}));
+    allVac.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  }catch(e){
+    console.error(e); toast('Error cargando vacaciones','error'); allVac=[];
+  }
+  renderVacaciones();
 }
 
 // Render de la tabla de topes (en la card de configuración)
@@ -503,14 +515,16 @@ window.guardarVacacion=async function(){
     if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+msgAcum+'.\n\n¿Querés registrar igual?')) return;
   }
   try {
-    await addDoc(collection(db,'vacaciones'),{
-      empleado, desde, hasta, dias, obs,
-      creadoPor:currentUser.nombre, ts:Date.now()
-    });
+    const nuevo={ empleado, desde, hasta, dias, obs, creadoPor:currentUser.nombre, ts:Date.now() };
+    const ref = await addDoc(collection(db,'vacaciones'), nuevo);
+    nuevo.id = ref.id;
+    // Actualiza el array local en vez de releer toda la colección
+    allVac.unshift(nuevo);
     document.getElementById('vacDesde').value='';
     document.getElementById('vacHasta').value='';
     document.getElementById('vacObs').value='';
     document.getElementById('vacDias').value='';
+    renderVacaciones();
     toast('Vacaciones guardadas ✓','success');
   } catch(e){ toast('Error: '+e.message,'error'); }
 };
@@ -519,6 +533,8 @@ window.eliminarVac=async function(id){
   if(currentUser?.rol!=='admin' && currentUser?.rol!=='cargador'){toast('Sin permiso','error');return;}
   if(!confirm('¿Eliminar estas vacaciones? Esta acción no se puede deshacer.')) return;
   await deleteDoc(doc(db,'vacaciones',id));
+  allVac = allVac.filter(v=>v.id!==id);
+  renderVacaciones();
   toast('Vacaciones eliminadas','error');
 };
 
