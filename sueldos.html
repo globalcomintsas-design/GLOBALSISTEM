@@ -324,8 +324,8 @@ function normalizarNombre(n){
 
 let currentUser = null;
 let movData = {}, fsData = {};
-let allAdelanto = [], allMovGlobal = [];
-let allMov = [], allFS = [];   // caches en memoria para movilidad y fines de semana
+let allAdelanto = [];
+let allMov = [], allFS = [];   // caches en memoria: SOLO del período actualmente seleccionado
 let tablaLista = false;        // flag: la tabla ya fue construida
 let dividendoPorSocio = 0, periodoDividendo = '';
 let empleadosAnterior = {};   // liquidación del mes anterior (para precargar bruto/autónomo por defecto)
@@ -357,17 +357,28 @@ function fechaAPeriodo(fecha){
   if(fecha.includes('/')){const p=fecha.split('/');return p[2]+'-'+p[1].padStart(2,'0');}
   return fecha.substring(0,7);
 }
-function calcularNetoPesos(periodo){
+
+// Trae SOLO los movimientos de Caja del período pedido (filtrado por el
+// campo 'periodo' que ya guarda caja.html), para calcular el neto que
+// determina el dividendo. Antes esto traía la colección 'movimientos'
+// COMPLETA con un listener en vivo — acá se reemplaza por una consulta
+// puntual, del tamaño de un solo mes.
+async function calcularNetoPesosPeriodo(periodo){
   let ing=0,egr=0;
-  for(const m of allMovGlobal){
-    if(m.cuenta==='Dólares') continue;
-    if(m.cuenta==='Cheque'&&m.estadoCheque==='Rechazado') continue;
-    if(fechaAPeriodo(m.fecha)!==periodo) continue;
-    const v=Number(m.importe)||0;
-    m.tipo==='Ingreso'?ing+=v:egr+=v;
-  }
+  try{
+    const q = query(collection(db,'movimientos'), where('periodo','==',periodo));
+    const snap = await getDocs(q);
+    snap.docs.forEach(d=>{
+      const m=d.data();
+      if(m.cuenta==='Dólares') return;
+      if(m.cuenta==='Cheque'&&m.estadoCheque==='Rechazado') return;
+      const v=Number(m.importe)||0;
+      m.tipo==='Ingreso'?ing+=v:egr+=v;
+    });
+  }catch(e){ console.warn('movimientos (dividendo):',e); }
   return ing-egr;
 }
+
 function cuotaParaPeriodo(adel,periodo){
   // "Adelanto" (pago único): siempre descuenta en su mes de inicio, sin
   // importar si autoMarcarSaldados ya lo marcó "saldado" por el paso del
@@ -423,32 +434,19 @@ function arrancarSesion(){
 }
 
 function initApp(){
+  // Adelantos y config de empleados son colecciones chicas (decenas de
+  // documentos): el listener en vivo acá no pesa y da comodidad de verlos
+  // actualizados al toque sin recargar.
   onSnapshot(collection(db,'adelantos'), snap=>{
     allAdelanto=snap.docs.map(d=>({id:d.id,...d.data()}));
     if(typeof window.renderAdelantos==='function') window.renderAdelantos();
     if(typeof window.recalc==='function') window.recalc();
     autoMarcarSaldados();
   });
-  onSnapshot(collection(db,'movimientos'), snap=>{
-    allMovGlobal=snap.docs.map(d=>({id:d.id,...d.data()}));
-    calcDiv();
-    if(typeof window.recalc==='function') window.recalc();
-  });
-  // ── sincronización en tiempo real de movilidad y fines de semana ──
-  onSnapshot(collection(db,'movilidad'), snap=>{
-    allMov=snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
-  });
-  onSnapshot(collection(db,'finesdesemana'), snap=>{
-    allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
-    if(typeof window.actualizarMovFS==='function') window.actualizarMovFS();
-  });
-  // ── sincronización en tiempo real de la lista de empleados ──
   onSnapshot(doc(db,'config','empleados'), snap=>{
     if(snap.exists()){
       const lista=snap.data().lista||[];
       if(Array.isArray(lista)&&lista.length>0){
-        // Normaliza campos (por si algún doc viejo no tiene iniciales/esSocio)
         EMPLEADOS=lista.map(e=>({
           nombre:String(e.nombre||'').trim(),
           iniciales:(e.iniciales||'').toUpperCase(),
@@ -457,16 +455,15 @@ function initApp(){
       }
     }
     refrescarSelectEmpleados();
-    // Si la tabla ya estaba construida, recargarla para reflejar la nueva lista
     if(tablaLista && typeof window.cargarPeriodo==='function'){ window.cargarPeriodo(); }
   });
+
   const hoy=new Date();
   const mes=String(hoy.getMonth()+1).padStart(2,'0');
   document.getElementById('periodo').value=`${hoy.getFullYear()}-${mes}`;
   document.getElementById('badgePeriodo').textContent=periodoLabel(document.getElementById('periodo').value);
   refrescarSelectEmpleados();
   document.getElementById('adelInicio').value=document.getElementById('periodo').value;
-  // Llamada diferida: asegurar que cargarPeriodo ya esté asignada
   if(typeof window.cargarPeriodo==='function'){
     window.cargarPeriodo();
   } else {
@@ -484,10 +481,10 @@ function refrescarSelectEmpleados(){
   if(actual) sel.value=actual;
 }
 
-function calcDiv(){
+async function calcDiv(){
   const periodo=periodoActual();
   periodoDividendo=restarMeses(periodo,2);
-  const neto=calcularNetoPesos(periodoDividendo);
+  const neto=await calcularNetoPesosPeriodo(periodoDividendo);
   dividendoPorSocio=neto>0?Math.round(neto/8):0;
   const infoEl=document.getElementById('divInfo');
   const infoTxt=document.getElementById('divInfoTxt');
@@ -510,27 +507,32 @@ async function autoMarcarSaldados(){
   }
 }
 
+// Trae movilidad + fines de semana SOLO del período pedido (filtrado por
+// 'periodo'), reemplazando los listeners globales que traían las
+// colecciones completas cada vez que cualquiera cargaba un registro nuevo.
+async function cargarMovilidadFSPeriodo(periodo){
+  try{
+    const movQ = query(collection(db,'movilidad'), where('periodo','==',periodo));
+    const movSnap = await getDocs(movQ);
+    allMov = movSnap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.warn('movilidad:',e); allMov=[]; }
+  try{
+    const fsQ = query(collection(db,'finesdesemana'), where('periodo','==',periodo));
+    const fsSnap = await getDocs(fsQ);
+    allFS = fsSnap.docs.map(d=>({id:d.id,...d.data()}));
+  }catch(e){ console.warn('finesdesemana:',e); allFS=[]; }
+}
+
 window.cargarPeriodo = async function(){
   const periodo=periodoActual();
   if(autosaveTimer){ clearTimeout(autosaveTimer); autosaveTimer=null; } // cancela autoguardado pendiente del período anterior
   document.getElementById('badgePeriodo').textContent=periodoLabel(periodo);
   ocultarBadgeGuardado();
   document.getElementById('badgeCajaCargado').style.display='none';
-  // Fallback: si los snapshots aún no dispararon, hago getDocs para tener datos
-  if(allMov.length===0){
-    try {
-      const movSnap=await getDocs(collection(db,'movilidad'));
-      allMov=movSnap.docs.map(d=>({id:d.id,...d.data()}));
-    } catch(e){ console.warn('movilidad:',e); }
-  }
-  if(allFS.length===0){
-    try {
-      const fsSnap=await getDocs(collection(db,'finesdesemana'));
-      allFS=fsSnap.docs.map(d=>({id:d.id,...d.data()}));
-    } catch(e){ console.warn('finesdesemana:',e); }
-  }
-  // Recalcula movData/fsData desde el cache en memoria
+
+  await cargarMovilidadFSPeriodo(periodo);
   window.actualizarMovFS();
+
   let guardada={};
   liqActualDoc=null;
   try {
@@ -551,14 +553,14 @@ window.cargarPeriodo = async function(){
     const liqAnteriorDoc=await getDoc(doc(db,'sueldos',restarMeses(periodo,1)));
     if(liqAnteriorDoc.exists()){ empleadosAnterior=liqAnteriorDoc.data().empleados||{}; }
   } catch(e){ console.warn('sueldos anterior:',e); }
-  calcDiv();
+  await calcDiv();
   buildTable(guardada);
   ocultarSpinner();
 };
 
 // ── recalcula movData/fsData para el período actual y actualiza las celdas in-place ──
-// Se invoca desde los onSnapshot de movilidad/finesdesemana y desde cargarPeriodo.
-// No reconstruye toda la tabla => NO pisa los inputs bruto/autónomo que el usuario esté editando.
+// Se invoca luego de cargarMovilidadFSPeriodo. No reconstruye toda la tabla
+// => NO pisa los inputs bruto/autónomo que el usuario esté editando.
 window.actualizarMovFS = function(){
   const periodo=periodoActual();
   if(!periodo) return;
@@ -889,6 +891,7 @@ window.cargarACaja=async function(){
   if(!confirm(mensaje)) return;
 
   const fechaAR = fechaPago.split('-').reverse().join('/'); // caja.html usa dd/mm/aaaa
+  const periodoMovimiento = fechaPago.substring(0,7);       // yyyy-mm, para que quede filtrable igual que el resto de Caja
   const idsCreados = [];
   let count=0;
 
@@ -903,6 +906,7 @@ window.cargarACaja=async function(){
         importe:d.neto||0,
         observaciones:'Cargado automáticamente desde Sueldos',
         fecha:fechaAR,
+        periodo:periodoMovimiento,
         ts:Date.now(),
         creadoPor:currentUser.nombre,
         origenSueldos:true,
@@ -926,6 +930,11 @@ window.cargarACaja=async function(){
     document.getElementById('badgeCajaCargado').style.display='inline-block';
     document.getElementById('badgeCajaCargado').textContent='📤 Ya cargado a Banco ('+fechaAR+')';
     toast(`✅ ${count} sueldos cargados a Banco por ${fmt(totalNeto)}`,'success');
+
+    // Si el mes al que corresponde el pago (periodoMovimiento) coincide con
+    // el período de dividendo actualmente mostrado, refrescamos el cálculo
+    // para reflejar este nuevo egreso.
+    if(periodoMovimiento===periodoDividendo){ await calcDiv(); window.recalc(); }
   } catch(e){
     toast('❌ Error al cargar a Caja: '+e.message,'error');
   }
@@ -966,8 +975,7 @@ window.exportarExcel=function(){
     const desc=descuentoEmpleadoPeriodo(emp.nombre,periodo);
     filas.push([emp.nombre,emp.esSocio?'Socio':'Empleado',bruto,auto,mov,fs,desc,bruto+auto+mov+fs-desc,div]);
   });
-  const neto=calcularNetoPesos(periodoDividendo);
-  const resDiv=[['Concepto','Valor'],['Período base',periodoLabel(periodoDividendo)],['Neto pesos',neto],['Partes totales',8],['Dividendo por socio',dividendoPorSocio],['Reserva GLOBALCOMINT',dividendoPorSocio*2]];
+  const resDiv=[['Concepto','Valor'],['Período base',periodoLabel(periodoDividendo)],['Dividendo por socio',dividendoPorSocio],['Reserva GLOBALCOMINT',dividendoPorSocio*2]];
   const ws1=XLSX.utils.aoa_to_sheet(filas); ws1['!cols']=[22,10,14,12,14,14,14,14,16].map(w=>({wch:w}));
   const ws2=XLSX.utils.aoa_to_sheet(resDiv); ws2['!cols']=[30,16].map(w=>({wch:w}));
   const wb=XLSX.utils.book_new();
@@ -980,6 +988,8 @@ window.exportarExcel=function(){
 // ── HISTORIAL MENSUAL DE LIQUIDACIONES ────────────────────────────────
 // Lee todos los docs de la colección 'sueldos' (uno por período ya guardado)
 // y arma un historial mes a mes con el detalle de todos los empleados.
+// Es una colección chica (un doc por mes) y se carga bajo demanda al abrir
+// el modal, cacheada en memoria — no se toca en la carga normal de la página.
 window.abrirHistorial=async function(){
   document.getElementById('modalHistorial').classList.add('open');
   if(!historialCargado){
