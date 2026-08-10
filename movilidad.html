@@ -83,6 +83,7 @@ tr:hover td{background:#fafbff;}
 .notif.error{background:#dc2626;}
 .notif.success{background:#16a34a;}
 .spinner-overlay{position:fixed;inset:0;background:rgba(240,244,248,0.85);display:none;flex-direction:column;justify-content:center;align-items:center;z-index:200;gap:14px;}
+.spinner-overlay.show{display:flex;}
 .spinner{width:44px;height:44px;border:4px solid #bfdbfe;border-top-color:#1e3a8a;border-radius:50%;animation:spin .7s linear infinite;}
 .spinner-text{font-size:13px;color:#1e3a8a;font-weight:600;}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -112,22 +113,19 @@ tr:hover td{background:#fafbff;}
   window.vistaMov = 'mes';
   window.setVistaMov = function(v, ev){
     if(ev){ ev.stopPropagation(); }
-    window.vistaMov = v;
     var buttons = document.querySelectorAll('#toggleVistaMov button');
     buttons.forEach(function(b){ b.classList.remove('active'); });
     if(ev && ev.target){ ev.target.classList.add('active'); }
     else {
-      // fallback: marcar el botón correcto
       var idx = (v==='historico') ? 1 : 0;
       if(buttons[idx]) buttons[idx].classList.add('active');
     }
-    if(typeof window.renderMovilidad === 'function') window.renderMovilidad();
+    if(typeof window.cambiarVistaMov === 'function') window.cambiarVistaMov(v);
   };
   // Lo mismo para Fines de Semana
   window.vistaFS = 'mes';
   window.setVistaFS = function(v, ev){
     if(ev){ ev.stopPropagation(); }
-    window.vistaFS = v;
     var buttons = document.querySelectorAll('#toggleVistaFS button');
     buttons.forEach(function(b){ b.classList.remove('active'); });
     if(ev && ev.target){ ev.target.classList.add('active'); }
@@ -135,13 +133,13 @@ tr:hover td{background:#fafbff;}
       var idx = (v==='historico') ? 1 : 0;
       if(buttons[idx]) buttons[idx].classList.add('active');
     }
-    if(typeof window.renderFS === 'function') window.renderFS();
+    if(typeof window.cambiarVistaFS === 'function') window.cambiarVistaFS(v);
   };
 </script>
 
 <div id="spinnerOverlay" class="spinner-overlay">
   <div class="spinner"></div>
-  <div class="spinner-text">Cargando datos...</div>
+  <div class="spinner-text" id="spinnerText">Cargando datos...</div>
 </div>
 
 <div id="sistema">
@@ -170,7 +168,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Registros este mes</div><div class="card-value" id="movRegMes">0</div></div>
         <div class="card"><div class="card-label">Total este mes</div><div class="card-value green" id="movTotalMes">$ 0</div></div>
         <div class="card"><div class="card-label">Km este mes</div><div class="card-value orange" id="movKmMes">0</div></div>
-        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="movTotalGral">$ 0</div></div>
+        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="movTotalGral">—</div></div>
       </div>
 
       <!-- Destinos - solo admin (card colapsable) -->
@@ -285,7 +283,7 @@ tr:hover td{background:#fafbff;}
       <div class="cards">
         <div class="card"><div class="card-label">Registros este mes</div><div class="card-value" id="fsRegMes">0</div></div>
         <div class="card"><div class="card-label">Total este mes</div><div class="card-value green" id="fsTotalMes">$ 0</div></div>
-        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="fsTotalGral">$ 0</div></div>
+        <div class="card"><div class="card-label">Total general</div><div class="card-value" id="fsTotalGral">—</div></div>
       </div>
 
       <!-- Formulario registro -->
@@ -367,7 +365,10 @@ tr:hover td{background:#fafbff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getFirestore, collection, addDoc, getDocs, getDoc, deleteDoc, doc, setDoc,
+  query, where, getAggregateFromServer, sum
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
@@ -399,9 +400,22 @@ const DESTINOS_DEFAULT = [
 ];
 
 let currentUser = null;
-let allFS = [];
+
+// Datos del MES ACTUAL (lo único que se lee siempre al entrar)
 let allMovilidad = [];
+let allFS = [];
+
+// Caché de HISTÓRICO: null = todavía no se pidió. Se carga una sola vez,
+// bajo demanda, cuando el usuario toca el botón "Histórico".
+let movHistorico = null;
+let fsHistorico = null;
+
 let destinos = [...DESTINOS_DEFAULT];
+
+function periodoActual(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+}
 
 function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); }
 function today(){ return new Date().toLocaleDateString('es-AR'); }
@@ -413,18 +427,26 @@ function toast(msg,type=''){
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
+function mostrarSpinner(texto){
+  const s=document.getElementById('spinnerOverlay');
+  const t=document.getElementById('spinnerText');
+  if(t) t.textContent = texto || 'Cargando datos...';
+  if(s) s.classList.add('show');
+}
+function ocultarSpinner(){
+  const s=document.getElementById('spinnerOverlay');
+  if(s) s.classList.remove('show');
+}
+
 function mostrarSistema(user){
   currentUser = user;
   document.getElementById('sistema').style.display='block';
   const rolLabel = user.rol==='admin'?'👑 Admin':user.rol==='cargador'?'✏️ Cargador':'👁 Viewer';
   document.getElementById('userBadge').textContent=rolLabel+' '+user.nombre;
-  // Mostrar secciones según rol
   const puedeCargar = user.rol==='admin'||user.rol==='cargador';
   document.getElementById('seccionRegistrarMov').style.display = puedeCargar?'':'none';
   document.getElementById('seccionRegistrarFS').style.display = puedeCargar?'':'none';
-  // Destinos y Km: visible para todos los que pueden cargar (admin y cargador) para que cualquiera pueda ajustar los km
   document.getElementById('seccionDestinos').style.display = puedeCargar?'':'none';
-  // Precio por Km y agregar destino: solo admin puede tocarlos, para no descontrolar el catálogo
   const precioKmInput = document.getElementById('precioKmGlobal');
   if(precioKmInput) precioKmInput.disabled = user.rol!=='admin';
   const btnAgregarDestino = document.getElementById('btnAgregarDestino');
@@ -444,7 +466,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
 // SESION CENTRALIZADA
 window.cerrarSesion=function(){ localStorage.removeItem('gc_user'); location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); };
 document.addEventListener('DOMContentLoaded', function(){
-  if(currentUser){ return; } // Ya se logueó por URL (ej. Daniel via ?user=dnievas), no pisar esa sesión
+  if(currentUser){ return; }
   const _gcSesion = localStorage.getItem('gc_user');
   if(!_gcSesion){ location.href=location.origin+location.pathname.replace('movilidad.html','index.html'); return; }
   mostrarSistema(JSON.parse(_gcSesion));
@@ -459,33 +481,105 @@ window.showTab=function(name,el){
   if(name==='finesdesemana') renderFS();
 };
 
-function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
+// ── CARGA INICIAL: solo mes actual + totales por agregación ───────────
 
-function initFirestore(){
-  onSnapshot(collection(db,'finesdesemana'), snap=>{
-    allFS=snap.docs.map(d=>({id:d.id,...d.data()}));
-    allFS.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    renderFS();
-  });
-  onSnapshot(collection(db,'movilidad'), snap=>{
-    allMovilidad=snap.docs.map(d=>({id:d.id,...d.data()}));
-    allMovilidad.sort((a,b)=>(b.ts||0)-(a.ts||0));
-    renderMovilidad();
-    ocultarSpinner();
-  });
-  onSnapshot(doc(db,'config','destinos'), snap=>{
-    if(snap.exists()){
-      destinos=snap.data().lista||[...DESTINOS_DEFAULT];
-      const pKm=snap.data().precioKm||300;
-      const el=document.getElementById('precioKmGlobal');
-      if(el) el.value=pKm;
-    } else {
-      destinos=[...DESTINOS_DEFAULT];
-    }
-    renderDestinos();
-    actualizarSelectDestinos();
-  });
+async function cargarDestinos(){
+  const snap = await getDoc(doc(db,'config','destinos'));
+  if(snap.exists()){
+    destinos = snap.data().lista || [...DESTINOS_DEFAULT];
+    const pKm = snap.data().precioKm || 300;
+    const el = document.getElementById('precioKmGlobal');
+    if(el) el.value = pKm;
+  } else {
+    destinos = [...DESTINOS_DEFAULT];
+  }
 }
+
+async function cargarMovilidadMes(){
+  const q = query(collection(db,'movilidad'), where('periodo','==',periodoActual()));
+  const snap = await getDocs(q);
+  allMovilidad = snap.docs.map(d=>({id:d.id,...d.data()}));
+  allMovilidad.sort((a,b)=>(b.ts||0)-(a.ts||0));
+}
+
+async function cargarFSMes(){
+  const q = query(collection(db,'finesdesemana'), where('periodo','==',periodoActual()));
+  const snap = await getDocs(q);
+  allFS = snap.docs.map(d=>({id:d.id,...d.data()}));
+  allFS.sort((a,b)=>(b.ts||0)-(a.ts||0));
+}
+
+async function cargarTotalesGenerales(){
+  try{
+    const aggMov = await getAggregateFromServer(collection(db,'movilidad'), { total: sum('total') });
+    document.getElementById('movTotalGral').textContent = fmtMoney(aggMov.data().total || 0);
+  }catch(e){
+    console.error('Error total general movilidad', e);
+    document.getElementById('movTotalGral').textContent = '—';
+  }
+  try{
+    const aggFS = await getAggregateFromServer(collection(db,'finesdesemana'), { total: sum('monto') });
+    document.getElementById('fsTotalGral').textContent = fmtMoney(aggFS.data().total || 0);
+  }catch(e){
+    console.error('Error total general FS', e);
+    document.getElementById('fsTotalGral').textContent = '—';
+  }
+}
+
+async function initFirestore(){
+  mostrarSpinner('Cargando datos...');
+  try{
+    await Promise.all([cargarDestinos(), cargarMovilidadMes(), cargarFSMes(), cargarTotalesGenerales()]);
+  }catch(e){
+    console.error(e);
+    toast('Error cargando datos','error');
+  }
+  renderDestinos();
+  actualizarSelectDestinos();
+  renderMovilidad();
+  renderFS();
+  ocultarSpinner();
+}
+
+// Carga el histórico completo de una colección, una sola vez, cacheado en memoria.
+async function asegurarHistorico(coleccion){
+  if(coleccion==='movilidad'){
+    if(movHistorico!==null) return movHistorico;
+    mostrarSpinner('Cargando histórico...');
+    try{
+      const snap = await getDocs(collection(db,'movilidad'));
+      movHistorico = snap.docs.map(d=>({id:d.id,...d.data()}));
+      movHistorico.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    }catch(e){
+      console.error(e); toast('Error cargando histórico','error'); movHistorico=[];
+    }
+    ocultarSpinner();
+    return movHistorico;
+  } else {
+    if(fsHistorico!==null) return fsHistorico;
+    mostrarSpinner('Cargando histórico...');
+    try{
+      const snap = await getDocs(collection(db,'finesdesemana'));
+      fsHistorico = snap.docs.map(d=>({id:d.id,...d.data()}));
+      fsHistorico.sort((a,b)=>(b.ts||0)-(a.ts||0));
+    }catch(e){
+      console.error(e); toast('Error cargando histórico','error'); fsHistorico=[];
+    }
+    ocultarSpinner();
+    return fsHistorico;
+  }
+}
+
+window.cambiarVistaMov = async function(v){
+  window.vistaMov = v;
+  if(v==='historico'){ await asegurarHistorico('movilidad'); }
+  renderMovilidad();
+};
+window.cambiarVistaFS = async function(v){
+  window.vistaFS = v;
+  if(v==='historico'){ await asegurarHistorico('finesdesemana'); }
+  renderFS();
+};
 
 // ── MOVILIDAD ──────────────────────────────────────────
 
@@ -504,7 +598,6 @@ window.renderDestinos=function(){
       <td>${esAdmin?`<button onclick="eliminarDestino(${i})" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:18px;padding:2px 6px;line-height:1;">✕</button>`:''}</td>
     </tr>`;
   }).join('')||'<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin destinos</td></tr>';
-  // Resumen en el subtítulo de la card (visible sin abrir)
   const sub=document.getElementById('destinosCardSub');
   if(sub){
     sub.textContent = destinos.length>0
@@ -514,7 +607,6 @@ window.renderDestinos=function(){
   actualizarSelectDestinos();
 };
 
-// Toggle para abrir/cerrar la card de destinos
 window.toggleDestinosCard=function(){
   const card=document.getElementById('seccionDestinos');
   if(card) card.classList.toggle('open');
@@ -570,11 +662,20 @@ window.guardarMovilidad=async function(){
   const total=km*precioKm;
   const obs=document.getElementById('movObsReg').value.trim();
   if(!fecha||km<=0){ toast('Seleccioná fecha y un destino con km cargados','error'); return; }
-  const periodoMov=fecha.substring(0,7); await addDoc(collection(db,'movilidad'),{empleado,fecha,periodo:periodoMov,destino,km,precioKm,monto:total,total,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  const periodoMov=fecha.substring(0,7);
+  const nuevo={empleado,fecha,periodo:periodoMov,destino,km,precioKm,monto:total,total,obs,creadoPor:currentUser.nombre,ts:Date.now()};
+  const ref=await addDoc(collection(db,'movilidad'),nuevo);
+  nuevo.id=ref.id;
+  // Si el registro es del mes actual, lo sumamos localmente (sin re-leer la colección)
+  if(periodoMov===periodoActual()){ allMovilidad.unshift(nuevo); }
+  // Invalidamos el caché de histórico: si el usuario lo vuelve a abrir, se recarga con este nuevo dato
+  movHistorico = null;
+  await cargarTotalesGenerales();
   document.getElementById('movFecha').value='';
   document.getElementById('movKm').value='';
   document.getElementById('movTotal').value='';
   document.getElementById('movObsReg').value='';
+  renderMovilidad();
   toast('Movilidad guardada ✓','success');
 };
 
@@ -584,15 +685,8 @@ window.renderMovilidad=function(){
   const fD=document.getElementById('filtroMovDesde')?.value||'';
   const fH=document.getElementById('filtroMovHasta')?.value||'';
   const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
-  // Vista actual: 'mes' (solo mes actual) o 'historico' (todos)
   const vista = window.vistaMov || 'mes';
-  // Base: si vista es 'mes', solo registros del mes actual; si es 'historico', todos
-  let base = (vista==='historico') ? allMovilidad : allMovilidad.filter(r=>{
-    if(!r.fecha) return false;
-    const d=new Date(r.fecha+'T00:00:00');
-    return d.getMonth()===mes && d.getFullYear()===anio;
-  });
-  // Aplica filtros del usuario encima de la base
+  const base = (vista==='historico') ? (movHistorico||[]) : allMovilidad;
   let fil=base.filter(r=>{
     if(fEmp&&r.empleado!==fEmp) return false;
     if(fDest&&r.destino!==fDest) return false;
@@ -600,16 +694,11 @@ window.renderMovilidad=function(){
     if(fH&&r.fecha>fH) return false;
     return true;
   });
-  // Stats del mes actual (siempre del mes, sin importar la vista)
-  const delMes=allMovilidad.filter(r=>{
-    if(!r.fecha) return false;
-    const d=new Date(r.fecha+'T00:00:00');
-    return d.getMonth()===mes&&d.getFullYear()===anio;
-  });
+  // Stats del mes actual: siempre vienen de allMovilidad (ya filtrado por período en la query)
+  const delMes=allMovilidad;
   document.getElementById('movRegMes').textContent=delMes.length;
   document.getElementById('movTotalMes').textContent=fmtMoney(delMes.reduce((s,r)=>s+Number(r.total||0),0));
   document.getElementById('movKmMes').textContent=delMes.reduce((s,r)=>s+Number(r.km||0),0)+' km';
-  document.getElementById('movTotalGral').textContent=fmtMoney(allMovilidad.reduce((s,r)=>s+Number(r.total||0),0));
   const esAdmin=currentUser?.rol==='admin';
   document.getElementById('tablaMov').innerHTML=fil.map(r=>{
     const puedeEliminar = esAdmin || (r.creadoPor===currentUser?.nombre);
@@ -627,33 +716,41 @@ window.renderMovilidad=function(){
   const totKm=fil.reduce((s,r)=>s+Number(r.km||0),0);
   const totMonto=fil.reduce((s,r)=>s+Number(r.total||0),0);
   document.getElementById('resumenMov').innerHTML=`<span>📄 ${fil.length} viajes</span><span style="color:#d97706">Km: ${totKm}</span><span style="color:#16a34a">Total: ${fmtMoney(totMonto)}</span>`;
-  // Subtítulo dinámico de la card (visible sin abrir)
   const sub=document.getElementById('registrosMovSub');
   if(sub){
     const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes];
     if(vista==='historico'){
-      sub.textContent = `${allMovilidad.length} registros históricos · tocá para ver`;
+      sub.textContent = movHistorico ? `${movHistorico.length} registros históricos · tocá para ver` : `Cargando histórico...`;
     } else {
       sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
     }
   }
-  // Resumen por empleado: SOLO mes actual (para histórico completo está la vista "Histórico" arriba)
   const mapa={};
   delMes.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={viajes:0,km:0,total:0};mapa[r.empleado].viajes++;mapa[r.empleado].km+=Number(r.km||0);mapa[r.empleado].total+=Number(r.total||0);});
   document.getElementById('tablaMovResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.viajes}</td><td>${d.km} km</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
 window.eliminarMov=async function(id){
-  const reg=allMovilidad.find(r=>r.id===id);
+  const reg=allMovilidad.find(r=>r.id===id) || (movHistorico&&movHistorico.find(r=>r.id===id));
   const esAdmin=currentUser?.rol==='admin';
   if(reg && !esAdmin && reg.creadoPor!==currentUser?.nombre){ toast('Solo podés eliminar tus propios registros','error'); return; }
-  if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'movilidad',id));toast('Eliminado','error');};
+  if(!confirm('¿Eliminar?'))return;
+  await deleteDoc(doc(db,'movilidad',id));
+  allMovilidad = allMovilidad.filter(r=>r.id!==id);
+  if(movHistorico) movHistorico = movHistorico.filter(r=>r.id!==id);
+  await cargarTotalesGenerales();
+  renderMovilidad();
+  toast('Eliminado','error');
+};
 window.limpiarFiltrosMov=function(){['filtroMovEmpleado','filtroMovDestino','filtroMovDesde','filtroMovHasta'].forEach(id=>document.getElementById(id).value='');renderMovilidad();};
-window.exportarMovExcel=function(ev){
+window.exportarMovExcel=async function(ev){
   if(ev){ ev.stopPropagation(); }
+  mostrarSpinner('Preparando Excel...');
+  const datos = await asegurarHistorico('movilidad');
+  ocultarSpinner();
   const wb=XLSX.utils.book_new();
   const data=[['Empleado','Fecha','Destino','Km','Precio/Km','Total','Observaciones','Cargado por']];
-  allMovilidad.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',r.destino||'',Number(r.km||0),Number(r.precioKm||0),Number(r.total||0),r.obs||'',r.creadoPor||'']));
+  datos.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',r.destino||'',Number(r.km||0),Number(r.precioKm||0),Number(r.total||0),r.obs||'',r.creadoPor||'']));
   const ws=XLSX.utils.aoa_to_sheet(data);
   ws['!autofilter']={ref:'A1:H1'};
   ws['!cols']=[{wch:14},{wch:12},{wch:14},{wch:8},{wch:12},{wch:12},{wch:20},{wch:14}];
@@ -670,10 +767,17 @@ window.guardarFS=async function(){
   const monto=parseFloat(document.getElementById('fsMonto').value)||0;
   const obs=document.getElementById('fsObs').value.trim();
   if(!fecha||monto<=0){ toast('Completá fecha y monto','error'); return; }
-  const periodoFS=fecha.substring(0,7); await addDoc(collection(db,'finesdesemana'),{empleado,fecha,periodo:periodoFS,monto,obs,creadoPor:currentUser.nombre,ts:Date.now()});
+  const periodoFS=fecha.substring(0,7);
+  const nuevo={empleado,fecha,periodo:periodoFS,monto,obs,creadoPor:currentUser.nombre,ts:Date.now()};
+  const ref=await addDoc(collection(db,'finesdesemana'),nuevo);
+  nuevo.id=ref.id;
+  if(periodoFS===periodoActual()){ allFS.unshift(nuevo); }
+  fsHistorico = null;
+  await cargarTotalesGenerales();
   document.getElementById('fsFecha').value='';
   document.getElementById('fsMonto').value='';
   document.getElementById('fsObs').value='';
+  renderFS();
   toast('Fin de semana guardado ✓','success');
 };
 
@@ -682,25 +786,17 @@ window.renderFS=function(){
   const fD=document.getElementById('filtroFSDesde')?.value||'';
   const fH=document.getElementById('filtroFSHasta')?.value||'';
   const hoy=new Date(); const mes=hoy.getMonth(); const anio=hoy.getFullYear();
-  // Vista actual: 'mes' (solo mes actual) o 'historico' (todos)
   const vista = window.vistaFS || 'mes';
-  // Base según vista
-  let base = (vista==='historico') ? allFS : allFS.filter(r=>{
-    if(!r.fecha) return false;
-    const d=new Date(r.fecha+'T00:00:00');
-    return d.getMonth()===mes && d.getFullYear()===anio;
-  });
-  // Aplica filtros del usuario encima de la base
+  const base = (vista==='historico') ? (fsHistorico||[]) : allFS;
   let fil=base.filter(r=>{
     if(fEmp&&r.empleado!==fEmp) return false;
     if(fD&&r.fecha<fD) return false;
     if(fH&&r.fecha>fH) return false;
     return true;
   });
-  const delMes=allFS.filter(r=>{if(!r.fecha)return false;const d=new Date(r.fecha+'T00:00:00');return d.getMonth()===mes&&d.getFullYear()===anio;});
+  const delMes=allFS;
   document.getElementById('fsRegMes').textContent=delMes.length;
   document.getElementById('fsTotalMes').textContent=fmtMoney(delMes.reduce((s,r)=>s+Number(r.monto||0),0));
-  document.getElementById('fsTotalGral').textContent=fmtMoney(allFS.reduce((s,r)=>s+Number(r.monto||0),0));
   const esAdmin=currentUser?.rol==='admin';
   document.getElementById('tablaFS').innerHTML=fil.map(r=>{
     const puedeEliminar = esAdmin || (r.creadoPor===currentUser?.nombre);
@@ -715,33 +811,41 @@ window.renderFS=function(){
   }).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
   const tot=fil.reduce((s,r)=>s+Number(r.monto||0),0);
   document.getElementById('resumenFS').innerHTML=`<span>📄 ${fil.length} registros</span><span style="color:#16a34a">Total: ${fmtMoney(tot)}</span>`;
-  // Subtítulo dinámico de la card (visible sin abrir)
   const sub=document.getElementById('registrosFsSub');
   if(sub){
     const nombreMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][mes];
     if(vista==='historico'){
-      sub.textContent = `${allFS.length} registros históricos · tocá para ver`;
+      sub.textContent = fsHistorico ? `${fsHistorico.length} registros históricos · tocá para ver` : `Cargando histórico...`;
     } else {
       sub.textContent = `${delMes.length} registro${delMes.length===1?'':'s'} en ${nombreMes} · tocá para ver`;
     }
   }
-  // Resumen por empleado: SOLO mes actual
   const mapa={};
   delMes.forEach(r=>{if(!mapa[r.empleado])mapa[r.empleado]={cant:0,total:0};mapa[r.empleado].cant++;mapa[r.empleado].total+=Number(r.monto||0);});
   document.getElementById('tablaFSResumen').innerHTML=Object.entries(mapa).sort((a,b)=>b[1].total-a[1].total).map(([emp,d])=>`<tr><td><strong>${emp}</strong></td><td>${d.cant}</td><td style="color:#16a34a">${fmtMoney(d.total)}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos este mes</td></tr>';
 };
 
 window.eliminarFS=async function(id){
-  const reg=allFS.find(r=>r.id===id);
+  const reg=allFS.find(r=>r.id===id) || (fsHistorico&&fsHistorico.find(r=>r.id===id));
   const esAdmin=currentUser?.rol==='admin';
   if(reg && !esAdmin && reg.creadoPor!==currentUser?.nombre){ toast('Solo podés eliminar tus propios registros','error'); return; }
-  if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'finesdesemana',id));toast('Eliminado','error');};
+  if(!confirm('¿Eliminar?'))return;
+  await deleteDoc(doc(db,'finesdesemana',id));
+  allFS = allFS.filter(r=>r.id!==id);
+  if(fsHistorico) fsHistorico = fsHistorico.filter(r=>r.id!==id);
+  await cargarTotalesGenerales();
+  renderFS();
+  toast('Eliminado','error');
+};
 window.limpiarFiltrosFS=function(){['filtroFSEmpleado','filtroFSDesde','filtroFSHasta'].forEach(id=>document.getElementById(id).value='');renderFS();};
-window.exportarFSExcel=function(ev){
+window.exportarFSExcel=async function(ev){
   if(ev){ ev.stopPropagation(); }
+  mostrarSpinner('Preparando Excel...');
+  const datos = await asegurarHistorico('finesdesemana');
+  ocultarSpinner();
   const wb=XLSX.utils.book_new();
   const data=[['Empleado','Fecha','Monto','Observaciones','Cargado por']];
-  allFS.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',Number(r.monto||0),r.obs||'',r.creadoPor||'']));
+  datos.forEach(r=>data.push([r.empleado,r.fecha?r.fecha.split('-').reverse().join('/'):'',Number(r.monto||0),r.obs||'',r.creadoPor||'']));
   const ws=XLSX.utils.aoa_to_sheet(data);
   ws['!autofilter']={ref:'A1:E1'};
   ws['!cols']=[{wch:14},{wch:12},{wch:12},{wch:20},{wch:14}];
