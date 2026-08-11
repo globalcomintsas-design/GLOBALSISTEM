@@ -110,6 +110,19 @@ tr:hover td{background:#fafbff;}
 .pagin-bar button{background:#eff6ff;color:#1e3a8a;border:1.5px solid #bfdbfe;padding:6px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
 .pagin-bar button:disabled{opacity:.4;cursor:not-allowed;}
 .pagin-bar span{font-size:13px;font-weight:700;color:#1e3a8a;}
+.conc-drop{border:2px dashed #bfdbfe;border-radius:12px;padding:24px;text-align:center;background:#f8fafc;cursor:pointer;transition:all .15s;}
+.conc-drop:hover{background:#eff6ff;border-color:#1e3a8a;}
+.conc-drop.dragover{background:#eff6ff;border-color:#1e3a8a;}
+.conc-row-ok{background:#f0fdf4;}
+.conc-row-falta{background:#fff7ed;}
+.conc-tag{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;}
+.conc-tag-impuesto{background:#fee2e2;color:#991b1b;}
+.conc-tag-comision{background:#fef3c7;color:#92400e;}
+.conc-tag-iva{background:#e0e7ff;color:#3730a3;}
+.conc-tag-percepcion{background:#fae8ff;color:#86198f;}
+.conc-tag-transferencia{background:#dbeafe;color:#1e40af;}
+.conc-tag-cheque{background:#dcfce7;color:#166534;}
+.conc-tag-otro{background:#f1f5f9;color:#475569;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -145,6 +158,7 @@ tr:hover td{background:#fafbff;}
     <div class="tab" onclick="showTab('cuentacorriente',this)">📋 Cta. Corriente</div>
     <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
     <div class="tab" onclick="showTab('reportes',this)">📊 Reportes</div>
+    <div class="tab" onclick="showTab('conciliacion',this)">🏦 Conciliación</div>
     <div class="tab" onclick="showTab('usuarios',this)" id="tabUsuarios" style="display:none">👥 Usuarios</div>
   </div>
 
@@ -403,6 +417,77 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
+    <!-- CONCILIACION BANCARIA -->
+    <div class="page" id="page-conciliacion">
+      <div class="section">
+        <div class="section-title">🏦 Conciliación Bancaria Mensual</div>
+        <p style="font-size:12px;color:#666;margin-bottom:12px;">
+          Subí el PDF del resumen del banco (o pegá el texto de la sección "Movimientos en cuentas") y el sistema va a
+          comparar cada línea del banco contra lo que ya tenés cargado en Caja. Todo se procesa en tu navegador:
+          no se hace ninguna lectura extra a la base de datos, solo se escribe lo que confirmes cargar.
+        </p>
+        <div class="conc-drop" id="concDropZone" onclick="document.getElementById('concFileInput').click()">
+          <div style="font-size:28px;margin-bottom:6px;">📄</div>
+          <div style="font-weight:600;color:#1e3a8a;">Hacé clic o arrastrá acá el PDF del resumen</div>
+          <div style="font-size:11px;color:#94a3b8;margin-top:4px;">o pegá el texto manualmente abajo</div>
+          <input type="file" id="concFileInput" accept="application/pdf" style="display:none" onchange="onConcFileSelected(event)" />
+        </div>
+        <div class="field full" style="margin-top:12px;">
+          <label>Texto del resumen (pegado manualmente, alternativa al PDF)</label>
+          <textarea id="concTextarea" placeholder="Pegá acá el bloque 'Movimientos en cuentas' del resumen del banco..." style="min-height:120px;font-family:monospace;font-size:11px;"></textarea>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button class="btn btn-primary" onclick="procesarTextoConciliacion()">🔍 Procesar</button>
+          <button class="btn btn-outline" onclick="limpiarConciliacion()">✕ Limpiar</button>
+        </div>
+        <div id="concEstadoCarga" style="font-size:12px;color:#1e3a8a;margin-top:8px;"></div>
+      </div>
+
+      <div class="section" id="concResultadoSection" style="display:none">
+        <div class="cards">
+          <div class="card"><div class="card-label">Líneas del banco</div><div class="card-value" id="concTotalLineas">0</div></div>
+          <div class="card"><div class="card-label">Ya en Caja</div><div class="card-value green" id="concEnCaja">0</div></div>
+          <div class="card"><div class="card-label">Faltan cargar</div><div class="card-value orange" id="concFaltan">0</div></div>
+          <div class="card"><div class="card-label">Monto a cargar</div><div class="card-value red" id="concMontoFaltante">$ 0</div></div>
+        </div>
+        <div class="section-title">
+          Detalle de la conciliación
+          <button class="btn btn-success btn-sm" id="btnCargarFaltantes" onclick="cargarFaltantesConciliacion()">✅ Cargar faltantes en Caja</button>
+        </div>
+        <div class="filtros">
+          <div><label>Ver</label>
+            <select id="concFiltroEstado" onchange="renderTablaConciliacion()">
+              <option value="">Todos</option>
+              <option value="falta">Solo faltantes</option>
+              <option value="ok">Solo ya cargados</option>
+            </select>
+          </div>
+          <div><label>Categoría</label>
+            <select id="concFiltroCategoria" onchange="renderTablaConciliacion()">
+              <option value="">Todas</option>
+              <option value="impuesto">Impuesto Ley 25.413</option>
+              <option value="comision">Comisión</option>
+              <option value="iva">IVA</option>
+              <option value="percepcion">Percepción</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="cheque">Cheque</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th><input type="checkbox" id="concCheckAll" onchange="toggleConcCheckAll()" /></th><th>Fecha</th><th>Concepto</th><th>Categoría</th><th>Importe</th><th>Estado</th></tr></thead>
+            <tbody id="tablaConciliacion"></tbody>
+          </table>
+        </div>
+        <div class="section" style="margin-top:14px;background:#f8fafc;">
+          <div class="section-title" style="margin-bottom:6px;">Comparación de saldo</div>
+          <div id="concComparacionSaldo" style="font-size:13px;"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- USUARIOS -->
     <div class="page" id="page-usuarios">
       <div class="section">
@@ -513,6 +598,8 @@ tr:hover td{background:#fafbff;}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
@@ -556,6 +643,9 @@ let alicuotaImpBancario = 0.6; // % - editable por admin, se guarda en Firestore
 let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html
 let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobrado")
 let opsPorFactura = {};       // { "0001-00000123": true } - facturas asignadas a operaciones
+
+// ── Conciliación bancaria (todo en memoria, no genera lecturas extra a Firestore) ──
+let concLineasBanco = [];     // lineas parseadas del resumen del banco, ya clasificadas y comparadas
 
 function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -682,6 +772,8 @@ function initFirestore() {
     allMovimientos.sort((a,b)=>(b.ts||0)-(a.ts||0));
     procesarVencimientosCheques();
     renderSaldos(); renderFiltroMesMovimientos(); filtrar(); renderCC(); renderReportes(); renderCheques();
+    // Si ya había una conciliación procesada en pantalla, la recalcula contra los movimientos actuales
+    if (concLineasBanco.length) compararConciliacionConCaja();
     ocultarSpinner();
   });
   onSnapshot(collection(db,'vencimientos'), snap => {
@@ -902,6 +994,7 @@ async function crearMovimientoImpuesto(idOriginal, data, monto){
 
 async function sincronizarImpuestoBancario(id, data){
   if (data.esImpuestoBancario) return; // nunca se autogenera impuesto sobre un impuesto
+  if (data.origenConciliacion) return; // los movimientos importados por conciliación traen su propio impuesto real, no se autogenera otro
   const aplica = data.cuenta === 'Banco' || (data.cuenta === 'Cheque' && data.estadoCheque === 'Acreditado');
   const monto = calcularImpuestoBancario(data.importe);
 
@@ -984,6 +1077,7 @@ window.filtrar = function() {
   document.getElementById('tablaMovimientos').innerHTML=fPagina.map(m=>{
     let extra='';
     if(m.esImpuestoBancario){extra+=`<br><span style="font-size:10px;color:#dc2626;font-weight:600">🏦 Imp. ${alicuotaImpBancario}% autom.</span>`;}
+    if(m.origenConciliacion){extra+=`<br><span style="font-size:10px;color:#0284c7;font-weight:600">🏦 Conciliación bancaria</span>`;}
     if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra+=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
     const isDolar=m.cuenta==='Dólares';
     const montoStr=isDolar?`<span class="dolar-badge">${fmtUSD(m.importe)}</span>`:`<strong>${fmtMoney(m.importe)}</strong>`;
@@ -1419,6 +1513,303 @@ window.exportarReporteExcel=function(){
 };
 window.exportarExcel=function(){document.getElementById('repDesde').value='';document.getElementById('repHasta').value='';document.getElementById('repTipo').value='todos';exportarReporteExcel();};
 window.exportarPDF=function(){window.print();};
+
+// ══════════════════════════════════════════════════════════════════════════
+// ── CONCILIACIÓN BANCARIA ────────────────────────────────────────────────
+// Todo lo que sigue corre 100% en el navegador: parsear el PDF/texto y
+// compararlo contra `allMovimientos` (que ya está en memoria por el
+// onSnapshot de arriba) NO genera ninguna lectura extra a Firestore.
+// La única escritura ocurre cuando el usuario aprieta "Cargar faltantes",
+// y ahí se hace 1 addDoc por cada línea que falte, ni una de más.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Palabras clave para clasificar cada línea del resumen. Se evalúan en orden;
+// la primera que matchea gana.
+const CONC_REGLAS = [
+  { categoria:'impuesto',      test:/IMP\.?\s*LEY\s*25413|LEY\s*NRO\.?\s*25\.?413/i },
+  { categoria:'comision',      test:/COMISION|COMI\s+TRANSFERENCIA/i },
+  { categoria:'iva',           test:/IVA\s+TASA\s+GENERAL/i },
+  { categoria:'percepcion',    test:/PERCEPCION\s+IVA/i },
+  { categoria:'mantenimiento', test:/COM\s+MANT|MANT\s+MENS/i },
+  { categoria:'cheque',        test:/DEPOSITO\s+CHEQUE|CHEQUE\s+48HS|CHEQUE\s+BF/i },
+  { categoria:'transferencia', test:/TRANSFERENCIA|TRANSF\.|TR\.NE|TRANSFERENCIA\s+INMEDIATA/i },
+  { categoria:'debito',        test:/DEBITO\s+POR\s+PAGO|DEBITO\s+DIRECTO|PAGOS\s+AFIP|PAGO\s+CON\s+VISA|OPERACION\s+EN\s+EFECTIVO/i },
+];
+function clasificarConceptoBanco(concepto){
+  const c = (concepto||'').toUpperCase();
+  for(const r of CONC_REGLAS){ if(r.test.test(c)) return r.categoria; }
+  return 'otro';
+}
+window.clasificarConceptoBanco = clasificarConceptoBanco;
+
+const CONC_TAG_LABEL = {
+  impuesto:'Impuesto 25.413', comision:'Comisión', iva:'IVA', percepcion:'Percepción',
+  mantenimiento:'Mantenimiento', cheque:'Cheque', transferencia:'Transferencia',
+  debito:'Débito/Pago', otro:'Otro'
+};
+const CONC_TAG_CLASS = {
+  impuesto:'conc-tag-impuesto', comision:'conc-tag-comision', iva:'conc-tag-iva',
+  percepcion:'conc-tag-percepcion', mantenimiento:'conc-tag-comision', cheque:'conc-tag-cheque',
+  transferencia:'conc-tag-transferencia', debito:'conc-tag-otro', otro:'conc-tag-otro'
+};
+
+// Parsea el bloque de texto "Movimientos en cuentas" del resumen del banco.
+// Cada línea real tiene: FECHA (dd/mm) ... CONCEPTO ... IMPORTE(con signo si es débito) SALDO
+// Usamos que el IMPORTE es siempre el penúltimo número de la línea y el SALDO el último,
+// ambos en formato argentino (punto miles, coma decimal).
+function parsearTextoBanco(texto){
+  const lineas = texto.split('\n');
+  const numeroRegex = /-?\d{1,3}(?:\.\d{3})*,\d{2}/g;
+  const fechaRegex = /^(\d{2}\/\d{2})\b/;
+  const resultado = [];
+  let anioActual = new Date().getFullYear(); // se ajusta si el texto trae AAAA en algún lado
+  const anioMatch = texto.match(/20\d{2}/);
+  if(anioMatch) anioActual = Number(anioMatch[0]);
+
+  for(let linea of lineas){
+    linea = linea.trim();
+    if(!linea) continue;
+    const fechaMatch = linea.match(fechaRegex);
+    if(!fechaMatch) continue; // no es una línea de movimiento
+
+    const numeros = linea.match(numeroRegex);
+    if(!numeros || numeros.length < 1) continue;
+    if(/SALDO\s+ANTERIOR|SALDO\s+AL|TOTAL\s+MOVIMIENTOS|SIN\s+MOVIMIENTOS/i.test(linea)) continue;
+
+    // Concepto = todo lo que hay entre la fecha y el primer número encontrado
+    const idxPrimerNumero = linea.search(numeroRegex);
+    let concepto = linea.slice(fechaMatch[0].length, idxPrimerNumero).trim();
+    concepto = concepto.replace(/^(D\s*\d{0,3}|\d{2,3})\s+/,'').trim(); // saca códigos de origen tipo "D 500", "733", "246"
+
+    let importe;
+    if(numeros.length >= 2){
+      importe = parsearMontoAR(numeros[numeros.length-2]);
+    } else {
+      importe = parsearMontoAR(numeros[0]);
+    }
+    if(isNaN(importe)) continue;
+
+    const [dd,mm] = fechaMatch[1].split('/');
+    const fechaArg = `${dd}/${mm}/${anioActual}`;
+
+    resultado.push({
+      fecha: fechaArg,
+      fechaOrdenable: `${anioActual}-${mm}-${dd}`,
+      concepto,
+      importe,
+      categoria: clasificarConceptoBanco(concepto),
+      lineaOriginal: linea
+    });
+  }
+  return resultado;
+}
+window.parsearTextoBanco = parsearTextoBanco;
+
+async function extraerTextoDePDF(file){
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  let textoCompleto = '';
+  for(let i=1; i<=pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    // Agrupa por posición Y (renglón) para reconstruir el orden de líneas lo mejor posible
+    const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: Math.round(it.transform[5]) }));
+    items.sort((a,b) => b.y - a.y || a.x - b.x);
+    let filaActual = null, lineaActual = [];
+    for(const it of items){
+      if(filaActual === null || Math.abs(it.y - filaActual) > 3){
+        if(lineaActual.length) textoCompleto += lineaActual.join(' ') + '\n';
+        lineaActual = [it.str];
+        filaActual = it.y;
+      } else {
+        lineaActual.push(it.str);
+      }
+    }
+    if(lineaActual.length) textoCompleto += lineaActual.join(' ') + '\n';
+  }
+  return textoCompleto;
+}
+
+window.onConcFileSelected = async function(ev){
+  const file = ev.target.files[0];
+  if(!file) return;
+  await procesarArchivoConciliacion(file);
+};
+
+// Drag & drop del PDF sobre el recuadro
+const concDropZoneInit = () => {
+  const zona = document.getElementById('concDropZone');
+  if(!zona) return;
+  zona.addEventListener('dragover', e => { e.preventDefault(); zona.classList.add('dragover'); });
+  zona.addEventListener('dragleave', () => zona.classList.remove('dragover'));
+  zona.addEventListener('drop', async e => {
+    e.preventDefault(); zona.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if(file) await procesarArchivoConciliacion(file);
+  });
+};
+setTimeout(concDropZoneInit, 0);
+
+async function procesarArchivoConciliacion(file){
+  const estado = document.getElementById('concEstadoCarga');
+  try{
+    estado.textContent = '⏳ Leyendo el PDF...';
+    const texto = await extraerTextoDePDF(file);
+    document.getElementById('concTextarea').value = texto;
+    estado.textContent = '✓ PDF leído, procesando líneas...';
+    procesarLineasBanco(texto);
+  }catch(e){
+    console.error(e);
+    estado.textContent = '⚠️ No se pudo leer el PDF automáticamente. Copiá y pegá el texto manualmente en el cuadro de abajo.';
+  }
+}
+
+window.procesarTextoConciliacion = function(){
+  const texto = document.getElementById('concTextarea').value;
+  if(!texto.trim()){ toast('Pegá el texto del resumen o subí el PDF primero','error'); return; }
+  procesarLineasBanco(texto);
+};
+
+function procesarLineasBanco(texto){
+  const lineas = parsearTextoBanco(texto);
+  if(!lineas.length){
+    document.getElementById('concEstadoCarga').textContent = '⚠️ No se encontraron movimientos reconocibles en el texto. Revisá que sea el bloque "Movimientos en cuentas".';
+    document.getElementById('concResultadoSection').style.display='none';
+    return;
+  }
+  concLineasBanco = lineas;
+  compararConciliacionConCaja();
+  document.getElementById('concEstadoCarga').textContent = `✓ ${lineas.length} movimientos detectados en el resumen.`;
+  document.getElementById('concResultadoSection').style.display='block';
+}
+
+// Compara cada línea del banco contra allMovimientos (ya en memoria, 0 lecturas nuevas).
+// Match por fecha + importe absoluto con tolerancia de $1.
+function compararConciliacionConCaja(){
+  // Movimientos de Caja candidatos a matchear: los de cuenta Banco, más los que ya
+  // representan cheques acreditados a Banco, más los impuestos auto-generados.
+  const candidatosCaja = allMovimientos.filter(m => m.cuenta==='Banco' || m.esImpuestoBancario);
+
+  for(const linea of concLineasBanco){
+    const match = candidatosCaja.find(m => {
+      const mismaFecha = m.fecha === linea.fecha;
+      const importeCaja = m.tipo==='Egreso' ? -Math.abs(Number(m.importe)) : Math.abs(Number(m.importe));
+      return mismaFecha && Math.abs(importeCaja - linea.importe) < 1;
+    });
+    linea.enCaja = !!match;
+    linea.idCaja = match ? match.id : null;
+  }
+  renderTablaConciliacion();
+  renderComparacionSaldo();
+}
+
+window.renderTablaConciliacion = function(){
+  const filtroEstado = document.getElementById('concFiltroEstado').value;
+  const filtroCategoria = document.getElementById('concFiltroCategoria').value;
+  let filtradas = concLineasBanco.filter(l=>{
+    if(filtroEstado==='falta' && l.enCaja) return false;
+    if(filtroEstado==='ok' && !l.enCaja) return false;
+    if(filtroCategoria && l.categoria!==filtroCategoria) return false;
+    return true;
+  });
+
+  document.getElementById('tablaConciliacion').innerHTML = filtradas.map((l,idx)=>{
+    const realIdx = concLineasBanco.indexOf(l);
+    return `<tr class="${l.enCaja?'conc-row-ok':'conc-row-falta'}">
+      <td>${l.enCaja?'':`<input type="checkbox" class="conc-check" data-idx="${realIdx}" checked />`}</td>
+      <td>${l.fecha}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.concepto}">${l.concepto}</td>
+      <td><span class="conc-tag ${CONC_TAG_CLASS[l.categoria]}">${CONC_TAG_LABEL[l.categoria]}</span></td>
+      <td>${fmtMoney(l.importe)}</td>
+      <td>${l.enCaja ? '<span class="badge badge-pagado">✓ En Caja</span>' : '<span class="badge badge-pendiente">Falta cargar</span>'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#888;padding:20px">Sin líneas para mostrar</td></tr>';
+
+  const total = concLineasBanco.length;
+  const enCaja = concLineasBanco.filter(l=>l.enCaja).length;
+  const faltan = total - enCaja;
+  const montoFaltante = concLineasBanco.filter(l=>!l.enCaja).reduce((s,l)=>s+Math.abs(l.importe),0);
+  document.getElementById('concTotalLineas').textContent = total;
+  document.getElementById('concEnCaja').textContent = enCaja;
+  document.getElementById('concFaltan').textContent = faltan;
+  document.getElementById('concMontoFaltante').textContent = fmtMoney(montoFaltante);
+};
+
+window.toggleConcCheckAll = function(){
+  const master = document.getElementById('concCheckAll').checked;
+  document.querySelectorAll('.conc-check').forEach(cb => cb.checked = master);
+};
+
+function renderComparacionSaldo(){
+  if(!concLineasBanco.length){ document.getElementById('concComparacionSaldo').innerHTML=''; return; }
+  // Saldo Banco actual en Caja (según renderSaldos: incluye cuenta Banco + cheques Acreditados)
+  let saldoCajaBanco = 0;
+  for(const m of allMovimientos){
+    const v = Number(m.importe)||0;
+    if(m.cuenta==='Banco') saldoCajaBanco += m.tipo==='Ingreso' ? v : -v;
+    if(m.cuenta==='Cheque' && m.estadoCheque==='Acreditado') saldoCajaBanco += m.tipo==='Ingreso' ? v : -v;
+  }
+  const montoFaltante = concLineasBanco.filter(l=>!l.enCaja).reduce((s,l)=>s+l.importe,0);
+  const saldoProyectado = saldoCajaBanco + montoFaltante;
+  document.getElementById('concComparacionSaldo').innerHTML = `
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div><span style="color:#666">Saldo Banco actual en Caja:</span> <strong>${fmtMoney(saldoCajaBanco)}</strong></div>
+      <div><span style="color:#666">Si cargás lo que falta, quedaría en:</span> <strong style="color:#1e3a8a">${fmtMoney(saldoProyectado)}</strong></div>
+    </div>
+    <div style="font-size:11px;color:#94a3b8;margin-top:6px;">Comparalo contra el "SALDO AL" del resumen del banco para confirmar que cuadra.</div>
+  `;
+}
+
+window.limpiarConciliacion = function(){
+  concLineasBanco = [];
+  document.getElementById('concTextarea').value='';
+  document.getElementById('concFileInput').value='';
+  document.getElementById('concEstadoCarga').textContent='';
+  document.getElementById('concResultadoSection').style.display='none';
+};
+
+// Carga en Firestore únicamente las líneas tildadas que faltan. No pasa por
+// sincronizarImpuestoBancario (estas líneas son datos reales del banco, ya
+// incluyen su propio impuesto real, no hay que recalcular nada encima).
+window.cargarFaltantesConciliacion = async function(){
+  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
+  const checks = document.querySelectorAll('.conc-check:checked');
+  if(!checks.length){ toast('No hay líneas tildadas para cargar','error'); return; }
+  const btn = document.getElementById('btnCargarFaltantes');
+  btn.disabled = true; btn.textContent = '⏳ Cargando...';
+
+  let cargados = 0;
+  for(const chk of checks){
+    const idx = Number(chk.dataset.idx);
+    const linea = concLineasBanco[idx];
+    if(!linea || linea.enCaja) continue;
+
+    const tipo = linea.importe < 0 ? 'Egreso' : 'Ingreso';
+    let clienteLbl = 'Banco (conciliación)';
+    if(linea.categoria==='impuesto') clienteLbl = 'Imp. Déb./Créd. Bancarios';
+    else if(linea.categoria==='comision') clienteLbl = 'Comisión bancaria';
+    else if(linea.categoria==='iva') clienteLbl = 'IVA s/comisión bancaria';
+    else if(linea.categoria==='percepcion') clienteLbl = 'Percepción IVA RG 2408';
+    else if(linea.categoria==='mantenimiento') clienteLbl = 'Mantenimiento cuenta bancaria';
+
+    const data = {
+      tipo, cuenta:'Banco', factura:'', cliente:clienteLbl, detalle:linea.concepto,
+      importe: Math.abs(linea.importe), observaciones:'',
+      fecha: linea.fecha, ts: Date.now(), creadoPor: currentUser.nombre,
+      origenConciliacion: true, categoriaConciliacion: linea.categoria
+    };
+    try{
+      await addDoc(collection(db,'movimientos'), data);
+      linea.enCaja = true;
+      cargados++;
+    }catch(e){ console.error('Error cargando línea de conciliación:', e); }
+  }
+
+  btn.disabled = false; btn.textContent = '✅ Cargar faltantes en Caja';
+  toast(`${cargados} movimiento(s) cargado(s) desde la conciliación ✓`, 'success');
+  renderTablaConciliacion();
+  renderComparacionSaldo();
+};
 
 // USUARIOS
 window.guardarUsuario=async function(){
