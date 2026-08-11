@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc, where }
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc, where, limit }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -316,8 +316,14 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
 // un Ingreso y el sistema intenta vincularlo con Operaciones (pago por factura, pago
 // genérico por despachante, o marcar una mudanza como cobrada). Se muestra en la
 // pestaña Saldos, junto al historial de pagos, para poder auditar qué hizo el sistema.
+//
+// Esta colección crece SOLA con el tiempo (una entrada por cada ingreso cargado en Caja,
+// para siempre), a diferencia de operaciones/mudanzas que están filtradas por año. La
+// tabla que la muestra ya pagina de a 15, así que no hace falta traer el historial
+// completo: se acota a los últimos 300 registros con limit(), para que el listener en
+// vivo nunca crezca sin techo.
 let logVinculaciones = [];
-onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc')), snap => {
+onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc'), limit(300)), snap => {
   logVinculaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderLogVinculaciones();
 });
