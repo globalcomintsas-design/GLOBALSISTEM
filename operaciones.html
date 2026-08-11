@@ -462,15 +462,26 @@
     </div>
 
     <div class="section-card">
-      <h3>⚖️ Saldo por despachante</h3>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
+        <h3 style="margin:0;">⚖️ Saldo por despachante</h3>
+        <div class="periodo-bar" style="margin:0;">
+          <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px;">
+            Mes:
+            <select id="saldos_filtro_mes" onchange="renderSaldos()">
+              <option value="">Todos los meses (histórico)</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="saldos-periodo-nota" style="font-size:11px;color:#94a3b8;margin-bottom:10px;"></div>
       <div class="tabla-wrap">
         <table>
           <thead>
             <tr>
               <th>Despachante</th>
-              <th>Total facturado</th>
-              <th>Total pagado</th>
-              <th>Saldo pendiente</th>
+              <th>Facturado</th>
+              <th>Pagado</th>
+              <th>Saldo</th>
             </tr>
           </thead>
           <tbody id="tbody-saldos">
