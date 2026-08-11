@@ -1421,17 +1421,24 @@ function montoExigible(o){
 window.montoExigible = montoExigible;
 
 // ── PAGOS Y SALDOS POR DESPACHANTE ──
-function calcularSaldoDespachante(nombre){
-  const ops = operaciones.filter(o => o.despachante === nombre);
-  // "facturado" se mantiene igual que siempre: total bruto histórico (neto+IVA de todas las
-  // operaciones, tengan o no factura cargada). Es un dato informativo, no cambia.
+// El parámetro opcional "mes" (formato 'YYYY-MM') permite acotar el cálculo a un solo
+// período: operaciones cuya fecha empiece con ese mes, y pagos cuya fecha empiece con
+// ese mes. Si no se pasa "mes" (o se pasa vacío), se comporta EXACTAMENTE igual que
+// antes: saldo histórico completo, sin filtrar por fecha. Esto es clave para que el
+// resto de las pantallas que llaman calcularSaldoDespachante(nombre) sin segundo
+// argumento (Dashboard, cobertura FIFO, etc.) no cambien su comportamiento.
+function calcularSaldoDespachante(nombre, mes){
+  const ops = operaciones.filter(o => o.despachante === nombre && (!mes || (o.fecha||'').startsWith(mes)));
+  // "facturado" se mantiene igual que siempre: total bruto (neto+IVA de todas las
+  // operaciones del período, tengan o no factura cargada). Es un dato informativo.
   const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
-  // "exigible" es el monto nuevo que se usa para el saldo: neto en operaciones sin factura,
+  // "exigible" es el monto que se usa para el saldo: neto en operaciones sin factura,
   // neto+IVA (bruto) en las que ya tienen N° de factura cargado.
   const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
-  const pagado    = pagos.filter(p => p.despachante === nombre).reduce((a,b) => a + (b.monto||0), 0);
-  // El saldo pendiente ahora se calcula contra lo exigible, NO contra el bruto total.
+  const pagado    = pagos.filter(p => p.despachante === nombre && (!mes || (p.fecha||'').startsWith(mes))).reduce((a,b) => a + (b.monto||0), 0);
+  // El saldo pendiente se calcula contra lo exigible, NO contra el bruto total.
   // Mientras no haya factura: saldo = neto - pagos. Facturada: saldo = neto + iva - pagos.
+  // Con "mes" cargado, tanto lo exigible como los pagos quedan acotados a ese mes.
   return { facturado, exigible, pagado, saldo: exigible - pagado };
 }
 window.calcularSaldoDespachante = calcularSaldoDespachante;
@@ -1466,6 +1473,23 @@ window.eliminarPago = async function(id){
   toast('Pago eliminado');
 };
 
+// ── Selector de mes para la tabla de Saldos ──
+// Se puebla con todos los meses que aparecen en operaciones o pagos, más el mes en
+// curso (por si todavía no hay nada cargado ese mes). Arranca en "Todos los meses"
+// (histórico) y se respeta lo que el usuario elija, igual que los otros filtros de mes.
+function poblarSelectorMesSaldos(){
+  const sel = document.getElementById('saldos_filtro_mes');
+  if(!sel) return;
+  const v = sel.value;
+  const mesesOps   = operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean);
+  const mesesPagos = pagos.map(p => p.fecha?.slice(0,7)).filter(Boolean);
+  const mesActual  = new Date().toISOString().slice(0,7);
+  const meses = [...new Set([...mesesOps, ...mesesPagos, mesActual])].sort().reverse();
+  sel.innerHTML = '<option value="">Todos los meses (histórico)</option>' +
+    meses.map(m => `<option value="${m}">${m}</option>`).join('');
+  sel.value = v;
+}
+
 function renderSaldos(){
   // Select de despachantes
   const sel = document.getElementById('pago_despachante');
@@ -1479,19 +1503,43 @@ function renderSaldos(){
   const fechaEl = document.getElementById('pago_fecha');
   if(fechaEl && !fechaEl.value) fechaEl.value = new Date().toISOString().split('T')[0];
 
+  // Filtro de mes de la tabla de saldos ('' = histórico completo, igual que antes)
+  poblarSelectorMesSaldos();
+  const filtMesSaldos = document.getElementById('saldos_filtro_mes')?.value || '';
+
+  const notaPeriodoEl = document.getElementById('saldos-periodo-nota');
+  if(notaPeriodoEl){
+    notaPeriodoEl.innerHTML = filtMesSaldos
+      ? `📅 Mostrando solo <strong>${filtMesSaldos}</strong> — Facturado, Pagado y Saldo corresponden únicamente a operaciones y pagos de ese mes.`
+      : `📅 Mostrando el <strong>histórico completo</strong> (todas las fechas). Elegí un mes arriba para ver la deuda de un período puntual.`;
+  }
+
   // Tabla de saldos por despachante
   const tbodySaldos = document.getElementById('tbody-saldos');
   if(tbodySaldos){
-    const nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
+    // Si hay un mes filtrado, se listan los despachantes que tuvieron operaciones O
+    // pagos en ese mes (para no perder de vista, por ejemplo, un pago suelto sin
+    // operaciones ese mes). Sin filtro, se mantiene el comportamiento histórico: todos
+    // los despachantes que alguna vez tuvieron operaciones.
+    let nombresConOps;
+    if(filtMesSaldos){
+      const nombresOpsMes  = operaciones.filter(o => (o.fecha||'').startsWith(filtMesSaldos)).map(o => o.despachante);
+      const nombresPagosMes = pagos.filter(p => (p.fecha||'').startsWith(filtMesSaldos)).map(p => p.despachante);
+      nombresConOps = [...new Set([...nombresOpsMes, ...nombresPagosMes].filter(Boolean))].sort();
+    } else {
+      nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
+    }
+
     if(!nombresConOps.length){
-      tbodySaldos.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin operaciones cargadas</td></tr>';
+      tbodySaldos.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">${filtMesSaldos ? 'Sin operaciones ni pagos en ' + filtMesSaldos : 'Sin operaciones cargadas'}</td></tr>`;
     } else {
       tbodySaldos.innerHTML = nombresConOps.map(n => {
-        const { facturado, pagado, saldo } = calcularSaldoDespachante(n);
+        const { facturado, pagado, saldo } = calcularSaldoDespachante(n, filtMesSaldos);
         const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
         const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
-        // Indicador: ¿tiene este despachante operaciones sin factura aún (IVA no exigible)?
-        const opsDelDesp = operaciones.filter(o => o.despachante === n);
+        // Indicador: ¿tiene este despachante operaciones sin factura aún (IVA no exigible)
+        // dentro del período seleccionado (o histórico, si no hay mes elegido)?
+        const opsDelDesp = operaciones.filter(o => o.despachante === n && (!filtMesSaldos || (o.fecha||'').startsWith(filtMesSaldos)));
         const tieneSinFacturar = opsDelDesp.some(o => !(o.numFactura && String(o.numFactura).trim()));
         const ivaNoExigible = opsDelDesp
           .filter(o => !(o.numFactura && String(o.numFactura).trim()))
