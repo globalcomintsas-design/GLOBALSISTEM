@@ -51,6 +51,12 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .field textarea{min-height:70px;resize:vertical;}
 .field.full{grid-column:1/-1;}
 .field .hint{font-size:10px;color:#94a3b8;margin-top:3px;}
+.field.ac-wrap{position:relative;}
+.ac-list{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #bfdbfe;border-radius:8px;margin-top:4px;max-height:220px;overflow-y:auto;z-index:60;box-shadow:0 8px 20px rgba(0,0,0,.14);}
+.ac-item{padding:8px 12px;font-size:12px;cursor:pointer;border-bottom:1px solid #f1f5f9;}
+.ac-item:last-child{border-bottom:none;}
+.ac-item:hover,.ac-item-active{background:#eff6ff;color:#1e3a8a;}
+.ac-new{color:#16a34a;font-weight:600;}
 .cheque-fields-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;grid-column:1/-1;background:#eff6ff;border-radius:10px;padding:12px;border:1px solid #bfdbfe;}
 .cheque-fields-title{font-size:11px;font-weight:700;color:#1e3a8a;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;grid-column:1/-1;}
 .btn{padding:10px 18px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s;}
@@ -196,7 +202,13 @@ tr:hover td{background:#fafbff;}
           <div class="field"><label>Tipo</label><select id="tipo"><option>Ingreso</option><option>Egreso</option></select></div>
           <div class="field"><label>Cuenta</label><select id="cuenta" onchange="toggleChequeFields()"><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
           <div class="field"><label>N° Factura</label><input type="text" id="factura" placeholder="0001-00000123" /></div>
-          <div class="field"><label>Cliente / Proveedor</label><input type="text" id="cliente" placeholder="Nombre..." /></div>
+          <div class="field ac-wrap"><label>Cliente / Proveedor</label>
+            <input type="text" id="cliente" placeholder="Nombre..." autocomplete="off"
+              oninput="filtrarACCaja('cliente','ac_cliente')"
+              onkeydown="manejarTecladoACCaja(event,'ac_cliente')"
+              onblur="setTimeout(()=>cerrarACCaja('ac_cliente'),180)" />
+            <div id="ac_cliente" class="ac-list"></div>
+          </div>
           <div class="field"><label>Detalle</label><input type="text" id="detalle" placeholder="Descripción..." /></div>
           <div class="field">
             <label>Importe</label>
@@ -528,7 +540,13 @@ tr:hover td{background:#fafbff;}
       <div class="field"><label>Tipo</label><select id="eTipo"><option>Ingreso</option><option>Egreso</option></select></div>
       <div class="field"><label>Cuenta</label><select id="eCuenta" onchange="toggleChequeFieldsModal()"><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
       <div class="field"><label>N° Factura</label><input type="text" id="eFactura" /></div>
-      <div class="field"><label>Cliente / Proveedor</label><input type="text" id="eCliente" /></div>
+      <div class="field ac-wrap"><label>Cliente / Proveedor</label>
+        <input type="text" id="eCliente" autocomplete="off"
+          oninput="filtrarACCaja('eCliente','ac_eCliente')"
+          onkeydown="manejarTecladoACCaja(event,'ac_eCliente')"
+          onblur="setTimeout(()=>cerrarACCaja('ac_eCliente'),180)" />
+        <div id="ac_eCliente" class="ac-list"></div>
+      </div>
       <div class="field"><label>Detalle</label><input type="text" id="eDetalle" /></div>
       <div class="field">
         <label>Importe</label>
@@ -640,9 +658,29 @@ const CHEQUES_PAGE_SIZE = 15;
 let alicuotaImpBancario = 0.6; // % - editable por admin, se guarda en Firestore (config/impuestoBancario)
 
 // ── Vinculación con módulo Operaciones (corresponsales) ──
-let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html
+let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html (mayúsculas, para matching)
 let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobrado")
 let opsPorFactura = {};       // { "0001-00000123": true } - facturas asignadas a operaciones
+
+// ── Clientes/Proveedores para el autocompletado de Caja ──
+// Se arma con TRES fuentes: los despachantes de Operaciones, los clientes finales de
+// Operaciones (ambos son "los mismos de Operaciones, que son nuestros clientes") y los
+// proveedores propios de Caja (colección 'caja_proveedores'), que se van guardando solos
+// a medida que se cargan movimientos con un nombre que todavía no está en la lista.
+let despachantesNombresCaja = [];
+let clientesFinalesNombresCaja = [];
+let proveedoresNombresCaja = [];
+let clientesNombresCaja = [];
+window.clientesNombresCaja = clientesNombresCaja;
+
+function actualizarClientesNombresCaja(){
+  clientesNombresCaja = [...new Set([
+    ...despachantesNombresCaja,
+    ...clientesFinalesNombresCaja,
+    ...proveedoresNombresCaja
+  ].map(n => (n||'').trim()).filter(Boolean))].sort();
+  window.clientesNombresCaja = clientesNombresCaja;
+}
 
 // ── Conciliación bancaria (todo en memoria, no genera lecturas extra a Firestore) ──
 let concLineasBanco = [];     // lineas parseadas del resumen del banco, ya clasificadas y comparadas
@@ -714,6 +752,99 @@ function toast(msg, type='') {
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
+// ── AUTOCOMPLETADO Cliente/Proveedor (Nuevo Movimiento + Modal Editar) ──
+// Lista combinada: despachantes de Operaciones + clientes finales de Operaciones +
+// proveedores propios de Caja. Si el usuario tipea un nombre que no existe todavía,
+// se le ofrece la opción de guardarlo; y aunque no la use, al guardar el movimiento
+// el sistema lo guarda solo como proveedor nuevo (ver guardarProveedorSiEsNuevo).
+let acStateCaja = {};
+
+function renderACCaja(listId){
+  const state = acStateCaja[listId];
+  const list = document.getElementById(listId);
+  if(!list) return;
+  if(!state || !state.items.length){ list.style.display='none'; return; }
+  list.innerHTML = state.items.map((it,i) => {
+    const activeClass = i === state.activeIndex ? ' ac-item-active' : '';
+    if(it.tipo === 'nuevo'){
+      return `<div class="ac-item ac-new${activeClass}" onmousedown="seleccionarACIndexCaja('${listId}',${i})">➕ Guardar "${it.valor}"</div>`;
+    }
+    return `<div class="ac-item${activeClass}" onmousedown="seleccionarACIndexCaja('${listId}',${i})">${it.valor}</div>`;
+  }).join('');
+  list.style.display = 'block';
+}
+
+window.filtrarACCaja = function(inputId, listId){
+  const inputEl = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  if(!inputEl || !list) return;
+  const val = inputEl.value.trim();
+  if(!val){ list.style.display='none'; acStateCaja[listId]=null; return; }
+  const valUpper = val.toUpperCase();
+  const matches = clientesNombresCaja.filter(n => n.toUpperCase().includes(valUpper)).slice(0,8);
+  const existe = clientesNombresCaja.some(n => n.toUpperCase() === valUpper);
+  const items = matches.map(n => ({tipo:'match', valor:n}));
+  if(!existe && val.length > 1) items.push({tipo:'nuevo', valor: val});
+  acStateCaja[listId] = { items, activeIndex:-1, inputId };
+  renderACCaja(listId);
+};
+
+window.seleccionarACIndexCaja = function(listId, idx){
+  const state = acStateCaja[listId];
+  if(!state) return;
+  const it = state.items[idx];
+  if(!it) return;
+  document.getElementById(state.inputId).value = it.valor;
+  document.getElementById(listId).style.display='none';
+  acStateCaja[listId]=null;
+  if(it.tipo === 'nuevo') guardarProveedorSiEsNuevo(it.valor);
+};
+
+window.manejarTecladoACCaja = function(e, listId){
+  const state = acStateCaja[listId];
+  const list = document.getElementById(listId);
+  if(!state || !list || list.style.display==='none' || !state.items.length) return;
+  if(e.key==='ArrowDown'){
+    e.preventDefault();
+    state.activeIndex = state.activeIndex < state.items.length-1 ? state.activeIndex+1 : 0;
+    renderACCaja(listId);
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    state.activeIndex = state.activeIndex>0 ? state.activeIndex-1 : state.items.length-1;
+    renderACCaja(listId);
+  } else if(e.key==='Enter' || e.key==='Tab'){
+    if(state.activeIndex>=0){ e.preventDefault(); seleccionarACIndexCaja(listId, state.activeIndex); }
+  } else if(e.key==='Escape'){
+    list.style.display='none';
+  }
+};
+
+window.cerrarACCaja = function(listId){
+  const el = document.getElementById(listId);
+  if(el) el.style.display='none';
+};
+
+// Guarda en 'caja_proveedores' cualquier nombre de Cliente/Proveedor que todavía no
+// esté en la lista combinada (despachantes + clientes finales de Operaciones + proveedores
+// ya guardados en Caja). Se llama tanto al elegir "➕ Guardar" del autocompletado como,
+// por las dudas, automáticamente al guardar un movimiento o una edición — así el listado
+// se va completando solo con el tiempo, se haya usado o no el desplegable.
+async function guardarProveedorSiEsNuevo(nombre){
+  const val = (nombre||'').trim();
+  if(!val) return;
+  const valUpper = val.toUpperCase();
+  const yaExiste = clientesNombresCaja.some(n => n.toUpperCase() === valUpper);
+  if(yaExiste) return;
+  const id = valUpper.replace(/\s+/g,'_').replace(/[^A-Z0-9_]/g,'');
+  if(!id) return;
+  try {
+    await setDoc(doc(db,'caja_proveedores', id), { nombre: val, ts: Date.now() }, { merge:true });
+  } catch(e){
+    console.warn('No se pudo guardar el proveedor nuevo en caja_proveedores:', e);
+  }
+}
+window.guardarProveedorSiEsNuevo = guardarProveedorSiEsNuevo;
+
 // SESION CENTRALIZADA
 const _gcSesion = localStorage.getItem('gc_user');
 if(!_gcSesion){ location.href=location.origin+location.pathname.replace('caja.html','index.html'); }
@@ -782,8 +913,20 @@ function initFirestore() {
   });
 
   // ── Listeners del módulo Operaciones (solo lectura desde Caja) ──
+  // Colecciones chicas y estáticas (igual criterio que usa operaciones.js): se pueden
+  // escuchar en tiempo real sin impactar la cuota de lecturas.
   onSnapshot(collection(db,'corresponsales_clientes'), snap => {
     despachantesOp = snap.docs.map(d => (d.data().nombre||'').toUpperCase());
+    despachantesNombresCaja = snap.docs.map(d => d.data().nombre).filter(Boolean);
+    actualizarClientesNombresCaja();
+  });
+  onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
+    clientesFinalesNombresCaja = snap.docs.map(d => d.data().nombre).filter(Boolean);
+    actualizarClientesNombresCaja();
+  });
+  onSnapshot(collection(db,'caja_proveedores'), snap => {
+    proveedoresNombresCaja = snap.docs.map(d => d.data().nombre).filter(Boolean);
+    actualizarClientesNombresCaja();
   });
   onSnapshot(collection(db,'corresponsales_mudanzas'), snap => {
     mudanzasPend = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -882,6 +1025,10 @@ window.guardarMovimiento = async function() {
     try { await vincularIngresoConOperaciones({ cliente, factura, importe, detalle }); }
     catch(e){ console.warn('Vinculación con Operaciones falló:', e); }
   }
+
+  // ── Guarda el Cliente/Proveedor como nuevo si todavía no estaba en la lista ──
+  try { await guardarProveedorSiEsNuevo(cliente); }
+  catch(e){ console.warn('No se pudo guardar el proveedor nuevo:', e); }
 
   limpiarForm();
   toast('Movimiento guardado ✓ (' + fmtMoney(importe) + ')','success');
@@ -1025,6 +1172,7 @@ window.limpiarForm = function() {
   const ec=document.getElementById('estadoCheque');if(ec)ec.value='En cartera';
   document.getElementById('chequeFieldsWrap').style.display='none';
   document.getElementById('cuenta').value='Caja';
+  cerrarACCaja('ac_cliente');
 };
 
 // ── Filtro de mes para Movimientos (misma dinámica que "filtro_mes" de Operaciones) ──
@@ -1154,6 +1302,7 @@ window.abrirEditar=function(id){
   document.getElementById('eImporte').value=m.importe;
   const eip=document.getElementById('eImportePreview'); if(eip) eip.textContent='';
   document.getElementById('eObservaciones').value=m.observaciones||'';
+  cerrarACCaja('ac_eCliente');
   const wrap=document.getElementById('eChequeFieldsWrap');
   if(m.cuenta==='Cheque'){wrap.style.display='';document.getElementById('eNumeroCheque').value=m.numeroCheque||'';document.getElementById('eBancoCheque').value=m.bancoCheque||'';document.getElementById('eFechaVencCheque').value=m.fechaVencCheque||'';document.getElementById('ePagadorCheque').value=m.pagadorCheque||'';document.getElementById('eEstadoCheque').value=m.estadoCheque||'En cartera';}
   else wrap.style.display='none';
@@ -1165,7 +1314,8 @@ window.guardarEdicion=async function(){
   const cuenta=document.getElementById('eCuenta').value;
   const importeEditado = parsearMontoAR(document.getElementById('eImporte').value);
   if(isNaN(importeEditado) || importeEditado<=0){ toast('Importe inválido','error'); return; }
-  const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:document.getElementById('eCliente').value,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
+  const clienteEditado = document.getElementById('eCliente').value;
+  const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:clienteEditado,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
   if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;}
   const originalMov = allMovimientos.find(x=>x.id===editandoId) || {};
   await updateDoc(doc(db,'movimientos',editandoId),data);
@@ -1173,6 +1323,10 @@ window.guardarEdicion=async function(){
   // ── Impuesto a los Créditos y Débitos Bancarios (automático) ──
   try { await sincronizarImpuestoBancario(editandoId, { ...originalMov, ...data }); }
   catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
+
+  // ── Guarda el Cliente/Proveedor como nuevo si todavía no estaba en la lista ──
+  try { await guardarProveedorSiEsNuevo(clienteEditado); }
+  catch(e){ console.warn('No se pudo guardar el proveedor nuevo:', e); }
 
   cerrarModal();toast('Actualizado ✓ (' + fmtMoney(importeEditado) + ')','success');
 };
