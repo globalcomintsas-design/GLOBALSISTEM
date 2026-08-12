@@ -983,6 +983,9 @@ function calcularCoberturaFIFO(nombre){
 window.calcularCoberturaFIFO = calcularCoberturaFIFO;
 
 // ── ASIGNAR N° FACTURA A UNA OPERACIÓN ──
+// Este campo se puede editar SIEMPRE, tenga o no un número cargado: sirve tanto para
+// asignar la factura por primera vez como para corregirla si te equivocaste. No hay
+// ninguna restricción que lo bloquee una vez asignado.
 window.asignarFactura = async function(id, numFactura){
   const val = (numFactura||'').trim().toUpperCase();
   try {
@@ -1003,19 +1006,25 @@ window.toggleFacturaLotePanel = function(){
     document.getElementById('lote_fecha_desde').value = '';
     document.getElementById('lote_fecha_hasta').value = '';
     document.getElementById('lote_num_factura').value = '';
+    const chkIncluir = document.getElementById('lote_incluir_con_factura');
+    if(chkIncluir) chkIncluir.checked = false;
     actualizarPreviewLote();
   }
 };
 
+// Si "incluirConFactura" está tildado, el lote también trae operaciones que YA tienen
+// un N° de factura cargado, para poder corregirlas (antes quedaban invisibles para
+// siempre una vez asignadas, por el filtro !o.numFactura).
 function opsParaLote(){
   const despachante = document.getElementById('lote_despachante').value;
   const desde = document.getElementById('lote_fecha_desde').value;
   const hasta = document.getElementById('lote_fecha_hasta').value;
+  const incluirConFactura = document.getElementById('lote_incluir_con_factura')?.checked;
   if(!despachante) return [];
   return operaciones.filter(o => o.despachante === despachante
     && (!desde || (o.fecha || '') >= desde)
     && (!hasta || (o.fecha || '') <= hasta)
-    && !o.numFactura);
+    && (incluirConFactura || !o.numFactura));
 }
 window.opsParaLote = opsParaLote;
 
@@ -1028,16 +1037,17 @@ window.actualizarPreviewLote = function(){
   }
   const ops = opsParaLote();
   const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  const incluirConFactura = document.getElementById('lote_incluir_con_factura')?.checked;
   prev.innerHTML = ops.length
-    ? `${ops.length} operación(es) sin factura por un total de $${fmt2(totBruto)}`
-    : '<span style="color:#dc2626;">No hay operaciones sin factura con esos filtros</span>';
+    ? `${ops.length} operación(es) ${incluirConFactura ? '(incluye con factura ya asignada)' : 'sin factura'} por un total de $${fmt2(totBruto)}`
+    : `<span style="color:#dc2626;">No hay operaciones ${incluirConFactura ? '' : 'sin factura '}con esos filtros</span>`;
 };
 
 window.ejecutarAsignarFacturaMasiva = async function(){
   const despachante = document.getElementById('lote_despachante').value;
   if(!despachante){ toast('⚠️ Elegí un despachante'); return; }
   const ops = opsParaLote();
-  if(!ops.length){ toast('No hay operaciones sin factura con esos filtros'); return; }
+  if(!ops.length){ toast('No hay operaciones con esos filtros'); return; }
   const val = document.getElementById('lote_num_factura').value.trim().toUpperCase();
   if(!val){ toast('⚠️ Ingresá el N° de factura'); return; }
   for(const o of ops){
@@ -1115,7 +1125,8 @@ function renderTabla(){
       <td>
         <input type="text" style="width:100px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:11px;font-family:monospace;"
           value="${o.numFactura||''}" placeholder="s/fact"
-          onchange="asignarFactura('${o.id}', this.value)">
+          onchange="asignarFactura('${o.id}', this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
       </td>
       <td>${coberturaHtml}</td>
       <td>${o.adicionales ? o.adicionales.split(',').map(a=>`<span class="tag">${a.trim()}</span>`).join('') : '-'}</td>
