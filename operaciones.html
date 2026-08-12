@@ -375,6 +375,12 @@
             <label>N° de factura</label>
             <input type="text" id="lote_num_factura" placeholder="Ej: A0001-00001234" style="text-transform:uppercase;">
           </div>
+          <div class="form-group" style="align-self:end;">
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#64748b;cursor:pointer;">
+              <input type="checkbox" id="lote_incluir_con_factura" onchange="actualizarPreviewLote()">
+              Incluir operaciones que ya tienen factura (corregir)
+            </label>
+          </div>
           <div class="form-group" style="align-self:end;display:flex;gap:8px;">
             <button class="btn-primary" onclick="ejecutarAsignarFacturaMasiva()">✅ Asignar</button>
             <button class="btn-outline" onclick="toggleFacturaLotePanel()">Cancelar</button>
