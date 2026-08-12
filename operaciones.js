@@ -1420,22 +1420,40 @@ function montoExigible(o){
 }
 window.montoExigible = montoExigible;
 
+// ── NORMALIZAR FECHA A "YYYY-MM" (soporta ISO y formato argentino) ──
+// La gran mayoría de las fechas del sistema son ISO ("YYYY-MM-DD", las que salen de
+// <input type="date">). PERO los pagos que se cargan automáticamente desde Caja
+// (origenCaja) a veces vienen en formato argentino ("DD/MM/YYYY" o "D/M/YYYY"). Si a
+// esas fechas se les aplica .slice(0,7) como si fueran ISO, el resultado queda cortado
+// y sin sentido (ej: "11/08/2026".slice(0,7) = "11/08/2"). Esta función devuelve
+// siempre "YYYY-MM" sin importar el formato de entrada, para que el selector de mes y
+// los filtros por mes de Saldos agrupen bien todas las fechas.
+function mesDeFecha(fecha){
+  if(!fecha) return '';
+  const f = String(fecha).trim();
+  if(/^\d{4}-\d{2}/.test(f)) return f.slice(0,7); // ISO: YYYY-MM-DD o YYYY-MM
+  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); // AR: D/M/YYYY o DD/MM/YYYY
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}`;
+  return '';
+}
+window.mesDeFecha = mesDeFecha;
+
 // ── PAGOS Y SALDOS POR DESPACHANTE ──
 // El parámetro opcional "mes" (formato 'YYYY-MM') permite acotar el cálculo a un solo
-// período: operaciones cuya fecha empiece con ese mes, y pagos cuya fecha empiece con
-// ese mes. Si no se pasa "mes" (o se pasa vacío), se comporta EXACTAMENTE igual que
-// antes: saldo histórico completo, sin filtrar por fecha. Esto es clave para que el
-// resto de las pantallas que llaman calcularSaldoDespachante(nombre) sin segundo
-// argumento (Dashboard, cobertura FIFO, etc.) no cambien su comportamiento.
+// período: operaciones y pagos cuyo mes normalizado (ver mesDeFecha) coincida con ese
+// mes. Si no se pasa "mes" (o se pasa vacío), se comporta EXACTAMENTE igual que antes:
+// saldo histórico completo, sin filtrar por fecha. Esto es clave para que el resto de
+// las pantallas que llaman calcularSaldoDespachante(nombre) sin segundo argumento
+// (Dashboard, cobertura FIFO, etc.) no cambien su comportamiento.
 function calcularSaldoDespachante(nombre, mes){
-  const ops = operaciones.filter(o => o.despachante === nombre && (!mes || (o.fecha||'').startsWith(mes)));
+  const ops = operaciones.filter(o => o.despachante === nombre && (!mes || mesDeFecha(o.fecha) === mes));
   // "facturado" se mantiene igual que siempre: total bruto (neto+IVA de todas las
   // operaciones del período, tengan o no factura cargada). Es un dato informativo.
   const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
   // "exigible" es el monto que se usa para el saldo: neto en operaciones sin factura,
   // neto+IVA (bruto) en las que ya tienen N° de factura cargado.
   const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
-  const pagado    = pagos.filter(p => p.despachante === nombre && (!mes || (p.fecha||'').startsWith(mes))).reduce((a,b) => a + (b.monto||0), 0);
+  const pagado    = pagos.filter(p => p.despachante === nombre && (!mes || mesDeFecha(p.fecha) === mes)).reduce((a,b) => a + (b.monto||0), 0);
   // El saldo pendiente se calcula contra lo exigible, NO contra el bruto total.
   // Mientras no haya factura: saldo = neto - pagos. Facturada: saldo = neto + iva - pagos.
   // Con "mes" cargado, tanto lo exigible como los pagos quedan acotados a ese mes.
@@ -1481,8 +1499,8 @@ function poblarSelectorMesSaldos(){
   const sel = document.getElementById('saldos_filtro_mes');
   if(!sel) return;
   const v = sel.value;
-  const mesesOps   = operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean);
-  const mesesPagos = pagos.map(p => p.fecha?.slice(0,7)).filter(Boolean);
+  const mesesOps   = operaciones.map(o => mesDeFecha(o.fecha)).filter(Boolean);
+  const mesesPagos = pagos.map(p => mesDeFecha(p.fecha)).filter(Boolean);
   const mesActual  = new Date().toISOString().slice(0,7);
   const meses = [...new Set([...mesesOps, ...mesesPagos, mesActual])].sort().reverse();
   sel.innerHTML = '<option value="">Todos los meses (histórico)</option>' +
@@ -1523,8 +1541,8 @@ function renderSaldos(){
     // los despachantes que alguna vez tuvieron operaciones.
     let nombresConOps;
     if(filtMesSaldos){
-      const nombresOpsMes  = operaciones.filter(o => (o.fecha||'').startsWith(filtMesSaldos)).map(o => o.despachante);
-      const nombresPagosMes = pagos.filter(p => (p.fecha||'').startsWith(filtMesSaldos)).map(p => p.despachante);
+      const nombresOpsMes  = operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante);
+      const nombresPagosMes = pagos.filter(p => mesDeFecha(p.fecha) === filtMesSaldos).map(p => p.despachante);
       nombresConOps = [...new Set([...nombresOpsMes, ...nombresPagosMes].filter(Boolean))].sort();
     } else {
       nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
@@ -1539,7 +1557,7 @@ function renderSaldos(){
         const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
         // Indicador: ¿tiene este despachante operaciones sin factura aún (IVA no exigible)
         // dentro del período seleccionado (o histórico, si no hay mes elegido)?
-        const opsDelDesp = operaciones.filter(o => o.despachante === n && (!filtMesSaldos || (o.fecha||'').startsWith(filtMesSaldos)));
+        const opsDelDesp = operaciones.filter(o => o.despachante === n && (!filtMesSaldos || mesDeFecha(o.fecha) === filtMesSaldos));
         const tieneSinFacturar = opsDelDesp.some(o => !(o.numFactura && String(o.numFactura).trim()));
         const ivaNoExigible = opsDelDesp
           .filter(o => !(o.numFactura && String(o.numFactura).trim()))
