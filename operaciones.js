@@ -1438,26 +1438,87 @@ function mesDeFecha(fecha){
 }
 window.mesDeFecha = mesDeFecha;
 
+// ── COBERTURA FIFO SOBRE LO EXIGIBLE (para el saldo por mes en Saldos) ──
+// Hay dos tipos de pago en la colección 'despachantees_pagos':
+//   1) Pagos ATADOS A UNA FACTURA puntual (p.numFactura cargado) — normalmente llegan
+//      automáticos desde Caja cuando el ingreso matchea el N° de factura de una o más
+//      operaciones ya facturadas. Estos se aplican DIRECTO a esas operaciones, sin
+//      importar si son las más viejas o no: si pagan la factura de una operación de
+//      agosto, ese pago cancela esa operación de agosto.
+//   2) Pagos GENÉRICOS (sin numFactura, ej. una transferencia "a cuenta" sin factura
+//      puntual, o el sobrante de un pago de factura que pagó de más) — estos SÍ se
+//      reparten con FIFO por antigüedad: primero se usan para tapar la operación
+//      pendiente más vieja del despachante, y así siguiendo.
+// El resultado es coherente con lo que ya se ve en "Historial de pagos" (donde los
+// pagos con factura muestran la etiqueta "Fact. X") y con la columna "Cobertura" del
+// Listado.
+function calcularCoberturaExigibleFIFO(nombre){
+  const pagosDesp = pagos.filter(p => p.despachante === nombre);
+  const pagosConFactura = pagosDesp.filter(p => p.numFactura && String(p.numFactura).trim());
+  const pagosGenericos  = pagosDesp.filter(p => !(p.numFactura && String(p.numFactura).trim()));
+
+  const ops = operaciones.filter(o => o.despachante === nombre)
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(b.ts||0))
+    .map(o => ({ ...o, exigible: montoExigible(o), cubierto: 0 }));
+
+  // 1) Pagos atados a factura: se aplican directo a la(s) operación(es) con ese N° de
+  // factura (puede haber varias si se asignó la misma factura en lote). Si el pago
+  // alcanza y sobra (pagaron de más, o la factura no matchea ninguna operación
+  // existente), el sobrante pasa al pool genérico del paso 2.
+  let poolGenerico = pagosGenericos.reduce((a,b) => a + (b.monto||0), 0);
+
+  pagosConFactura.forEach(p => {
+    const numFact = String(p.numFactura).trim().toUpperCase();
+    const opsFactura = ops.filter(o => o.numFactura && String(o.numFactura).trim().toUpperCase() === numFact);
+    let restante = p.monto || 0;
+    opsFactura.forEach(o => {
+      if(restante <= 0) return;
+      const falta = o.exigible - o.cubierto;
+      const aplicar = Math.min(falta, restante);
+      o.cubierto += aplicar;
+      restante -= aplicar;
+    });
+    if(restante > 0) poolGenerico += restante;
+  });
+
+  // 2) Pool genérico (pagos sin factura + sobrantes de pagos con factura): FIFO por
+  // antigüedad sobre lo que haya quedado pendiente después del paso 1.
+  let restanteGenerico = poolGenerico;
+  ops.forEach(o => {
+    if(restanteGenerico <= 0) return;
+    const falta = o.exigible - o.cubierto;
+    const aplicar = Math.min(falta, restanteGenerico);
+    o.cubierto += aplicar;
+    restanteGenerico -= aplicar;
+  });
+
+  return ops.map(o => ({ ...o, pendiente: o.exigible - o.cubierto }));
+}
+window.calcularCoberturaExigibleFIFO = calcularCoberturaExigibleFIFO;
+
 // ── PAGOS Y SALDOS POR DESPACHANTE ──
-// El parámetro opcional "mes" (formato 'YYYY-MM') permite acotar el cálculo a un solo
-// período: operaciones y pagos cuyo mes normalizado (ver mesDeFecha) coincida con ese
-// mes. Si no se pasa "mes" (o se pasa vacío), se comporta EXACTAMENTE igual que antes:
-// saldo histórico completo, sin filtrar por fecha. Esto es clave para que el resto de
-// las pantallas que llaman calcularSaldoDespachante(nombre) sin segundo argumento
-// (Dashboard, cobertura FIFO, etc.) no cambien su comportamiento.
+// Sin "mes": comportamiento histórico de siempre — exigible total menos pagado total.
+// Con "mes": los pagos históricos (de cualquier fecha) se reparten con FIFO entre las
+// operaciones del despachante empezando por las más viejas (ver calcularCoberturaExigibleFIFO),
+// y el saldo del mes es lo que queda pendiente en las operaciones DE ESE MES después de
+// aplicar esa cobertura. Esto hace que un pago hecho en agosto que cubre operaciones de
+// julio efectivamente reduzca la deuda de julio, en vez de aparecer como un pago "suelto"
+// de agosto sin relación con las operaciones que en realidad canceló.
 function calcularSaldoDespachante(nombre, mes){
-  const ops = operaciones.filter(o => o.despachante === nombre && (!mes || mesDeFecha(o.fecha) === mes));
-  // "facturado" se mantiene igual que siempre: total bruto (neto+IVA de todas las
-  // operaciones del período, tengan o no factura cargada). Es un dato informativo.
-  const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
-  // "exigible" es el monto que se usa para el saldo: neto en operaciones sin factura,
-  // neto+IVA (bruto) en las que ya tienen N° de factura cargado.
-  const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
-  const pagado    = pagos.filter(p => p.despachante === nombre && (!mes || mesDeFecha(p.fecha) === mes)).reduce((a,b) => a + (b.monto||0), 0);
-  // El saldo pendiente se calcula contra lo exigible, NO contra el bruto total.
-  // Mientras no haya factura: saldo = neto - pagos. Facturada: saldo = neto + iva - pagos.
-  // Con "mes" cargado, tanto lo exigible como los pagos quedan acotados a ese mes.
-  return { facturado, exigible, pagado, saldo: exigible - pagado };
+  if(!mes){
+    const ops = operaciones.filter(o => o.despachante === nombre);
+    const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
+    const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
+    const pagado    = pagos.filter(p => p.despachante === nombre).reduce((a,b) => a + (b.monto||0), 0);
+    return { facturado, exigible, pagado, saldo: exigible - pagado };
+  }
+  const cobertura = calcularCoberturaExigibleFIFO(nombre);
+  const opsDelMes = cobertura.filter(o => mesDeFecha(o.fecha) === mes);
+  const facturado = opsDelMes.reduce((a,b) => a + (b.bruto||0), 0);
+  const exigible  = opsDelMes.reduce((a,b) => a + b.exigible, 0);
+  const cubierto  = opsDelMes.reduce((a,b) => a + b.cubierto, 0);
+  const saldo     = opsDelMes.reduce((a,b) => a + b.pendiente, 0);
+  return { facturado, exigible, pagado: cubierto, saldo };
 }
 window.calcularSaldoDespachante = calcularSaldoDespachante;
 
@@ -1528,8 +1589,8 @@ function renderSaldos(){
   const notaPeriodoEl = document.getElementById('saldos-periodo-nota');
   if(notaPeriodoEl){
     notaPeriodoEl.innerHTML = filtMesSaldos
-      ? `📅 Mostrando solo <strong>${filtMesSaldos}</strong> — Facturado, Pagado y Saldo corresponden únicamente a operaciones y pagos de ese mes.`
-      : `📅 Mostrando el <strong>histórico completo</strong> (todas las fechas). Elegí un mes arriba para ver la deuda de un período puntual.`;
+      ? `📅 Mostrando solo <strong>${filtMesSaldos}</strong> — "Facturado" y "Exigible" son de las operaciones de ese mes. "Pagado" es lo que le tocó cubrir a esas operaciones: primero los pagos atados a su propia factura, y el resto (pagos sin factura o sobrantes) repartido por antigüedad (FIFO). "Saldo" es lo que de ese mes queda realmente sin cubrir.`
+      : `📅 Mostrando el <strong>histórico completo</strong> (todas las fechas). Elegí un mes arriba para ver la deuda real de un período puntual: los pagos con factura asignada cancelan esa operación puntual, y el resto se reparte empezando por las operaciones más antiguas.`;
   }
 
   // Tabla de saldos por despachante
@@ -1541,15 +1602,13 @@ function renderSaldos(){
     // los despachantes que alguna vez tuvieron operaciones.
     let nombresConOps;
     if(filtMesSaldos){
-      const nombresOpsMes  = operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante);
-      const nombresPagosMes = pagos.filter(p => mesDeFecha(p.fecha) === filtMesSaldos).map(p => p.despachante);
-      nombresConOps = [...new Set([...nombresOpsMes, ...nombresPagosMes].filter(Boolean))].sort();
+      nombresConOps = [...new Set(operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante).filter(Boolean))].sort();
     } else {
       nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
     }
 
     if(!nombresConOps.length){
-      tbodySaldos.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">${filtMesSaldos ? 'Sin operaciones ni pagos en ' + filtMesSaldos : 'Sin operaciones cargadas'}</td></tr>`;
+      tbodySaldos.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">${filtMesSaldos ? 'Sin operaciones en ' + filtMesSaldos : 'Sin operaciones cargadas'}</td></tr>`;
     } else {
       tbodySaldos.innerHTML = nombresConOps.map(n => {
         const { facturado, pagado, saldo } = calcularSaldoDespachante(n, filtMesSaldos);
