@@ -94,6 +94,8 @@ tr:hover td{background:#fafbff;}
 .badge-acreditado{background:#dcfce7;color:#166534;}
 .badge-endosado{background:#e0e7ff;color:#3730a3;}
 .badge-rechazado{background:#fee2e2;color:#991b1b;}
+.badge-factura-a{background:#dbeafe;color:#1e40af;}
+.badge-factura-c{background:#f1f5f9;color:#475569;}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center;padding:20px;}
 .modal-bg.open{display:flex;}
 .modal{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:560px;max-height:90vh;overflow-y:auto;}
@@ -130,6 +132,8 @@ tr:hover td{background:#fafbff;}
 .conc-tag-transferencia{background:#dbeafe;color:#1e40af;}
 .conc-tag-cheque{background:#dcfce7;color:#166534;}
 .conc-tag-otro{background:#f1f5f9;color:#475569;}
+.boleta-iva-info{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 10px;font-size:11px;color:#1e3a8a;margin-top:3px;}
+.boleta-iva-info.exento{background:#f1f5f9;border-color:#e2e8f0;color:#64748b;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -165,6 +169,7 @@ tr:hover td{background:#fafbff;}
     <div class="tab" onclick="showTab('cuentacorriente',this)">📋 Cta. Corriente</div>
     <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
     <div class="tab" onclick="showTab('reportes',this)">📊 Reportes</div>
+    <div class="tab" onclick="showTab('boletas',this)">🧾 Boletas</div>
     <div class="tab" onclick="showTab('conciliacion',this)">🏦 Conciliación</div>
     <div class="tab" onclick="showTab('usuarios',this)" id="tabUsuarios" style="display:none">👥 Usuarios</div>
   </div>
@@ -416,6 +421,80 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
+    <!-- BOLETAS (Factura A / C de los socios) -->
+    <div class="page" id="page-boletas">
+      <div class="section">
+        <div class="section-title">
+          🧾 Boletas de los Socios
+          <div style="display:flex;align-items:center;gap:8px">
+            <label style="font-size:11px;color:#666">Período</label>
+            <input type="month" id="boletaPeriodo" onchange="cambiarPeriodoBoletas()" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;" />
+          </div>
+        </div>
+        <p style="font-size:12px;color:#666;margin-bottom:12px;">
+          Cargá acá cada boleta que traiga alguno de los 6 socios. Si es Factura A el sistema discrimina el IVA
+          según el rubro (editable); si es Factura C no discrimina IVA (Monotributo). El % de IVA sugerido por
+          rubro se puede corregir en cualquier momento, y si el rubro no está en la lista lo podés cargar como
+          "Otro" — queda guardado para la próxima vez.
+        </p>
+        <div class="cards">
+          <div class="card"><div class="card-label">Total boletas del mes</div><div class="card-value" id="boletasTotalImporte">$ 0</div></div>
+          <div class="card"><div class="card-label">IVA discriminado (Fact. A)</div><div class="card-value blue" id="boletasTotalIva">$ 0</div></div>
+          <div class="card"><div class="card-label">Boletas Factura A</div><div class="card-value green" id="boletasCantA">0</div></div>
+          <div class="card"><div class="card-label">Boletas Factura C</div><div class="card-value orange" id="boletasCantC">0</div></div>
+        </div>
+        <div class="cards" id="boletasPorSocio"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Nueva Boleta</div>
+        <div class="form-grid">
+          <div class="field"><label>Socio</label><select id="boletaSocio"></select></div>
+          <div class="field"><label>Tipo Factura</label>
+            <select id="boletaTipoFactura" onchange="toggleBoletaTipoFactura()">
+              <option value="A">Factura A (discrimina IVA)</option>
+              <option value="C">Factura C (Monotributo, sin IVA)</option>
+            </select>
+          </div>
+          <div class="field"><label>Rubro</label><select id="boletaRubro" onchange="toggleBoletaRubroActual()"></select></div>
+          <div class="field" id="boletaRubroCustomWrap" style="display:none"><label>Nombre del rubro nuevo</label><input type="text" id="boletaRubroCustomNombre" placeholder="Ej: Imprenta..." /></div>
+          <div class="field">
+            <label>Importe (total de la boleta)</label>
+            <input type="text" id="boletaImporte" placeholder="Ej: 15000" inputmode="decimal" oninput="actualizarInfoIvaBoleta()" />
+          </div>
+          <div class="field">
+            <label>% IVA</label>
+            <input type="number" id="boletaIva" placeholder="21" min="0" max="27" step="0.5" oninput="actualizarInfoIvaBoleta()" />
+          </div>
+          <div class="field"><label>N° de Boleta (opcional)</label><input type="text" id="boletaNumero" placeholder="0001-00012345" /></div>
+          <div class="field full"><label>Observaciones</label><input type="text" id="boletaObs" placeholder="Notas adicionales..." /></div>
+          <div class="field full boleta-iva-info" id="boletaIvaInfo"></div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="guardarBoleta()">💾 Guardar Boleta</button>
+          <button class="btn btn-outline" onclick="limpiarFormBoleta()">✕ Limpiar</button>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Boletas Cargadas
+          <button class="btn btn-success btn-sm" onclick="exportarBoletasExcel()">📊 Excel</button>
+        </div>
+        <div class="filtros">
+          <div><label>Socio</label><select id="boletaFiltroSocio" onchange="resetPaginaBoletas()"><option value="">Todos</option></select></div>
+          <div><label>Tipo Factura</label><select id="boletaFiltroTipo" onchange="resetPaginaBoletas()"><option value="">Todas</option><option value="A">Factura A</option><option value="C">Factura C</option></select></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Socio</th><th>Tipo</th><th>Rubro</th><th>N° Boleta</th><th>Importe</th><th>IVA</th><th>Obs.</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaBoletas"></tbody>
+          </table>
+        </div>
+        <div id="boletas-paginacion"></div>
+      </div>
+    </div>
+
     <!-- CONCILIACION BANCARIA -->
     <div class="page" id="page-conciliacion">
       <div class="section">
@@ -604,7 +683,7 @@ tr:hover td{background:#fafbff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, updateDoc, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, updateDoc, doc, setDoc, getDocs, query, where } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import * as pdfjsLib from "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.min.mjs";
 pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.7.76/build/pdf.worker.min.mjs";
 
@@ -677,22 +756,6 @@ function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimu
 function today() { return new Date().toLocaleDateString('es-AR'); }
 
 // ── PARSEO DE MONTOS EN FORMATO ARGENTINO ──────────────────────────────────
-// BUG QUE SOLUCIONA ESTO: un <input type="number"> de HTML SIEMPRE interpreta
-// el punto como separador DECIMAL (nunca como separador de miles), sin importar
-// el idioma del navegador. Si alguien tipeaba "912.977" (con el punto "a la
-// argentina", para indicar $912.977) el sistema lo guardaba como 912,977 pesos
-// -> se veía después como "$912,98" en vez de "$912.977". Eso fue lo que le
-// pasó al pago de Víctor Martínez.
-//
-// Ahora los campos de importe son texto libre (type="text") y se procesan acá,
-// aceptando CUALQUIERA de estas formas y devolviendo siempre el número correcto:
-//   "912977"        -> 912977
-//   "912.977"       -> 912977   (punto = miles, sin coma -> se asume separador de miles
-//                                 si el último grupo tiene exactamente 3 dígitos)
-//   "912.977,50"    -> 912977.5 (formato completo argentino: puntos=miles, coma=decimal)
-//   "912977,50"     -> 912977.5
-//   "912977.50"     -> 912977.5 (decimal suelto, 2 dígitos después del punto)
-//   "1.234.567"     -> 1234567  (varios puntos = siempre miles)
 function parsearMontoAR(valorCrudo){
   if(valorCrudo === null || valorCrudo === undefined) return NaN;
   let s = String(valorCrudo).trim().replace(/\s/g,'');
@@ -701,14 +764,10 @@ function parsearMontoAR(valorCrudo){
   const tienePunto = s.includes('.');
 
   if(tieneComa){
-    // Formato argentino completo: los puntos son de miles, la coma es el decimal.
     s = s.replace(/\./g,'').replace(',', '.');
   } else if(tienePunto){
     const partes = s.split('.');
     const ultimoGrupo = partes[partes.length-1];
-    // Más de un punto (ej "1.234.567") o el grupo final tiene 3 dígitos (ej "912.977")
-    // -> son separadores de miles, no un decimal. Si el grupo final tiene 1 o 2 dígitos
-    // (ej "912.5" o "912.50") se respeta como decimal normal.
     const esSeparadorDeMiles = partes.length > 2 || ultimoGrupo.length === 3;
     if(esSeparadorDeMiles) s = s.replace(/\./g,'');
   }
@@ -718,8 +777,6 @@ function parsearMontoAR(valorCrudo){
 }
 window.parsearMontoAR = parsearMontoAR;
 
-// Muestra debajo del campo cómo se va a interpretar el importe, para que se note
-// antes de guardar si algo se entendió mal (ej: tipeaste de más o de menos).
 window.previsualizarImporte = function(inputId, hintId){
   const el = document.getElementById(inputId);
   const hint = document.getElementById(hintId);
@@ -739,10 +796,6 @@ function toast(msg, type='') {
 }
 
 // ── AUTOCOMPLETADO Cliente/Proveedor (Nuevo Movimiento + Modal Editar) ──
-// Lista combinada: despachantes de Operaciones + clientes finales de Operaciones +
-// proveedores propios de Caja. Si el usuario tipea un nombre que no existe todavía,
-// se le ofrece la opción de guardarlo; y aunque no la use, al guardar el movimiento
-// el sistema lo guarda solo como proveedor nuevo (ver guardarProveedorSiEsNuevo).
 let acStateCaja = {};
 
 function renderACCaja(listId){
@@ -810,11 +863,6 @@ window.cerrarACCaja = function(listId){
   if(el) el.style.display='none';
 };
 
-// Guarda en 'caja_proveedores' cualquier nombre de Cliente/Proveedor que todavía no
-// esté en la lista combinada (despachantes + clientes finales de Operaciones + proveedores
-// ya guardados en Caja). Se llama tanto al elegir "➕ Guardar" del autocompletado como,
-// por las dudas, automáticamente al guardar un movimiento o una edición — así el listado
-// se va completando solo con el tiempo, se haya usado o no el desplegable.
 async function guardarProveedorSiEsNuevo(nombre){
   const val = (nombre||'').trim();
   if(!val) return;
@@ -857,6 +905,7 @@ window.showTab = function(name, el) {
   if (name==='vencimientos') renderVencimientos();
   if (name==='usuarios') renderUsuarios();
   if (name==='cheques') { procesarVencimientosCheques(); renderCheques(); }
+  if (name==='boletas') { if(typeof window.initBoletasTab==='function') window.initBoletasTab(); }
 };
 
 // TOGGLE CHEQUE FIELDS
@@ -895,8 +944,6 @@ function initFirestore() {
   });
 
   // ── Listeners del módulo Operaciones (solo lectura desde Caja) ──
-  // Colecciones chicas y estáticas (igual criterio que usa operaciones.js): se pueden
-  // escuchar en tiempo real sin impactar la cuota de lecturas.
   onSnapshot(collection(db,'corresponsales_clientes'), snap => {
     despachantesOp = snap.docs.map(d => (d.data().nombre||'').toUpperCase());
     despachantesNombresCaja = snap.docs.map(d => d.data().nombre).filter(Boolean);
@@ -947,7 +994,7 @@ function renderSaldos() {
     }
     if (m.cuenta === 'Cheque') {
       const e = m.estadoCheque||'En cartera';
-      if (e==='Rechazado' || e==='Endosado') continue; // endosado: salió de la cartera, no ingresó al banco
+      if (e==='Rechazado' || e==='Endosado') continue;
       if (e==='Acreditado') { m.tipo==='Ingreso' ? c.Banco+=v : c.Banco-=v; continue; }
       m.tipo==='Ingreso' ? c.Cheque+=v : c.Cheque-=v;
       continue;
@@ -1001,15 +1048,6 @@ window.guardarMovimiento = async function() {
   toast('Movimiento guardado ✓ (' + fmtMoney(importe) + ')','success');
 };
 
-// ── Vincula un ingreso de Caja con el módulo Operaciones (despachantees_ops / mudanzas) ──
-// FIX (ago-2026): antes esta función marcaba "cobrada" la PRIMERA mudanza pendiente que
-// encontraba para el cliente, sin chequear el monto. Si un cliente tenía más de una mudanza
-// pendiente, podía marcar la mudanza equivocada. Ahora:
-//   1) Solo auto-marca "cobrada" si hay UNA sola mudanza pendiente de ese cliente Y el monto
-//      coincide (tolerancia $1).
-//   2) Si hay ambigüedad (más de una candidata) o el monto no coincide, NO toca nada y avisa.
-//   3) Cada decisión queda registrada en la colección 'log_vinculaciones_caja' para poder
-//      auditar después qué hizo el sistema con cada ingreso (se ve en Operaciones > Saldos).
 async function vincularIngresoConOperaciones({ cliente, factura, importe, detalle }) {
   const clienteUpper = (cliente||'').trim().toUpperCase();
   const facturaKey = (factura||'').trim().toUpperCase();
@@ -1018,7 +1056,6 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
     fecha: today(), ts: Date.now(), cargadoPor: currentUser.nombre, acciones: []
   };
 
-  // 1 - Si tiene N° de factura y esa factura está asignada a operaciones → pago exacto por factura
   if (facturaKey && opsPorFactura[facturaKey]) {
     await addDoc(collection(db,'despachantees_pagos'), {
       despachante: clienteUpper,
@@ -1033,7 +1070,6 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
     toast('🔗 Vinculado a Operaciones por factura ' + facturaKey, 'success');
     logEntry.acciones.push('Pago vinculado a Operaciones por factura ' + facturaKey);
   }
-  // 2 - Si no vino con factura (o no matcheó) pero el cliente es un despachante conocido → pago genérico (se aplica FIFO en Operaciones)
   else if (despachantesOp.includes(clienteUpper)) {
     await addDoc(collection(db,'despachantees_pagos'), {
       despachante: clienteUpper,
@@ -1048,7 +1084,6 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
     logEntry.acciones.push('Pago vinculado a Operaciones (saldo FIFO, sin factura)');
   }
 
-  // 3 - Mudanzas: SOLO auto-marcar cobrada si hay UNA candidata y el monto coincide
   const candidatas = mudanzasPend.filter(m => (m.cliente||'').toUpperCase() === clienteUpper && !m.cobrado);
   if (candidatas.length === 1) {
     const mud = candidatas[0];
@@ -1077,13 +1112,6 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
   await addDoc(collection(db,'log_vinculaciones_caja'), logEntry);
 }
 
-// ── Impuesto a los Créditos y Débitos Bancarios: ya NO se genera automáticamente ──
-// Antes cada movimiento en Banco (y cada cheque al pasar a Acreditado) generaba solo un
-// Egreso estimado (alícuota configurable). Bruno prefirió sacar esto porque complicaba
-// la carga: ahora el impuesto real se carga a mano, a fin de mes, con el monto exacto
-// que figura en el resumen bancario (por ejemplo importándolo desde Conciliación).
-
-// ── Cheques: mostrar/ocultar el campo "Endosado a" según el estado elegido ──
 window.toggleEndosoFields = function(){
   const wrap = document.getElementById('endosadoAWrap');
   if(wrap) wrap.style.display = document.getElementById('estadoCheque').value==='Endosado' ? '' : 'none';
@@ -1103,15 +1131,12 @@ window.limpiarForm = function() {
   cerrarACCaja('ac_cliente');
 };
 
-// ── Filtro de mes para Movimientos (misma dinámica que "filtro_mes" de Operaciones) ──
-// Arranca siempre en el mes en curso; una vez que el usuario lo cambia a mano (incluido
-// "Todos los meses") se respeta esa elección y no se lo pisa más.
 function renderFiltroMesMovimientos(){
   const sel = document.getElementById('filtroMes');
   if(!sel) return;
   const prevVal = sel.value;
   const meses = [...new Set(allMovimientos.map(m=>{
-    const p=(m.fecha||'').split('/'); // fecha guardada como dd/mm/yyyy
+    const p=(m.fecha||'').split('/');
     return p.length===3 ? (p[2]+'-'+p[1].padStart(2,'0')) : null;
   }).filter(Boolean))].sort().reverse();
   const mesActual = new Date().toISOString().slice(0,7);
@@ -1141,7 +1166,6 @@ window.filtrar = function() {
     if(desde||hasta){const p=(m.fecha||'').split('/');if(p.length===3){const d=p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0');if(desde&&d<desde)return false;if(hasta&&d>hasta)return false;}}
     return true;
   });
-  // f ya viene ordenado más nuevo primero (allMovimientos se ordena por ts desc al cargar)
 
   const totalPaginas = Math.max(1, Math.ceil(f.length / MOVIMIENTOS_PAGE_SIZE));
   if(movimientosPage > totalPaginas) movimientosPage = totalPaginas;
@@ -1170,7 +1194,6 @@ window.filtrar = function() {
     </tr>`;
   }).join('')||'<tr><td colspan="9" style="text-align:center;color:#888;padding:20px">Sin resultados</td></tr>';
 
-  // Totales / resumen: siempre sobre TODO lo filtrado, no solo la página visible
   const tI=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
   const tE=f.filter(m=>m.tipo==='Egreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
   const tIusd=f.filter(m=>m.tipo==='Ingreso'&&m.cuenta==='Dólares').reduce((s,m)=>s+Number(m.importe),0);
@@ -1201,17 +1224,15 @@ window.limpiarFiltros=function(){
   document.getElementById('filtroTipo').value='';
   document.getElementById('filtroCuenta').value='';
   const selMes=document.getElementById('filtroMes'); if(selMes) selMes.value='';
-  usuarioEligioMesMovimientos = true; // "Todos los meses" queda como elección explícita
+  usuarioEligioMesMovimientos = true;
   resetPaginaMovimientos();
 };
 window.eliminar=async function(id){
   if(!confirm('¿Eliminar?'))return;
   const m = allMovimientos.find(x=>x.id===id);
-  // Si el movimiento tiene un impuesto bancario vinculado, se borra en cascada
   if(m?.impuestoMovId){
     try { await deleteDoc(doc(db,'movimientos', m.impuestoMovId)); } catch(e){}
   }
-  // Si el movimiento ES el impuesto vinculado a otro, se limpia la referencia en el original
   if(m?.vinculadoA){
     try { await updateDoc(doc(db,'movimientos', m.vinculadoA), { impuestoMovId: null }); } catch(e){}
   }
@@ -1247,7 +1268,6 @@ window.guardarEdicion=async function(){
   if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;data.endosadoA=document.getElementById('eEndosadoA').value.trim();}
   await updateDoc(doc(db,'movimientos',editandoId),data);
 
-  // ── Guarda el Cliente/Proveedor como nuevo si todavía no estaba en la lista ──
   try { await guardarProveedorSiEsNuevo(clienteEditado); }
   catch(e){ console.warn('No se pudo guardar el proveedor nuevo:', e); }
 
@@ -1305,14 +1325,12 @@ window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque'
 window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');resetPaginaCheques();};
 
 // ── EXPORTAR EXCEL: estilo unificado (Arial 7) — mismo criterio que usa operaciones.js ──
-// Bordes finos en toda la grilla, encabezado azul con letra blanca, fila TOTAL destacada
-// en rojo, y fuente Arial 7 en todo (encabezado, datos y total).
 function estilizarHojaExcel(ws, opts){
   const { numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const formatoDecimal = '#,##0.00';
-  const totalRowIdx = 1 + numDataRows; // fila 0-index de la fila TOTAL
+  const totalRowIdx = 1 + numDataRows;
 
   const range = XLSX.utils.decode_range(ws['!ref']);
   for(let R = range.s.r; R <= range.e.r; R++){
@@ -1352,7 +1370,6 @@ function estilizarHojaExcel(ws, opts){
 }
 window.estilizarHojaExcel = estilizarHojaExcel;
 
-// Redondea a centavos exactos (sin llevar a entero) - igual criterio que operaciones.js
 function dec2(n){ return Math.round((Number(n||0) + Number.EPSILON) * 100) / 100; }
 window.dec2 = dec2;
 
@@ -1463,7 +1480,6 @@ window.renderReportes=function(){
   const neto=ingMes-egrMes;const netoEl=document.getElementById('repNetoMes');netoEl.textContent=fmtMoney(neto);netoEl.className='card-value '+(neto>=0?'green':'red');
   document.getElementById('repCantMes').textContent=delMes.length;
 
-  // ── Resumen Anual (selector de año + desglose mes a mes) ──
   const selAnio=document.getElementById('repAnio');
   const aniosDisponibles=[...new Set(allMovimientos.map(m=>{const p=(m.fecha||'').split('/');return p.length===3?Number(p[2]):null;}).filter(a=>a&&!isNaN(a)))];
   if(!aniosDisponibles.includes(anio)) aniosDisponibles.push(anio);
@@ -1513,13 +1529,11 @@ window.renderReportes=function(){
   for(const m of allMovimientos.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares')){if(!clientes[m.cliente])clientes[m.cliente]={total:0,cant:0};clientes[m.cliente].total+=Number(m.importe)||0;clientes[m.cliente].cant++;}
   document.getElementById('tablaTopClientes').innerHTML=Object.entries(clientes).sort((a,b)=>b[1].total-a[1].total).slice(0,10).map(([cl,d])=>`<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.total)}</td><td>${d.cant}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
 };
-// Convierte fecha dd/mm/yyyy (como se guarda en el sistema) a yyyy-mm-dd para poder ordenar/comparar
 function fechaOrdenable(fechaAR){
   const p=(fechaAR||'').split('/');
   return p.length===3 ? p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0') : '';
 }
 
-// Aplica estilo + fila TOTAL con fórmulas SUBTOTAL a una hoja simple de tipo [Etiqueta, Ingresos, Egresos, Saldo]
 function hojaResumenConTotal(wb, nombreHoja, header, rows, totales, anchoCols){
   const totalRow=['TOTAL', dec2(totales.ing), dec2(totales.egr), dec2(totales.ing-totales.egr)];
   const aoa=[header, ...rows, totalRow];
@@ -1545,7 +1559,6 @@ window.exportarReporteExcel=function(){
 
   const wb=XLSX.utils.book_new();
 
-  // ── Hoja Movimientos ──
   const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por'];
   const rows=movs.map(m=>[m.fecha,m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.bancoCheque||'',m.fechaVencCheque||'',m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
   const totImporte=movs.reduce((s,m)=>s+Number(m.importe||0),0);
@@ -1563,7 +1576,6 @@ window.exportarReporteExcel=function(){
   estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6] });
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
 
-  // ── Hoja Por cuenta ──
   if(tipo==='todos'||tipo==='porCuenta'){
     const cuentas={};
     for(const m of movs){ if(!cuentas[m.cuenta]) cuentas[m.cuenta]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v; }
@@ -1573,7 +1585,6 @@ window.exportarReporteExcel=function(){
     hojaResumenConTotal(wb,'Por cuenta',['Cuenta','Ingresos','Egresos','Saldo'],rowsCta,totCta,[{wch:16},{wch:14},{wch:14},{wch:14}]);
   }
 
-  // ── Hoja Por cliente ──
   if(tipo==='todos'||tipo==='porCliente'){
     const clMap={};
     for(const m of movs){ if(!clMap[m.cliente]) clMap[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMap[m.cliente].ing+=v:clMap[m.cliente].egr+=v; }
@@ -1589,17 +1600,368 @@ window.exportarReporteExcel=function(){
 window.exportarExcel=function(){document.getElementById('repDesde').value='';document.getElementById('repHasta').value='';document.getElementById('repTipo').value='todos';exportarReporteExcel();};
 window.exportarPDF=function(){window.print();};
 
+/* ══════════════════════════════════════════════════════════════════════
+   ── BOLETAS (Factura A / Factura C de cada socio) ──────────────────
+   Colección Firestore: 'caja_boletas'. Se filtra SIEMPRE por período
+   (campo 'periodo', formato yyyy-mm) usando getDocs puntual — igual
+   criterio que usa sueldos.html para movilidad/fines de semana — para
+   no dejar un onSnapshot en vivo escuchando toda la colección histórica.
+   Los rubros con % de IVA sugerido se guardan en 'caja_rubros_iva'
+   (colección chica, un doc por rubro personalizado) para poder
+   reutilizarlos entre sesiones sin tener que retipearlos.
+   ══════════════════════════════════════════════════════════════════════ */
+
+// Rubros habituales que puede traer una boleta de gastos de una empresa
+// de despacho de aduana en Argentina, con la tasa de IVA que discrimina
+// una Factura A para cada uno (Factura C = Monotributo, nunca discrimina IVA).
+// Fuente: tasas de IVA vigentes AFIP (general 21%, reducida 10.5%,
+// incrementada 27%, exento 0%).
+const BOLETAS_RUBROS_BASE = [
+  { id:'general',        label:'Gastos varios (tasa general)',        iva:21   },
+  { id:'combustible',    label:'Combustible (nafta / gasoil / GNC)',  iva:21   },
+  { id:'gastronomia',    label:'Gastronomía / Restaurante',            iva:21   },
+  { id:'hoteleria',      label:'Hotelería / Alojamiento',              iva:21   },
+  { id:'libreria',       label:'Librería / Insumos de oficina',        iva:21   },
+  { id:'mantenVehic',    label:'Mantenimiento / Repuestos vehículo',   iva:21   },
+  { id:'peajesEstac',    label:'Peajes / Estacionamiento',             iva:21   },
+  { id:'fletes',         label:'Fletes / Transporte de cargas',        iva:21   },
+  { id:'correo',         label:'Correo / Courier / Encomiendas',       iva:21   },
+  { id:'honorarios',     label:'Honorarios profesionales',             iva:21   },
+  { id:'alquilerCom',    label:'Alquiler comercial',                   iva:21   },
+  { id:'seguros',        label:'Seguros',                              iva:21   },
+  { id:'telefoniaLuz',   label:'Telefonía / Internet / Luz / Gas (uso comercial)', iva:27 },
+  { id:'medicina',       label:'Medicamentos / Medicina prepaga',      iva:10.5 },
+  { id:'construccion',   label:'Construcción / Refacción de inmueble', iva:10.5 },
+  { id:'transportePas',  label:'Transporte público de pasajeros',      iva:0    },
+  { id:'otro',           label:'Otro (elegir % manualmente)',          iva:null },
+];
+let boletasRubrosCustom = [];   // rubros agregados a mano por el usuario, guardados en Firestore
+function rubrosBoletasTodos(){ return [...BOLETAS_RUBROS_BASE.filter(r=>r.id!=='otro'), ...boletasRubrosCustom, BOLETAS_RUBROS_BASE.find(r=>r.id==='otro')]; }
+
+// Socios de sueldos.html (los mismos 6 que cobran autónomo + dividendo)
+const BOLETAS_SOCIOS = ['Bruno Cola','Pablo Mazzolin','Daniel Nievas','Adrián Juri','Diego Gómez','Sebastián Oliveros'];
+
+let boletasPeriodoActual = new Date().toISOString().slice(0,7);
+let allBoletas = [];          // SOLO las del período seleccionado (getDocs puntual, no listener)
+let boletasCargadas = false;  // evita recargar de más si el usuario reabre la pestaña sin cambiar de mes
+let rubrosBoletasCargados = false;
+let boletasPage = 1;
+const BOLETAS_PAGE_SIZE = 15;
+
+function fmtPct(n){ return (Number(n)%1===0?Number(n):Number(n).toFixed(1)) + '%'; }
+
+// Arma el <select> de rubros y deja armado el <select> de socios (una sola vez)
+function construirSelectoresBoletas(){
+  const selRubro=document.getElementById('boletaRubro');
+  if(selRubro){
+    selRubro.innerHTML = rubrosBoletasTodos().map(r=>`<option value="${r.id}" data-iva="${r.iva===null?'':r.iva}">${r.label}${r.iva!==null?' · '+fmtPct(r.iva):''}</option>`).join('');
+  }
+  const selSocio=document.getElementById('boletaSocio');
+  if(selSocio && !selSocio.dataset.built){
+    selSocio.innerHTML = BOLETAS_SOCIOS.map(n=>`<option value="${n}">${n}</option>`).join('');
+    selSocio.dataset.built='1';
+  }
+  const selFiltroSocio=document.getElementById('boletaFiltroSocio');
+  if(selFiltroSocio && !selFiltroSocio.dataset.built){
+    selFiltroSocio.innerHTML = '<option value="">Todos</option>' + BOLETAS_SOCIOS.map(n=>`<option value="${n}">${n}</option>`).join('');
+    selFiltroSocio.dataset.built='1';
+  }
+}
+
+// Trae (una sola vez por sesión) los rubros personalizados que ya se hayan
+// guardado antes, para no repetir la carga a mano. Colección chica (unos
+// pocos documentos), se lee con getDocs una única vez y se cachea.
+async function cargarRubrosCustomBoletas(){
+  if(rubrosBoletasCargados) return;
+  try{
+    const snap = await getDocs(collection(db,'caja_rubros_iva'));
+    boletasRubrosCustom = snap.docs.map(d=>({ id:d.id, label:d.data().label, iva:Number(d.data().iva) }));
+  }catch(e){ console.warn('caja_rubros_iva:',e); boletasRubrosCustom=[]; }
+  rubrosBoletasCargados = true;
+  construirSelectoresBoletas();
+}
+
+// Trae SOLO las boletas del período pedido (where periodo==), igual criterio
+// que sueldos.html para movilidad/finesdesemana: minimiza lecturas porque
+// nunca trae el histórico completo, solo el mes que se está mirando.
+async function cargarBoletasPeriodo(periodo){
+  try{
+    const q = query(collection(db,'caja_boletas'), where('periodo','==',periodo));
+    const snap = await getDocs(q);
+    allBoletas = snap.docs.map(d=>({id:d.id,...d.data()}));
+    allBoletas.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  }catch(e){ console.warn('caja_boletas:',e); allBoletas=[]; toast('Error al cargar boletas del período','error'); }
+  boletasCargadas = true;
+}
+
+// Punto de entrada al abrir la pestaña Boletas (llamado desde showTab)
+window.initBoletasTab = async function(){
+  construirSelectoresBoletas();
+  await cargarRubrosCustomBoletas();
+  const selP=document.getElementById('boletaPeriodo');
+  if(selP && !selP.value) selP.value = boletasPeriodoActual;
+  window.toggleBoletaRubroActual();
+  window.toggleBoletaTipoFactura();
+  if(!boletasCargadas){
+    await cargarBoletasPeriodo(boletasPeriodoActual);
+    renderBoletas();
+  }
+};
+
+// Cambia el período visible en la pestaña Boletas (dispara UNA lectura nueva, filtrada)
+window.cambiarPeriodoBoletas = async function(){
+  const val = document.getElementById('boletaPeriodo').value;
+  if(!val) return;
+  boletasPeriodoActual = val;
+  boletasPage = 1;
+  document.getElementById('spinnerOverlay').style.display='flex';
+  await cargarBoletasPeriodo(boletasPeriodoActual);
+  renderBoletas();
+  document.getElementById('spinnerOverlay').style.display='none';
+};
+
+// Al elegir un rubro, sugiere el % de IVA correspondiente (si la factura es A)
+window.toggleBoletaRubroActual = function(){
+  const sel=document.getElementById('boletaRubro');
+  const ivaInput=document.getElementById('boletaIva');
+  const custWrap=document.getElementById('boletaRubroCustomWrap');
+  if(!sel||!ivaInput) return;
+  const opt = sel.selectedOptions[0];
+  const ivaSugerido = opt?.dataset.iva;
+  const esOtro = sel.value==='otro';
+  if(custWrap) custWrap.style.display = esOtro ? '' : 'none';
+  if(!esOtro && ivaSugerido!==''){
+    ivaInput.value = ivaSugerido;
+  }
+  actualizarInfoIvaBoleta();
+};
+
+// Factura C (monotributo) nunca discrimina IVA: deshabilita y limpia el campo.
+window.toggleBoletaTipoFactura = function(){
+  const tipo=document.getElementById('boletaTipoFactura').value;
+  const ivaInput=document.getElementById('boletaIva');
+  if(!ivaInput) return;
+  if(tipo==='C'){
+    ivaInput.value=0;
+    ivaInput.disabled=true;
+  } else {
+    ivaInput.disabled=false;
+    window.toggleBoletaRubroActual();
+  }
+  actualizarInfoIvaBoleta();
+};
+
+function actualizarInfoIvaBoleta(){
+  const tipo=document.getElementById('boletaTipoFactura')?.value;
+  const infoEl=document.getElementById('boletaIvaInfo');
+  const importe=parsearMontoAR(document.getElementById('boletaImporte')?.value||'');
+  const ivaPct=Number(document.getElementById('boletaIva')?.value)||0;
+  if(!infoEl) return;
+  if(tipo==='C'){
+    infoEl.className='boleta-iva-info exento';
+    infoEl.textContent='Factura C (Monotributo): no discrimina IVA.';
+    return;
+  }
+  infoEl.className='boleta-iva-info';
+  if(!isNaN(importe) && importe>0){
+    const neto = importe/(1+ivaPct/100);
+    const ivaMonto = importe-neto;
+    infoEl.textContent = `Neto: ${fmtMoney(neto)}  ·  IVA (${fmtPct(ivaPct)}): ${fmtMoney(ivaMonto)}  ·  Total: ${fmtMoney(importe)}`;
+  } else {
+    infoEl.textContent = `Se va a discriminar IVA al ${fmtPct(ivaPct)} sobre el importe total de la boleta.`;
+  }
+}
+window.actualizarInfoIvaBoleta = actualizarInfoIvaBoleta;
+
+// Guarda un rubro nuevo (tipeado en "Otro") en 'caja_rubros_iva' para que
+// quede disponible la próxima vez, con el % de IVA que el usuario definió.
+async function guardarRubroCustomSiCorresponde(){
+  const sel=document.getElementById('boletaRubro');
+  if(!sel||sel.value!=='otro') return null;
+  const nombre=(document.getElementById('boletaRubroCustomNombre').value||'').trim();
+  const ivaPct=Number(document.getElementById('boletaIva').value)||0;
+  if(!nombre) return null;
+  const yaExiste = boletasRubrosCustom.find(r=>r.label.toLowerCase()===nombre.toLowerCase());
+  if(yaExiste) return yaExiste.label;
+  const id = nombre.toUpperCase().replace(/\s+/g,'_').replace(/[^A-Z0-9_]/g,'').slice(0,60) || ('RUBRO_'+Date.now());
+  try{
+    await setDoc(doc(db,'caja_rubros_iva', id), { label:nombre, iva:ivaPct, ts:Date.now() }, { merge:true });
+    boletasRubrosCustom.push({ id, label:nombre, iva:ivaPct });
+    construirSelectoresBoletas();
+  }catch(e){ console.warn('No se pudo guardar el rubro nuevo:', e); }
+  return nombre;
+}
+
+window.guardarBoleta = async function(){
+  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
+  const socio = document.getElementById('boletaSocio').value;
+  const tipoFactura = document.getElementById('boletaTipoFactura').value;
+  const rubroSel = document.getElementById('boletaRubro');
+  const rubroId = rubroSel.value;
+  const importe = parsearMontoAR(document.getElementById('boletaImporte').value);
+  const ivaPct = tipoFactura==='C' ? 0 : (Number(document.getElementById('boletaIva').value)||0);
+  const numeroBoleta = document.getElementById('boletaNumero').value.trim();
+  const observaciones = document.getElementById('boletaObs').value.trim();
+
+  if(!socio || isNaN(importe) || importe<=0){ toast('Completá socio e importe','error'); return; }
+  if(rubroId==='otro' && !document.getElementById('boletaRubroCustomNombre').value.trim()){
+    toast('Escribí el nombre del rubro nuevo','error'); return;
+  }
+
+  let rubroLabel;
+  if(rubroId==='otro'){
+    rubroLabel = await guardarRubroCustomSiCorresponde();
+  } else {
+    rubroLabel = rubrosBoletasTodos().find(r=>r.id===rubroId)?.label || rubroId;
+  }
+
+  const neto = tipoFactura==='A' ? dec2(importe/(1+ivaPct/100)) : dec2(importe);
+  const ivaMonto = tipoFactura==='A' ? dec2(importe-neto) : 0;
+
+  const data = {
+    periodo: boletasPeriodoActual,
+    socio, tipoFactura, rubro: rubroLabel, rubroId: rubroId==='otro'?'otro':rubroId,
+    importe: dec2(importe), ivaPct, neto, ivaMonto,
+    numeroBoleta, observaciones,
+    fecha: today(), ts: Date.now(), creadoPor: currentUser.nombre
+  };
+
+  try{
+    await addDoc(collection(db,'caja_boletas'), data);
+    limpiarFormBoleta();
+    toast('Boleta guardada ✓ ('+fmtMoney(importe)+')','success');
+    await cargarBoletasPeriodo(boletasPeriodoActual);
+    renderBoletas();
+  }catch(e){ toast('Error al guardar: '+e.message,'error'); }
+};
+
+window.limpiarFormBoleta = function(){
+  ['boletaImporte','boletaNumero','boletaObs','boletaRubroCustomNombre'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('boletaTipoFactura').value='A';
+  document.getElementById('boletaRubro').value='general';
+  window.toggleBoletaTipoFactura();
+  window.toggleBoletaRubroActual();
+};
+window.limpiarFormBoleta.__isReset = true;
+
+window.eliminarBoleta = async function(id){
+  if(!confirm('¿Eliminar esta boleta?')) return;
+  try{
+    await deleteDoc(doc(db,'caja_boletas', id));
+    allBoletas = allBoletas.filter(b=>b.id!==id);
+    renderBoletas();
+    toast('Boleta eliminada','error');
+  }catch(e){ toast('Error al eliminar: '+e.message,'error'); }
+};
+
+window.resetPaginaBoletas = function(){ boletasPage = 1; renderBoletas(); };
+window.cambiarPaginaBoletas = function(delta){ boletasPage += delta; renderBoletas(); };
+
+window.renderBoletas = function(){
+  const fSocio = document.getElementById('boletaFiltroSocio')?.value||'';
+  const fTipo = document.getElementById('boletaFiltroTipo')?.value||'';
+
+  let f = allBoletas.filter(b=>{
+    if(fSocio && b.socio!==fSocio) return false;
+    if(fTipo && b.tipoFactura!==fTipo) return false;
+    return true;
+  });
+
+  // Cards resumen (sobre TODO el período, no solo lo filtrado en pantalla)
+  const totalImporte = allBoletas.reduce((s,b)=>s+Number(b.importe||0),0);
+  const totalIva = allBoletas.filter(b=>b.tipoFactura==='A').reduce((s,b)=>s+Number(b.ivaMonto||0),0);
+  const cantA = allBoletas.filter(b=>b.tipoFactura==='A').length;
+  const cantC = allBoletas.filter(b=>b.tipoFactura==='C').length;
+  const elTot=document.getElementById('boletasTotalImporte'); if(elTot) elTot.textContent=fmtMoney(totalImporte);
+  const elIva=document.getElementById('boletasTotalIva'); if(elIva) elIva.textContent=fmtMoney(totalIva);
+  const elA=document.getElementById('boletasCantA'); if(elA) elA.textContent=cantA;
+  const elC=document.getElementById('boletasCantC'); if(elC) elC.textContent=cantC;
+
+  // Resumen por socio (para ver rápido cuánto trajo cada uno este mes)
+  const porSocio = {};
+  BOLETAS_SOCIOS.forEach(s=>porSocio[s]={total:0,cant:0});
+  allBoletas.forEach(b=>{ if(!porSocio[b.socio]) porSocio[b.socio]={total:0,cant:0}; porSocio[b.socio].total+=Number(b.importe||0); porSocio[b.socio].cant++; });
+  const contSocios=document.getElementById('boletasPorSocio');
+  if(contSocios){
+    contSocios.innerHTML = Object.entries(porSocio).map(([s,d])=>`
+      <div class="card"><div class="card-label">${s.split(' ')[0]}</div><div class="card-value" style="font-size:15px;">${fmtMoney(d.total)}</div><div style="font-size:10px;color:#94a3b8;">${d.cant} boleta(s)</div></div>
+    `).join('');
+  }
+
+  const totalPaginas = Math.max(1, Math.ceil(f.length / BOLETAS_PAGE_SIZE));
+  if(boletasPage > totalPaginas) boletasPage = totalPaginas;
+  if(boletasPage < 1) boletasPage = 1;
+  const inicio = (boletasPage-1) * BOLETAS_PAGE_SIZE;
+  const fPagina = f.slice(inicio, inicio+BOLETAS_PAGE_SIZE);
+
+  const esAdmin = currentUser?.rol==='admin';
+  const tbody = document.getElementById('tablaBoletas');
+  if(tbody){
+    tbody.innerHTML = fPagina.map(b=>{
+      const badgeTipo = b.tipoFactura==='A' ? 'badge-factura-a' : 'badge-factura-c';
+      const ivaTxt = b.tipoFactura==='A' ? `${fmtPct(b.ivaPct)} · ${fmtMoney(b.ivaMonto)}` : '—';
+      return `<tr>
+        <td>${b.fecha||''}</td>
+        <td><strong>${b.socio}</strong></td>
+        <td><span class="badge ${badgeTipo}">Fact. ${b.tipoFactura}</span></td>
+        <td>${b.rubro||'-'}</td>
+        <td>${b.numeroBoleta||'-'}</td>
+        <td><strong>${fmtMoney(b.importe)}</strong></td>
+        <td>${ivaTxt}</td>
+        <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${b.observaciones||''}">${b.observaciones||'-'}</td>
+        <td>${esAdmin?`<button class="btn btn-danger btn-sm" onclick="eliminarBoleta('${b.id}')">🗑</button>`:''}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#888;padding:20px">Sin boletas cargadas en este período</td></tr>';
+  }
+
+  const pagWrap = document.getElementById('boletas-paginacion');
+  if(pagWrap){
+    pagWrap.innerHTML = totalPaginas>1 ? `
+      <div class="pagin-bar">
+        <button onclick="cambiarPaginaBoletas(-1)" ${boletasPage<=1?'disabled':''}>‹ Anterior</button>
+        <span>Página ${boletasPage}/${totalPaginas} · ${f.length} boleta(s)</span>
+        <button onclick="cambiarPaginaBoletas(1)" ${boletasPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+      </div>` : '';
+  }
+};
+
+window.exportarBoletasExcel = function(){
+  if(!allBoletas.length){ toast('No hay boletas para exportar en este período','error'); return; }
+  const filas = [...allBoletas].sort((a,b)=>(a.ts||0)-(b.ts||0));
+  const header=['Fecha','Socio','Tipo Factura','Rubro','N° Boleta','Importe','% IVA','IVA $','Neto','Observaciones'];
+  const rows = filas.map(b=>[b.fecha||'',b.socio,'Factura '+b.tipoFactura,b.rubro||'',b.numeroBoleta||'',dec2(b.importe),b.tipoFactura==='A'?b.ivaPct:'',dec2(b.ivaMonto||0),dec2(b.neto||b.importe),b.observaciones||'']);
+  const totImporte = filas.reduce((s,b)=>s+Number(b.importe||0),0);
+  const totIva = filas.filter(b=>b.tipoFactura==='A').reduce((s,b)=>s+Number(b.ivaMonto||0),0);
+  const totNeto = filas.reduce((s,b)=>s+Number(b.neto||b.importe||0),0);
+  const totalRow=['TOTAL',`${filas.length} boleta(s)`,'','','',dec2(totImporte),'',dec2(totIva),dec2(totNeto),''];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:11},{wch:18},{wch:12},{wch:26},{wch:14},{wch:13},{wch:9},{wch:12},{wch:13},{wch:26}];
+
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const firstDataRow=2, lastDataRow=1+rows.length, totalRowNum=2+rows.length;
+  ws['!autofilter']={ ref:`A1:${lastCol}${lastDataRow}` };
+  const addrCant=XLSX.utils.encode_cell({r:totalRowNum-1,c:1});
+  ws[addrCant]={ t:'str', v:`${rows.length} boleta(s)`, f:`SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" boleta(s)"` };
+  const addrImp=XLSX.utils.encode_cell({r:totalRowNum-1,c:5});
+  ws[addrImp]={ t:'n', v:dec2(totImporte), f:`SUBTOTAL(109,F${firstDataRow}:F${lastDataRow})` };
+  const addrIva=XLSX.utils.encode_cell({r:totalRowNum-1,c:7});
+  ws[addrIva]={ t:'n', v:dec2(totIva), f:`SUBTOTAL(109,H${firstDataRow}:H${lastDataRow})` };
+  const addrNeto=XLSX.utils.encode_cell({r:totalRowNum-1,c:8});
+  ws[addrNeto]={ t:'n', v:dec2(totNeto), f:`SUBTOTAL(109,I${firstDataRow}:I${lastDataRow})` };
+
+  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[5,7,8], colsNumericas:[5,6,7,8] });
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Boletas '+boletasPeriodoActual);
+  XLSX.writeFile(wb,'Boletas_'+boletasPeriodoActual+'.xlsx');
+  toast('Excel generado ✓','success');
+};
+
 // ══════════════════════════════════════════════════════════════════════════
 // ── CONCILIACIÓN BANCARIA ────────────────────────────────────────────────
-// Todo lo que sigue corre 100% en el navegador: parsear el PDF/texto y
-// compararlo contra `allMovimientos` (que ya está en memoria por el
-// onSnapshot de arriba) NO genera ninguna lectura extra a Firestore.
-// La única escritura ocurre cuando el usuario aprieta "Cargar faltantes",
-// y ahí se hace 1 addDoc por cada línea que falte, ni una de más.
 // ══════════════════════════════════════════════════════════════════════════
 
-// Palabras clave para clasificar cada línea del resumen. Se evalúan en orden;
-// la primera que matchea gana.
 const CONC_REGLAS = [
   { categoria:'impuesto',      test:/IMP\.?\s*LEY\s*25413|LEY\s*NRO\.?\s*25\.?413/i },
   { categoria:'comision',      test:/COMISION|COMI\s+TRANSFERENCIA/i },
@@ -1628,16 +1990,12 @@ const CONC_TAG_CLASS = {
   transferencia:'conc-tag-transferencia', debito:'conc-tag-otro', otro:'conc-tag-otro'
 };
 
-// Parsea el bloque de texto "Movimientos en cuentas" del resumen del banco.
-// Cada línea real tiene: FECHA (dd/mm) ... CONCEPTO ... IMPORTE(con signo si es débito) SALDO
-// Usamos que el IMPORTE es siempre el penúltimo número de la línea y el SALDO el último,
-// ambos en formato argentino (punto miles, coma decimal).
 function parsearTextoBanco(texto){
   const lineas = texto.split('\n');
   const numeroRegex = /-?\d{1,3}(?:\.\d{3})*,\d{2}/g;
   const fechaRegex = /^(\d{2}\/\d{2})\b/;
   const resultado = [];
-  let anioActual = new Date().getFullYear(); // se ajusta si el texto trae AAAA en algún lado
+  let anioActual = new Date().getFullYear();
   const anioMatch = texto.match(/20\d{2}/);
   if(anioMatch) anioActual = Number(anioMatch[0]);
 
@@ -1645,16 +2003,15 @@ function parsearTextoBanco(texto){
     linea = linea.trim();
     if(!linea) continue;
     const fechaMatch = linea.match(fechaRegex);
-    if(!fechaMatch) continue; // no es una línea de movimiento
+    if(!fechaMatch) continue;
 
     const numeros = linea.match(numeroRegex);
     if(!numeros || numeros.length < 1) continue;
     if(/SALDO\s+ANTERIOR|SALDO\s+AL|TOTAL\s+MOVIMIENTOS|SIN\s+MOVIMIENTOS/i.test(linea)) continue;
 
-    // Concepto = todo lo que hay entre la fecha y el primer número encontrado
     const idxPrimerNumero = linea.search(numeroRegex);
     let concepto = linea.slice(fechaMatch[0].length, idxPrimerNumero).trim();
-    concepto = concepto.replace(/^(D\s*\d{0,3}|\d{2,3})\s+/,'').trim(); // saca códigos de origen tipo "D 500", "733", "246"
+    concepto = concepto.replace(/^(D\s*\d{0,3}|\d{2,3})\s+/,'').trim();
 
     let importe;
     if(numeros.length >= 2){
@@ -1687,7 +2044,6 @@ async function extraerTextoDePDF(file){
   for(let i=1; i<=pdf.numPages; i++){
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    // Agrupa por posición Y (renglón) para reconstruir el orden de líneas lo mejor posible
     const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: Math.round(it.transform[5]) }));
     items.sort((a,b) => b.y - a.y || a.x - b.x);
     let filaActual = null, lineaActual = [];
@@ -1711,7 +2067,6 @@ window.onConcFileSelected = async function(ev){
   await procesarArchivoConciliacion(file);
 };
 
-// Drag & drop del PDF sobre el recuadro
 const concDropZoneInit = () => {
   const zona = document.getElementById('concDropZone');
   if(!zona) return;
@@ -1758,12 +2113,7 @@ function procesarLineasBanco(texto){
   document.getElementById('concResultadoSection').style.display='block';
 }
 
-// Compara cada línea del banco contra allMovimientos (ya en memoria, 0 lecturas nuevas).
-// Match por fecha + importe absoluto con tolerancia de $1.
 function compararConciliacionConCaja(){
-  // Movimientos de Caja candidatos a matchear: los de cuenta Banco (incluye los que ya
-  // representan cheques acreditados a Banco), más cualquier movimiento histórico que haya
-  // quedado marcado como impuesto bancario automático.
   const candidatosCaja = allMovimientos.filter(m => m.cuenta==='Banco' || m.esImpuestoBancario);
 
   for(const linea of concLineasBanco){
@@ -1818,7 +2168,6 @@ window.toggleConcCheckAll = function(){
 
 function renderComparacionSaldo(){
   if(!concLineasBanco.length){ document.getElementById('concComparacionSaldo').innerHTML=''; return; }
-  // Saldo Banco actual en Caja (según renderSaldos: incluye cuenta Banco + cheques Acreditados)
   let saldoCajaBanco = 0;
   for(const m of allMovimientos){
     const v = Number(m.importe)||0;
@@ -1844,9 +2193,6 @@ window.limpiarConciliacion = function(){
   document.getElementById('concResultadoSection').style.display='none';
 };
 
-// Carga en Firestore únicamente las líneas tildadas que faltan. Estas líneas son datos
-// reales del banco (incluido el impuesto Ley 25.413 real, si aparece en el resumen), así
-// que se cargan tal cual, sin generar ningún movimiento automático encima.
 window.cargarFaltantesConciliacion = async function(){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   const checks = document.querySelectorAll('.conc-check:checked');
