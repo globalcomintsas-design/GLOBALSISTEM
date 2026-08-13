@@ -92,6 +92,7 @@ tr:hover td{background:#fafbff;}
 .badge-en-cartera{background:#dbeafe;color:#1e40af;}
 .badge-depositado{background:#fef9c3;color:#854d0e;}
 .badge-acreditado{background:#dcfce7;color:#166534;}
+.badge-endosado{background:#e0e7ff;color:#3730a3;}
 .badge-rechazado{background:#fee2e2;color:#991b1b;}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:center;padding:20px;}
 .modal-bg.open{display:flex;}
@@ -181,21 +182,6 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Total Pesos</div><div class="card-value green" id="saldoTotal">$ 0</div></div>
       </div>
 
-      <div class="section" style="padding:12px 16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
-          <div>
-            <strong style="color:#1e3a8a;font-size:13px;">🏦 Impuesto a los Créditos y Débitos Bancarios (Ley 25.413)</strong>
-            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">Se genera un movimiento de Egreso automático por cada movimiento en Banco, y por cada cheque cuando pasa a Acreditado.</div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;">
-            <label style="font-size:12px;color:#666;">Alícuota</label>
-            <input type="number" id="alicuotaInput" value="0.6" step="0.05" min="0" style="width:70px;padding:6px 8px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:13px;font-family:'DM Sans',sans-serif;text-align:right;" />
-            <span style="font-size:12px;color:#666;">%</span>
-            <button class="btn btn-outline btn-sm" id="btnGuardarAlicuota" onclick="guardarAlicuota()">💾 Guardar</button>
-          </div>
-        </div>
-      </div>
-
       <div class="section">
         <div class="section-title">Nuevo Movimiento</div>
         <div class="form-grid">
@@ -224,13 +210,15 @@ tr:hover td{background:#fafbff;}
               <div class="field"><label>Fecha Vencimiento</label><input type="date" id="fechaVencCheque" /></div>
               <div class="field"><label>Quién lo pagó</label><input type="text" id="pagadorCheque" placeholder="Nombre del pagador..." /></div>
               <div class="field"><label>Estado</label>
-                <select id="estadoCheque">
+                <select id="estadoCheque" onchange="toggleEndosoFields()">
                   <option value="En cartera">En cartera</option>
                   <option value="Depositado">Depositado</option>
                   <option value="Acreditado">Acreditado</option>
+                  <option value="Endosado">Endosado</option>
                   <option value="Rechazado">Rechazado</option>
                 </select>
               </div>
+              <div class="field" id="endosadoAWrap" style="display:none"><label>Endosado a</label><input type="text" id="endosadoA" placeholder="A quién se le endosó..." /></div>
             </div>
           </div>
         </div>
@@ -246,6 +234,7 @@ tr:hover td{background:#fafbff;}
           <div class="btn-row">
             <button class="btn btn-success btn-sm" onclick="exportarExcel()">📊 Excel</button>
             <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
+            <button class="btn btn-outline btn-sm" id="btnBorrarImpAuto" onclick="borrarMovimientosImpuestoAutomaticos()" style="display:none;border-color:#dc2626;color:#dc2626;">🗑 Borrar automáticos Ley 25.413</button>
           </div>
         </div>
         <div class="search-bar"><input type="text" id="buscar" placeholder="Buscar por cliente, detalle, factura..." oninput="resetPaginaMovimientos()" /></div>
@@ -274,12 +263,13 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">En Cartera</div><div class="card-value" id="chEnCartera">$ 0</div></div>
         <div class="card"><div class="card-label">Depositados</div><div class="card-value orange" id="chDepositados">$ 0</div></div>
         <div class="card"><div class="card-label">Acreditados</div><div class="card-value green" id="chAcreditados">$ 0</div></div>
+        <div class="card"><div class="card-label">Endosados</div><div class="card-value blue" id="chEndosados">$ 0</div></div>
         <div class="card"><div class="card-label">Rechazados</div><div class="card-value red" id="chRechazados">$ 0</div></div>
       </div>
       <div class="section">
         <div class="section-title">Cartera de Cheques <button class="btn btn-success btn-sm" onclick="exportarChequesExcel()">📊 Excel</button></div>
         <div class="filtros">
-          <div><label>Estado</label><select id="filtroChEstado" onchange="resetPaginaCheques()"><option value="">Todos</option><option>En cartera</option><option>Depositado</option><option>Acreditado</option><option>Rechazado</option></select></div>
+          <div><label>Estado</label><select id="filtroChEstado" onchange="resetPaginaCheques()"><option value="">Todos</option><option>En cartera</option><option>Depositado</option><option>Acreditado</option><option>Endosado</option><option>Rechazado</option></select></div>
           <div><label>Banco</label><input type="text" id="filtroChBanco" placeholder="Banco..." oninput="resetPaginaCheques()" /></div>
           <div><label>Cliente</label><input type="text" id="filtroChCliente" placeholder="Cliente..." oninput="resetPaginaCheques()" /></div>
           <div><label>Venc. desde</label><input type="date" id="filtroChDesde" onchange="resetPaginaCheques()" /></div>
@@ -361,7 +351,6 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Egresos del mes</div><div class="card-value red" id="repEgrMes">$ 0</div></div>
         <div class="card"><div class="card-label">Neto del mes</div><div class="card-value" id="repNetoMes">$ 0</div></div>
         <div class="card"><div class="card-label">Mov. este mes</div><div class="card-value" id="repCantMes">0</div></div>
-        <div class="card"><div class="card-label">🏦 Imp. bancario (mes)</div><div class="card-value red" id="repImpMes">$ 0</div></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -399,7 +388,6 @@ tr:hover td{background:#fafbff;}
           <div class="card"><div class="card-label">Egresos del año</div><div class="card-value red" id="repEgrAnio">$ 0</div></div>
           <div class="card"><div class="card-label">Neto del año</div><div class="card-value" id="repNetoAnio">$ 0</div></div>
           <div class="card"><div class="card-label">Mov. este año</div><div class="card-value" id="repCantAnio">0</div></div>
-          <div class="card"><div class="card-label">🏦 Imp. bancario (año)</div><div class="card-value red" id="repImpAnio">$ 0</div></div>
         </div>
         <div class="table-wrap">
           <table>
@@ -562,13 +550,15 @@ tr:hover td{background:#fafbff;}
           <div class="field"><label>Fecha Vencimiento</label><input type="date" id="eFechaVencCheque" /></div>
           <div class="field"><label>Quién lo pagó</label><input type="text" id="ePagadorCheque" /></div>
           <div class="field"><label>Estado</label>
-            <select id="eEstadoCheque">
+            <select id="eEstadoCheque" onchange="toggleEndosoFieldsModal()">
               <option value="En cartera">En cartera</option>
               <option value="Depositado">Depositado</option>
               <option value="Acreditado">Acreditado</option>
+              <option value="Endosado">Endosado</option>
               <option value="Rechazado">Rechazado</option>
             </select>
           </div>
+          <div class="field" id="eEndosadoAWrap" style="display:none"><label>Endosado a</label><input type="text" id="eEndosadoA" placeholder="A quién se le endosó..." /></div>
         </div>
       </div>
     </div>
@@ -653,9 +643,6 @@ window.marcarMesMovimientosElegidoPorUsuario = function(){ usuarioEligioMesMovim
 
 let chequesPage = 1;
 const CHEQUES_PAGE_SIZE = 15;
-
-// ── Impuesto a los Créditos y Débitos Bancarios (Ley 25.413) ──
-let alicuotaImpBancario = 0.6; // % - editable por admin, se guarda en Firestore (config/impuestoBancario)
 
 // ── Vinculación con módulo Operaciones (corresponsales) ──
 let despachantesOp = [];      // nombres de despachantes cargados en operaciones.html (mayúsculas, para matching)
@@ -854,12 +841,10 @@ window.cerrarSesion = function() { localStorage.removeItem('gc_user'); location.
 // Iniciar sistema directo
 document.getElementById('sistema').style.display = 'block';
 document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
-if (currentUser.rol === 'admin') document.getElementById('tabUsuarios').style.display = '';
-if (currentUser.rol !== 'admin') {
-  const alicInp = document.getElementById('alicuotaInput');
-  if (alicInp) alicInp.disabled = true;
-  const alicBtn = document.getElementById('btnGuardarAlicuota');
-  if (alicBtn) alicBtn.style.display = 'none';
+if (currentUser.rol === 'admin') {
+  document.getElementById('tabUsuarios').style.display = '';
+  const btnBorrarImp = document.getElementById('btnBorrarImpAuto');
+  if (btnBorrarImp) btnBorrarImp.style.display = '';
 }
 document.getElementById('spinnerOverlay').style.display = 'flex';
 initFirestore();
@@ -939,16 +924,6 @@ function initFirestore() {
     });
   });
 
-  // ── Alícuota del Impuesto a los Créditos y Débitos Bancarios (configurable) ──
-  onSnapshot(doc(db,'config','impuestoBancario'), snap => {
-    if (snap.exists() && snap.data().alicuota !== undefined) {
-      alicuotaImpBancario = Number(snap.data().alicuota) || 0.6;
-    }
-    const inp = document.getElementById('alicuotaInput');
-    if (inp && document.activeElement !== inp) inp.value = alicuotaImpBancario;
-    renderSaldos();
-    filtrar();
-  });
 }
 
 // CHEQUES VENCIMIENTOS
@@ -956,12 +931,10 @@ async function procesarVencimientosCheques() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   for (const m of allMovimientos) {
     if (m.cuenta !== 'Cheque' || !m.fechaVencCheque) continue;
-    if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado') continue;
+    if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado' || m.estadoCheque === 'Endosado') continue;
     const fv = new Date(m.fechaVencCheque+'T00:00:00');
     if (fv <= hoy) {
       await updateDoc(doc(db,'movimientos',m.id), { estadoCheque: 'Acreditado' });
-      try { await sincronizarImpuestoBancario(m.id, { ...m, estadoCheque: 'Acreditado' }); }
-      catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
     }
   }
 }
@@ -977,7 +950,7 @@ function renderSaldos() {
     }
     if (m.cuenta === 'Cheque') {
       const e = m.estadoCheque||'En cartera';
-      if (e==='Rechazado') continue;
+      if (e==='Rechazado' || e==='Endosado') continue; // endosado: salió de la cartera, no ingresó al banco
       if (e==='Acreditado') { m.tipo==='Ingreso' ? c.Banco+=v : c.Banco-=v; continue; }
       m.tipo==='Ingreso' ? c.Cheque+=v : c.Cheque-=v;
       continue;
@@ -1012,13 +985,10 @@ window.guardarMovimiento = async function() {
     data.fechaVencCheque = document.getElementById('fechaVencCheque').value;
     data.pagadorCheque = document.getElementById('pagadorCheque').value.trim();
     data.estadoCheque = document.getElementById('estadoCheque').value;
+    data.endosadoA = document.getElementById('endosadoA').value.trim();
     if (!data.numeroCheque) { toast('Completá el número de cheque','error'); return; }
   }
   const nuevoRef = await addDoc(collection(db,'movimientos'), data);
-
-  // ── Impuesto a los Créditos y Débitos Bancarios (automático) ──
-  try { await sincronizarImpuestoBancario(nuevoRef.id, data); }
-  catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
 
   // ── Vinculación automática con Operaciones (solo Ingresos) ──
   if (tipo === 'Ingreso') {
@@ -1110,67 +1080,54 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
   await addDoc(collection(db,'log_vinculaciones_caja'), logEntry);
 }
 
-// ── Impuesto a los Créditos y Débitos Bancarios: cálculo y sincronización automática ──
-// Se aplica sobre cualquier movimiento en cuenta "Banco" (Ingreso o Egreso), y sobre los
-// cheques en el momento en que pasan a estado "Acreditado" (que es cuando realmente
-// impactan en la cuenta bancaria). Genera/actualiza/borra un movimiento de Egreso
-// vinculado (esImpuestoBancario:true, vinculadoA:idOriginal) para que quede trazable
-// en la tabla, en Cta. Corriente y en los Excel — no se descuenta "de forma invisible".
-function calcularImpuestoBancario(importe){
-  return Math.round((Number(importe||0) * (alicuotaImpBancario/100) + Number.EPSILON) * 100) / 100;
-}
-window.calcularImpuestoBancario = calcularImpuestoBancario;
+// ── Impuesto a los Créditos y Débitos Bancarios: ya NO se genera automáticamente ──
+// Antes cada movimiento en Banco (y cada cheque al pasar a Acreditado) generaba solo un
+// Egreso estimado (alícuota configurable). Bruno prefirió sacar esto porque complicaba
+// la carga: ahora el impuesto real se carga a mano, a fin de mes, con el monto exacto
+// que figura en el resumen bancario (por ejemplo importándolo desde Conciliación).
+// borrarMovimientosImpuestoAutomaticos() de más abajo permite limpiar de una sola vez
+// los movimientos que el sistema ya había generado automáticamente en el pasado.
 
-async function crearMovimientoImpuesto(idOriginal, data, monto){
-  const ref = await addDoc(collection(db,'movimientos'), {
-    tipo: 'Egreso',
-    cuenta: 'Banco',
-    factura: '',
-    cliente: 'Imp. Déb./Créd. Bancarios',
-    detalle: `Ley 25.413 (${alicuotaImpBancario}%) s/ ${data.cliente||''}`,
-    importe: monto,
-    observaciones: '',
-    fecha: data.fecha || today(),
-    ts: Date.now(),
-    creadoPor: currentUser.nombre,
-    esImpuestoBancario: true,
-    vinculadoA: idOriginal
-  });
-  await updateDoc(doc(db,'movimientos', idOriginal), { impuestoMovId: ref.id });
-}
+// ── Cheques: mostrar/ocultar el campo "Endosado a" según el estado elegido ──
+window.toggleEndosoFields = function(){
+  const wrap = document.getElementById('endosadoAWrap');
+  if(wrap) wrap.style.display = document.getElementById('estadoCheque').value==='Endosado' ? '' : 'none';
+};
+window.toggleEndosoFieldsModal = function(){
+  const wrap = document.getElementById('eEndosadoAWrap');
+  if(wrap) wrap.style.display = document.getElementById('eEstadoCheque').value==='Endosado' ? '' : 'none';
+};
 
-async function sincronizarImpuestoBancario(id, data){
-  if (data.esImpuestoBancario) return; // nunca se autogenera impuesto sobre un impuesto
-  if (data.origenConciliacion) return; // los movimientos importados por conciliación traen su propio impuesto real, no se autogenera otro
-  const aplica = data.cuenta === 'Banco' || (data.cuenta === 'Cheque' && data.estadoCheque === 'Acreditado');
-  const monto = calcularImpuestoBancario(data.importe);
-
-  if (aplica) {
-    if (data.impuestoMovId) {
-      try { await updateDoc(doc(db,'movimientos', data.impuestoMovId), { importe: monto }); }
-      catch(e){ await crearMovimientoImpuesto(id, data, monto); } // el vinculado se había borrado a mano
-    } else {
-      await crearMovimientoImpuesto(id, data, monto);
-    }
-  } else if (data.impuestoMovId) {
-    try { await deleteDoc(doc(db,'movimientos', data.impuestoMovId)); } catch(e){}
-    await updateDoc(doc(db,'movimientos', id), { impuestoMovId: null });
+// ── Limpieza única de los movimientos de Ley 25.413 que el sistema generó automáticamente ──
+// Solo admin. Borra todos los movimientos con esImpuestoBancario:true y limpia la
+// referencia impuestoMovId en el movimiento original al que estaban vinculados.
+window.borrarMovimientosImpuestoAutomaticos = async function(){
+  if (currentUser?.rol !== 'admin') { toast('Solo el admin puede hacer esto','error'); return; }
+  const auto = allMovimientos.filter(m => m.esImpuestoBancario);
+  if (!auto.length) { toast('No hay movimientos automáticos de Ley 25.413 para borrar','success'); return; }
+  if (!confirm(`Se van a borrar ${auto.length} movimiento(s) generado(s) automáticamente por el impuesto Ley 25.413. Esta acción no se puede deshacer. ¿Continuar?`)) return;
+  const btn = document.getElementById('btnBorrarImpAuto');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Borrando...'; }
+  let borrados = 0;
+  for (const m of auto) {
+    try {
+      await deleteDoc(doc(db,'movimientos', m.id));
+      if (m.vinculadoA) {
+        try { await updateDoc(doc(db,'movimientos', m.vinculadoA), { impuestoMovId: null }); } catch(e){}
+      }
+      borrados++;
+    } catch(e){ console.warn('No se pudo borrar', m.id, e); }
   }
-}
-
-window.guardarAlicuota = async function(){
-  if (currentUser?.rol !== 'admin') { toast('Solo el admin puede cambiar la alícuota','error'); return; }
-  const v = parseFloat(document.getElementById('alicuotaInput').value);
-  if (isNaN(v) || v < 0) { toast('Alícuota inválida','error'); return; }
-  await setDoc(doc(db,'config','impuestoBancario'), { alicuota: v });
-  toast('Alícuota actualizada ✓ (' + v + '%)','success');
+  if (btn) { btn.disabled = false; btn.textContent = '🗑 Borrar automáticos Ley 25.413'; }
+  toast(`${borrados} movimiento(s) automático(s) borrado(s) ✓`, 'success');
 };
 
 window.limpiarForm = function() {
-  ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque','endosadoA'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const ip=document.getElementById('importePreview'); if(ip) ip.textContent='';
   const ec=document.getElementById('estadoCheque');if(ec)ec.value='En cartera';
   document.getElementById('chequeFieldsWrap').style.display='none';
+  document.getElementById('endosadoAWrap').style.display='none';
   document.getElementById('cuenta').value='Caja';
   cerrarACCaja('ac_cliente');
 };
@@ -1224,7 +1181,7 @@ window.filtrar = function() {
   const esAdmin=currentUser?.rol==='admin';
   document.getElementById('tablaMovimientos').innerHTML=fPagina.map(m=>{
     let extra='';
-    if(m.esImpuestoBancario){extra+=`<br><span style="font-size:10px;color:#dc2626;font-weight:600">🏦 Imp. ${alicuotaImpBancario}% autom.</span>`;}
+    if(m.esImpuestoBancario){extra+=`<br><span style="font-size:10px;color:#dc2626;font-weight:600">🏦 Imp. Ley 25.413 (auto., histórico)</span>`;}
     if(m.origenConciliacion){extra+=`<br><span style="font-size:10px;color:#0284c7;font-weight:600">🏦 Conciliación bancaria</span>`;}
     if(m.cuenta==='Cheque'&&m.numeroCheque){const b=m.estadoCheque?`<span class="badge badge-${m.estadoCheque.toLowerCase().replace(' ','-')}">${m.estadoCheque}</span>`:'';extra+=`<br><span style="font-size:10px;color:#888">Ch:${m.numeroCheque} ${b}</span>`;}
     const isDolar=m.cuenta==='Dólares';
@@ -1316,13 +1273,8 @@ window.guardarEdicion=async function(){
   if(isNaN(importeEditado) || importeEditado<=0){ toast('Importe inválido','error'); return; }
   const clienteEditado = document.getElementById('eCliente').value;
   const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:clienteEditado,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
-  if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;}
-  const originalMov = allMovimientos.find(x=>x.id===editandoId) || {};
+  if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;data.endosadoA=document.getElementById('eEndosadoA').value.trim();}
   await updateDoc(doc(db,'movimientos',editandoId),data);
-
-  // ── Impuesto a los Créditos y Débitos Bancarios (automático) ──
-  try { await sincronizarImpuestoBancario(editandoId, { ...originalMov, ...data }); }
-  catch(e){ console.warn('Sincronización de impuesto bancario falló:', e); }
 
   // ── Guarda el Cliente/Proveedor como nuevo si todavía no estaba en la lista ──
   try { await guardarProveedorSiEsNuevo(clienteEditado); }
@@ -1339,11 +1291,12 @@ window.renderCheques=function(){
   const fC=(document.getElementById('filtroChCliente')?.value||'').toLowerCase();
   const fD=document.getElementById('filtroChDesde')?.value||'';
   const fH=document.getElementById('filtroChHasta')?.value||'';
-  let ec=0,dep=0,acr=0,rech=0;
-  cheques.forEach(m=>{const v=Number(m.importe)||0;const e=m.estadoCheque||'En cartera';if(e==='En cartera')ec+=v;else if(e==='Depositado')dep+=v;else if(e==='Acreditado')acr+=v;else if(e==='Rechazado')rech+=v;});
+  let ec=0,dep=0,acr=0,endo=0,rech=0;
+  cheques.forEach(m=>{const v=Number(m.importe)||0;const e=m.estadoCheque||'En cartera';if(e==='En cartera')ec+=v;else if(e==='Depositado')dep+=v;else if(e==='Acreditado')acr+=v;else if(e==='Endosado')endo+=v;else if(e==='Rechazado')rech+=v;});
   document.getElementById('chEnCartera').textContent=fmtMoney(ec);
   document.getElementById('chDepositados').textContent=fmtMoney(dep);
   document.getElementById('chAcreditados').textContent=fmtMoney(acr);
+  document.getElementById('chEndosados').textContent=fmtMoney(endo);
   document.getElementById('chRechazados').textContent=fmtMoney(rech);
   const fil=cheques.filter(m=>{const e=m.estadoCheque||'En cartera';if(fE&&e!==fE)return false;if(fB&&!(m.bancoCheque||'').toLowerCase().includes(fB))return false;if(fC&&!(m.cliente||'').toLowerCase().includes(fC))return false;if(fD&&m.fechaVencCheque&&m.fechaVencCheque<fD)return false;if(fH&&m.fechaVencCheque&&m.fechaVencCheque>fH)return false;return true;}).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   const esAdmin=currentUser?.rol==='admin';
@@ -1358,7 +1311,8 @@ window.renderCheques=function(){
   document.getElementById('tablaCheques').innerHTML=filPagina.map(m=>{
     const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');
     let di='';if(m.fechaVencCheque){const fv=new Date(m.fechaVencCheque+'T00:00:00');const d=Math.round((fv-hoy)/(1000*60*60*24));di=d>=0?`<br><span style="font-size:10px;color:#888">Vence en ${d} días</span>`:`<br><span style="font-size:10px;color:#dc2626">Venció hace ${Math.abs(d)} días</span>`;}
-    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td><span class="badge ${bc}">${e}</span></td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
+    const estadoHtml=`<span class="badge ${bc}">${e}</span>`+(e==='Endosado'&&m.endosadoA?`<br><span style="font-size:10px;color:#3730a3">A: ${m.endosadoA}</span>`:'');
+    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td>${estadoHtml}</td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
   }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">Sin cheques</td></tr>';
 
   document.getElementById('cheques-paginacion').innerHTML = totalPaginasCh>1 ? `
@@ -1375,7 +1329,7 @@ window.renderCheques=function(){
 };
 window.cambiarPaginaCheques=function(delta){ chequesPage += delta; renderCheques(); };
 window.resetPaginaCheques=function(){ chequesPage = 1; renderCheques(); };
-window.verDetalleCheque=function(id){const m=allMovimientos.find(x=>x.id===id);if(!m)return;const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div><div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;document.getElementById('modalDetalleCheque').classList.add('open');};
+window.verDetalleCheque=function(id){const m=allMovimientos.find(x=>x.id===id);if(!m)return;const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');const filaEndoso=(e==='Endosado')?`<div class="row"><span class="lbl">Endosado a:</span><span class="val">${m.endosadoA||'-'}</span></div>`:'';document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div>${filaEndoso}<div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;document.getElementById('modalDetalleCheque').classList.add('open');};
 window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque').classList.remove('open');};
 window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');resetPaginaCheques();};
 
@@ -1434,13 +1388,13 @@ window.dec2 = dec2;
 window.exportarChequesExcel=function(){
   const filas=allMovimientos.filter(m=>m.cuenta==='Cheque').sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   if(!filas.length){ toast('No hay cheques para exportar','error'); return; }
-  const header=['N° Cheque','Cliente','Banco','Vencimiento','Importe','Estado','Quién pagó','Fecha carga','Observaciones'];
-  const rows=filas.map(m=>[m.numeroCheque||'',m.cliente,m.bancoCheque||'',m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'',dec2(m.importe),m.estadoCheque||'En cartera',m.pagadorCheque||'',m.fecha||'',m.observaciones||'']);
+  const header=['N° Cheque','Cliente','Banco','Vencimiento','Importe','Estado','Endosado a','Quién pagó','Fecha carga','Observaciones'];
+  const rows=filas.map(m=>[m.numeroCheque||'',m.cliente,m.bancoCheque||'',m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'',dec2(m.importe),m.estadoCheque||'En cartera',m.estadoCheque==='Endosado'?(m.endosadoA||''):'',m.pagadorCheque||'',m.fecha||'',m.observaciones||'']);
   const totImporte=filas.reduce((s,m)=>s+Number(m.importe||0),0);
-  const totalRow=['TOTAL',`${filas.length} cheque(s)`,'','',dec2(totImporte),'','','',''];
+  const totalRow=['TOTAL',`${filas.length} cheque(s)`,'','',dec2(totImporte),'','','','',''];
   const aoa=[header,...rows,totalRow];
   const ws=XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols']=[{wch:12},{wch:22},{wch:16},{wch:12},{wch:13},{wch:12},{wch:18},{wch:12},{wch:30}];
+  ws['!cols']=[{wch:12},{wch:22},{wch:16},{wch:12},{wch:13},{wch:12},{wch:18},{wch:18},{wch:12},{wch:30}];
 
   const lastCol=XLSX.utils.encode_col(header.length-1);
   const firstDataRow=2, lastDataRow=1+rows.length, totalRowNum=2+rows.length;
@@ -1537,8 +1491,6 @@ window.renderReportes=function(){
   document.getElementById('repEgrMes').textContent=fmtMoney(egrMes);
   const neto=ingMes-egrMes;const netoEl=document.getElementById('repNetoMes');netoEl.textContent=fmtMoney(neto);netoEl.className='card-value '+(neto>=0?'green':'red');
   document.getElementById('repCantMes').textContent=delMes.length;
-  const impMes=delMes.filter(m=>m.esImpuestoBancario).reduce((s,m)=>s+Number(m.importe),0);
-  document.getElementById('repImpMes').textContent=fmtMoney(impMes);
 
   // ── Resumen Anual (selector de año + desglose mes a mes) ──
   const selAnio=document.getElementById('repAnio');
@@ -1564,8 +1516,6 @@ window.renderReportes=function(){
   netoAnioEl.textContent=fmtMoney(netoAnio);
   netoAnioEl.className='card-value '+(netoAnio>=0?'green':'red');
   document.getElementById('repCantAnio').textContent=delAnio.length;
-  const impAnio=delAnio.filter(m=>m.esImpuestoBancario).reduce((s,m)=>s+Number(m.importe),0);
-  document.getElementById('repImpAnio').textContent=fmtMoney(impAnio);
 
   const nombresMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const porMes=Array.from({length:12},()=>({ing:0,egr:0,cant:0}));
@@ -1840,8 +1790,9 @@ function procesarLineasBanco(texto){
 // Compara cada línea del banco contra allMovimientos (ya en memoria, 0 lecturas nuevas).
 // Match por fecha + importe absoluto con tolerancia de $1.
 function compararConciliacionConCaja(){
-  // Movimientos de Caja candidatos a matchear: los de cuenta Banco, más los que ya
-  // representan cheques acreditados a Banco, más los impuestos auto-generados.
+  // Movimientos de Caja candidatos a matchear: los de cuenta Banco (incluye los que ya
+  // representan cheques acreditados a Banco), más cualquier movimiento histórico que haya
+  // quedado marcado como impuesto bancario automático.
   const candidatosCaja = allMovimientos.filter(m => m.cuenta==='Banco' || m.esImpuestoBancario);
 
   for(const linea of concLineasBanco){
@@ -1922,9 +1873,9 @@ window.limpiarConciliacion = function(){
   document.getElementById('concResultadoSection').style.display='none';
 };
 
-// Carga en Firestore únicamente las líneas tildadas que faltan. No pasa por
-// sincronizarImpuestoBancario (estas líneas son datos reales del banco, ya
-// incluyen su propio impuesto real, no hay que recalcular nada encima).
+// Carga en Firestore únicamente las líneas tildadas que faltan. Estas líneas son datos
+// reales del banco (incluido el impuesto Ley 25.413 real, si aparece en el resumen), así
+// que se cargan tal cual, sin generar ningún movimiento automático encima.
 window.cargarFaltantesConciliacion = async function(){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   const checks = document.querySelectorAll('.conc-check:checked');
