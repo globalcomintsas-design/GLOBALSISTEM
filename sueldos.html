@@ -280,7 +280,7 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, onSnapshot, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, getDoc, query, where }
+import { getFirestore, collection, onSnapshot, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, deleteField, getDoc, query, where }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -632,6 +632,7 @@ function buildTable(guardada){
     .filter(n=>!nombresActivos.has(n))
     .map(n=>({nombre:n, d:guardada[n]}));
 
+  const esAdminGhost=currentUser?.rol==='admin';
   exEmpleadosPeriodoActual.forEach(({nombre,d})=>{
     const iniciales = nombre.split(/\s+/).map(p=>p[0]||'').join('').substring(0,3).toUpperCase()||'?';
     const tr=document.createElement('tr');
@@ -644,7 +645,10 @@ function buildTable(guardada){
       <td><div class="auto-val">${fmt(d.finesdesemana)}</div></td>
       <td><div class="adel-val${(d.descuentos||0)===0?' cero':''}">${fmt(d.descuentos)}</div></td>
       <td><div class="neto-val${(d.neto||0)<0?' neto-neg':''}">${fmt(d.neto)}</div></td>
-      <td><div class="${d.dividendo?'div-val':'dash-cell'}">${d.dividendo?fmt(d.dividendo):'—'}</div></td>
+      <td style="display:flex;align-items:center;gap:8px;justify-content:flex-end;">
+        <div class="${d.dividendo?'div-val':'dash-cell'}">${d.dividendo?fmt(d.dividendo):'—'}</div>
+        ${esAdminGhost?`<button class="btn btn-danger btn-sm" onclick="eliminarExEmpleadoPeriodo('${nombre.replace(/'/g,"\\'")}')" title="Quitar este registro de este período (usar solo si es un nombre duplicado/mal cargado, no un ex-empleado real)">🗑</button>`:''}
+      </td>
     `;
     tbody.appendChild(tr);
   });
@@ -847,6 +851,23 @@ async function guardarAhora(){
   if(liqDoc.exists()) liqActualDoc=liqDoc.data();
   return empleados;
 }
+
+// Elimina, dentro del período actualmente abierto, la entrada guardada bajo
+// un nombre que ya no está en la lista de Empleados (fila "Ex-empleado ·
+// solo lectura"). Pensado para limpiar duplicados por nombres mal
+// escritos/renombrados — NO usar para borrar el sueldo de alguien que
+// realmente trabajó y dejó la empresa, porque esa plata desaparece del
+// historial de ese período.
+window.eliminarExEmpleadoPeriodo=async function(nombre){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const periodo=periodoActual();
+  if(!confirm(`¿Quitar el registro de "${nombre}" de la liquidación de ${periodoLabel(periodo)}?\n\nUsalo solo si es un nombre duplicado o mal cargado. Si esta persona realmente trabajó ese mes y después dejó la empresa, NO lo borres: se perdería ese pago del historial.`)) return;
+  try{
+    await updateDoc(doc(db,'sueldos',periodo),{ ['empleados.'+nombre]: deleteField() });
+    toast('Registro eliminado de este período ✓','success');
+    await window.cargarPeriodo();
+  }catch(e){ toast('Error al eliminar: '+e.message,'error'); }
+};
 
 // ── CARGA DE SUELDOS A CAJA (Banco) ─────────────────────────────────
 // Los sueldos siempre salen de la cuenta Banco. Crea un Egreso por cada
