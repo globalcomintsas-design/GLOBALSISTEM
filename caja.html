@@ -234,7 +234,6 @@ tr:hover td{background:#fafbff;}
           <div class="btn-row">
             <button class="btn btn-success btn-sm" onclick="exportarExcel()">📊 Excel</button>
             <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
-            <button class="btn btn-outline btn-sm" id="btnBorrarImpAuto" onclick="borrarMovimientosImpuestoAutomaticos()" style="display:none;border-color:#dc2626;color:#dc2626;">🗑 Borrar automáticos Ley 25.413</button>
           </div>
         </div>
         <div class="search-bar"><input type="text" id="buscar" placeholder="Buscar por cliente, detalle, factura..." oninput="resetPaginaMovimientos()" /></div>
@@ -843,8 +842,6 @@ document.getElementById('sistema').style.display = 'block';
 document.getElementById('userBadge').textContent = (currentUser.rol==='admin'?'👑 ':'👤 ') + currentUser.nombre + ' · ' + currentUser.rol;
 if (currentUser.rol === 'admin') {
   document.getElementById('tabUsuarios').style.display = '';
-  const btnBorrarImp = document.getElementById('btnBorrarImpAuto');
-  if (btnBorrarImp) btnBorrarImp.style.display = '';
 }
 document.getElementById('spinnerOverlay').style.display = 'flex';
 initFirestore();
@@ -1085,8 +1082,6 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
 // Egreso estimado (alícuota configurable). Bruno prefirió sacar esto porque complicaba
 // la carga: ahora el impuesto real se carga a mano, a fin de mes, con el monto exacto
 // que figura en el resumen bancario (por ejemplo importándolo desde Conciliación).
-// borrarMovimientosImpuestoAutomaticos() de más abajo permite limpiar de una sola vez
-// los movimientos que el sistema ya había generado automáticamente en el pasado.
 
 // ── Cheques: mostrar/ocultar el campo "Endosado a" según el estado elegido ──
 window.toggleEndosoFields = function(){
@@ -1096,30 +1091,6 @@ window.toggleEndosoFields = function(){
 window.toggleEndosoFieldsModal = function(){
   const wrap = document.getElementById('eEndosadoAWrap');
   if(wrap) wrap.style.display = document.getElementById('eEstadoCheque').value==='Endosado' ? '' : 'none';
-};
-
-// ── Limpieza única de los movimientos de Ley 25.413 que el sistema generó automáticamente ──
-// Solo admin. Borra todos los movimientos con esImpuestoBancario:true y limpia la
-// referencia impuestoMovId en el movimiento original al que estaban vinculados.
-window.borrarMovimientosImpuestoAutomaticos = async function(){
-  if (currentUser?.rol !== 'admin') { toast('Solo el admin puede hacer esto','error'); return; }
-  const auto = allMovimientos.filter(m => m.esImpuestoBancario);
-  if (!auto.length) { toast('No hay movimientos automáticos de Ley 25.413 para borrar','success'); return; }
-  if (!confirm(`Se van a borrar ${auto.length} movimiento(s) generado(s) automáticamente por el impuesto Ley 25.413. Esta acción no se puede deshacer. ¿Continuar?`)) return;
-  const btn = document.getElementById('btnBorrarImpAuto');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Borrando...'; }
-  let borrados = 0;
-  for (const m of auto) {
-    try {
-      await deleteDoc(doc(db,'movimientos', m.id));
-      if (m.vinculadoA) {
-        try { await updateDoc(doc(db,'movimientos', m.vinculadoA), { impuestoMovId: null }); } catch(e){}
-      }
-      borrados++;
-    } catch(e){ console.warn('No se pudo borrar', m.id, e); }
-  }
-  if (btn) { btn.disabled = false; btn.textContent = '🗑 Borrar automáticos Ley 25.413'; }
-  toast(`${borrados} movimiento(s) automático(s) borrado(s) ✓`, 'success');
 };
 
 window.limpiarForm = function() {
