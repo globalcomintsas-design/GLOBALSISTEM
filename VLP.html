@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GLOBALCOMINT · Control VLP</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -2060,75 +2060,157 @@ window.renderLog=function(){
 window.limpiarFiltrosLog=function(){['filtroLogOp','filtroLogTipo'].forEach(id=>document.getElementById(id).value='');renderLog();};
 
 // ====================================================
+// ESTILO UNIFICADO DE EXCEL (igual que en Operaciones): Arial 7, bordes finos,
+// encabezado azul con letra blanca, fila TOTAL en rojo. Se usa en TODAS las
+// exportaciones de este módulo (Pendientes, Pagadas, Fuera de término, CEPAS,
+// Viajes) para que tengan el mismo look & feel que las planillas de Operaciones.
+// ====================================================
+function estilizarHojaExcel(ws, opts){
+  const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const formatoDecimal = '#,##0.00';
+  const totalRowIdx = 1 + numDataRows; // fila 0-index de la fila TOTAL
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R = range.s.r; R <= range.e.r; R++){
+    for(let C = range.s.c; C <= range.e.c; C++){
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].z = formatoDecimal;
+      }
+
+      if(R === 0){
+        // Encabezado: negrita, fondo azul, letra blanca, Arial 7
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1E3A8A' } },
+          border: bordeTodo,
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      } else if(R === totalRowIdx){
+        // Fila TOTAL: negrita y destacada en rojo, Arial 7
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'DC2626' } },
+          fill: { fgColor: { rgb: 'FEF2F2' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else {
+        // Filas de datos, Arial 7
+        ws[addr].s = {
+          font: { sz: 7, name: 'Arial' },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      }
+    }
+  }
+}
+
+// ====================================================
 // EXPORTAR EXCEL
 // ====================================================
 window.exportarPendientesExcel=function(){
-  const wb=XLSX.utils.book_new();
   const hoy=hoyLocal();
   const fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).sort((a,b)=>{
     const fa=a.fecha_operativa?aFechaLocal(a.fecha_operativa):fechaLocal(2099,1,1);
     const fb=b.fecha_operativa?aFechaLocal(b.fecha_operativa):fechaLocal(2099,1,1);
     return fa-fb;
   });
-  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería']];
-  fil.forEach(o=>{
+  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería'];
+  const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const dias=fo?diasEntreFechas(fo,hoy):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||'']);
+    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||''];
   });
-  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:J1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:10},{wch:10},{wch:12},{wch:30}];
+  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','',''];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const lastDataRow=1+rows.length;
+  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:10},{wch:12},{wch:12},{wch:30}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[9]});
+  const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Pendientes');
   XLSX.writeFile(wb,'VLP_Pendientes_'+todayISO()+'.xlsx');
   toast('Excel generado ✓','success');
 };
 
 window.exportarPagadasExcel=function(){
-  const wb=XLSX.utils.book_new();
   const fil=allOps.filter(o=>o.pagada&&!o.archivada);
-  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Mes Operativo','Fecha Pago','Días tardó','VLP / Factura','Origen Pago','Importe','N° Doc']];
-  fil.forEach(o=>{
+  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Mes Operativo','Fecha Pago','Días tardó','VLP / Factura','Origen Pago','Importe','N° Doc'];
+  const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const fp=aFechaLocal(o.fecha_pago);
     const dias=(fo&&fp)?diasEntreFechas(fo,fp):null;
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',fp?formatFecha(fp):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||'',o.numero_doc_vlp||'']);
+    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',fp?formatFecha(fp):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||0,o.numero_doc_vlp||''];
   });
-  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:L1'};ws['!cols']=[{wch:12},{wch:35},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
+  const totImporte=fil.reduce((a,b)=>a+(b.importe_vlp||0),0);
+  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','','',totImporte,''];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const lastDataRow=1+rows.length;
+  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[11],colsNumericas:[8,11]});
+  const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
   XLSX.writeFile(wb,'VLP_Pagadas_'+todayISO()+'.xlsx');
   toast('Excel generado ✓','success');
 };
 
 window.exportarFueraTerminoExcel=function(){
-  const wb=XLSX.utils.book_new();
   const fil=allOps.filter(o=>{
     if(!o.pagada||!o.fecha_operativa||!o.fecha_pago)return false;
     const fo=aFechaLocal(o.fecha_operativa);
     const fp=aFechaLocal(o.fecha_pago);
     return diasEntreFechas(fo,fp)>30;
   });
-  const data=[['Operación','Cliente','Régimen','Tipo','Fecha Operativa','Fecha Pago','Días tardó','VLP / Factura','Origen Pago']];
-  fil.forEach(o=>{
+  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Fecha Pago','Días tardó','VLP / Factura','Origen Pago'];
+  const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const fp=aFechaLocal(o.fecha_pago);
-    data.push([o.operacion,o.cliente||'',o.codigo_regimen||'',o.tipo_operacion||'',formatFecha(fo),formatFecha(fp),diasEntreFechas(fo,fp),o.vlp_pago||'',o.origen_pago||'VLP']);
+    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',formatFecha(fo),formatFecha(fp),diasEntreFechas(fo,fp),o.vlp_pago||'',o.origen_pago||'VLP'];
   });
-  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:I1'};
+  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','',''];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const lastDataRow=1+rows.length;
+  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:14},{wch:10},{wch:22},{wch:16}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[7]});
+  const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Fuera de término');
   XLSX.writeFile(wb,'VLP_FueraTermino_'+todayISO()+'.xlsx');
   toast('Excel generado ✓','success');
 };
 
 window.exportarCepasExcel=function(){
-  const wb=XLSX.utils.book_new();
   const fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
-  const data=[['Operación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería']];
-  fil.forEach(o=>{
+  const header=['Operación','Destinación','Mes','Estado Pago','Fecha Operativa','VLP Pago','AD Camión','Patente','Transportista','F. Retiro','Liquidado','F. Liquidación','Observaciones CEPAS','Mercadería'];
+  const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const fr=aFechaLocal(o.cepas_fecha_retiro);
     const fl=aFechaLocal(o.cepas_fecha_liquid);
-    data.push([o.operacion,o.mes_operativo||'',o.pagada?'Pagada':'Pendiente',fo?formatFecha(fo):'',o.vlp_pago||'',o.cepas_ad_camion||'',o.cepas_patente||'',o.cepas_transportista||'',fr?formatFecha(fr):'',o.cepas_liquidado?'Sí':'No',fl?formatFecha(fl):'',o.cepas_observaciones||'',o.mercaderia||'']);
+    return [o.operacion,o.destinacion||o.codigo_regimen||'',o.mes_operativo||'',o.pagada?'Pagada':'Pendiente',fo?formatFecha(fo):'',o.vlp_pago||'',o.cepas_ad_camion||'',o.cepas_patente||'',o.cepas_transportista||'',fr?formatFecha(fr):'',o.cepas_liquidado?'Sí':'No',fl?formatFecha(fl):'',o.cepas_observaciones||'',o.mercaderia||''];
   });
-  const ws=XLSX.utils.aoa_to_sheet(data);ws['!autofilter']={ref:'A1:M1'};ws['!cols']=[{wch:12},{wch:10},{wch:12},{wch:14},{wch:22},{wch:12},{wch:10},{wch:18},{wch:12},{wch:10},{wch:14},{wch:20},{wch:30}];
+  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','','','','',''];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const lastDataRow=1+rows.length;
+  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!cols']=[{wch:12},{wch:16},{wch:10},{wch:12},{wch:14},{wch:22},{wch:12},{wch:10},{wch:18},{wch:12},{wch:10},{wch:14},{wch:20},{wch:30}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[]});
+  const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'CEPAS');
   XLSX.writeFile(wb,'VLP_CEPAS_'+todayISO()+'.xlsx');
   toast('Excel CEPAS generado ✓','success');
