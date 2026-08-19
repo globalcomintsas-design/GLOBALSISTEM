@@ -153,6 +153,8 @@ tr:hover td{background:#fafbff;}
 .endoso-complemento-row select{max-width:150px;}
 .endoso-complemento-row input{flex:1;min-width:160px;}
 .endoso-resumen .falta{color:#dc2626;font-weight:700;}
+.credito-aviso-pago{background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #fed7aa;font-size:12px;color:#92400e;margin-bottom:4px;}
+.credito-aviso-pago label{display:flex;align-items:center;gap:8px;cursor:pointer;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -205,23 +207,24 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Mercado Pago</div><div class="card-value" id="saldoMP">$ 0</div></div>
         <div class="card"><div class="card-label">Dólares</div><div class="card-value blue" id="saldoDolar">U$D 0</div></div>
         <div class="card"><div class="card-label">Total Pesos</div><div class="card-value green" id="saldoTotal">$ 0</div></div>
+        <div class="card"><div class="card-label">Crédito a favor</div><div class="card-value orange" id="saldoCreditoHeader">$ 0</div></div>
       </div>
 
       <div class="section">
         <div class="section-title">Nuevo Movimiento</div>
         <div class="form-grid">
-          <div class="field"><label>Tipo</label><select id="tipo"><option>Ingreso</option><option>Egreso</option></select></div>
+          <div class="field"><label>Tipo</label><select id="tipo" onchange="toggleChequeFields()"><option>Ingreso</option><option>Egreso</option></select></div>
           <div class="field"><label>Cuenta</label><select id="cuenta" onchange="toggleChequeFields()"><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option><option>Dólares</option></select></div>
-          <div class="field"><label>N° Factura</label><input type="text" id="factura" placeholder="0001-00000123" /></div>
+          <div class="field" id="facturaFieldWrap"><label>N° Factura</label><input type="text" id="factura" placeholder="0001-00000123" /></div>
           <div class="field ac-wrap"><label>Cliente / Proveedor</label>
             <input type="text" id="cliente" placeholder="Nombre..." autocomplete="off"
-              oninput="filtrarACCaja('cliente','ac_cliente')"
+              oninput="filtrarACCaja('cliente','ac_cliente');onClienteInputCaja();"
               onkeydown="manejarTecladoACCaja(event,'ac_cliente')"
               onblur="setTimeout(()=>cerrarACCaja('ac_cliente'),180)" />
             <div id="ac_cliente" class="ac-list"></div>
           </div>
           <div class="field"><label>Detalle</label><input type="text" id="detalle" placeholder="Descripción..." /></div>
-          <div class="field">
+          <div class="field" id="importeFieldWrap">
             <label>Importe</label>
             <input type="text" id="importe" placeholder="Ej: 912977 o 912.977" inputmode="decimal" onblur="previsualizarImporte('importe','importePreview')" />
             <div class="hint" id="importePreview"></div>
@@ -246,9 +249,36 @@ tr:hover td{background:#fafbff;}
               <div class="field" id="endosadoAWrap" style="display:none"><label>Endosado a</label><input type="text" id="endosadoA" placeholder="A quién se le endosó..." /></div>
             </div>
           </div>
+          <div class="field full" id="pagoChequeWrap" style="display:none">
+            <div class="cheque-fields-grid" style="background:#fff7ed;border-color:#fed7aa;">
+              <div class="cheque-fields-title" style="color:#d97706;">🔀 Pagar con Cheque(s)</div>
+              <div class="field full" id="pagoChequeCreditoAviso" style="display:none"></div>
+              <div class="field full">
+                <label style="font-size:11px;color:#666;display:block;margin-bottom:6px;">Facturas / conceptos que se pagan</label>
+                <div id="pagoChequeFilasWrap"></div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="agregarFilaPagoCheque()">➕ Agregar factura</button>
+              </div>
+              <div class="field full">
+                <div class="endoso-medios-title">Medios de pago</div>
+                <div class="hint" style="margin-bottom:6px;">Tildá uno o más cheques de la cartera. Si no alcanzan para cubrir el total, sumá un efectivo/transferencia como complemento.</div>
+                <div id="pagoChequeChequesWrap" class="endoso-cheque-list"></div>
+                <div class="endoso-complemento-row">
+                  <select id="pagoChequeCuentaComplemento">
+                    <option value="Caja">Caja</option>
+                    <option value="Banco">Banco</option>
+                    <option value="Mercado Pago">Mercado Pago</option>
+                  </select>
+                  <input type="text" id="pagoChequeMontoComplemento" placeholder="Efectivo/transferencia (opcional)" inputmode="decimal" oninput="calcularResumenPagoCheque()" />
+                </div>
+              </div>
+              <div class="field full">
+                <div class="endoso-resumen" id="pagoChequeResumen"></div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="btn-row">
-          <button class="btn btn-primary" onclick="guardarMovimiento()">💾 Guardar Movimiento</button>
+          <button class="btn btn-primary" id="btnGuardarMovimiento" onclick="guardarMovimiento()">💾 Guardar Movimiento</button>
           <button class="btn btn-outline" onclick="limpiarForm()">✕ Limpiar</button>
         </div>
       </div>
@@ -696,44 +726,6 @@ tr:hover td{background:#fafbff;}
   </div>
 </div>
 
-<!-- MODAL ENDOSAR / PAGAR CON CHEQUES -->
-<div class="modal-bg" id="modalEndosoCheque">
-  <div class="modal" style="max-width:600px">
-    <div class="modal-title">🔀 Pagar con Cheque(s) <button class="modal-close" onclick="cerrarModalEndoso()">✕</button></div>
-
-    <div class="field ac-wrap" style="margin-bottom:10px;">
-      <label>Pagado a (proveedor / destino)</label>
-      <input type="text" id="endosoDestino" placeholder="Nombre..." autocomplete="off"
-        oninput="filtrarACCaja('endosoDestino','ac_endosoDestino')"
-        onkeydown="manejarTecladoACCaja(event,'ac_endosoDestino')"
-        onblur="setTimeout(()=>cerrarACCaja('ac_endosoDestino'),180)" />
-      <div id="ac_endosoDestino" class="ac-list"></div>
-    </div>
-
-    <label style="font-size:11px;color:#666;display:block;margin-bottom:6px;">Facturas / conceptos que se pagan</label>
-    <div id="endosoFilasWrap"></div>
-    <button class="btn btn-outline btn-sm" onclick="agregarFilaEndoso()">➕ Agregar factura</button>
-
-    <div class="endoso-medios-title">Medios de pago</div>
-    <div class="hint" style="margin-bottom:6px;">Tildá uno o más cheques de la cartera. Si no alcanzan para cubrir el total, sumá un efectivo/transferencia como complemento.</div>
-    <div id="endosoChequesWrap" class="endoso-cheque-list"></div>
-    <div class="endoso-complemento-row">
-      <select id="endosoCuentaComplemento">
-        <option value="Caja">Caja</option>
-        <option value="Banco">Banco</option>
-        <option value="Mercado Pago">Mercado Pago</option>
-      </select>
-      <input type="text" id="endosoMontoComplemento" placeholder="Efectivo/transferencia (opcional)" inputmode="decimal" oninput="calcularResumenEndoso()" />
-    </div>
-
-    <div class="endoso-resumen" id="endosoResumen"></div>
-    <div class="btn-row" style="margin-top:14px;">
-      <button class="btn btn-primary" onclick="guardarEndosoCheque()">💾 Confirmar pago</button>
-      <button class="btn btn-outline" onclick="cerrarModalEndoso()">Cancelar</button>
-    </div>
-  </div>
-</div>
-
 <!-- MODAL EDITAR USUARIO -->
 <div class="modal-bg" id="modalEditarUsuario">
   <div class="modal">
@@ -876,7 +868,7 @@ function toast(msg, type='') {
   setTimeout(()=>el.classList.remove('show'),3000);
 }
 
-// ── AUTOCOMPLETADO Cliente/Proveedor (Nuevo Movimiento + Modal Editar + Endoso) ──
+// ── AUTOCOMPLETADO Cliente/Proveedor (Nuevo Movimiento + Modal Editar) ──
 let acStateCaja = {};
 
 function renderACCaja(listId){
@@ -918,6 +910,7 @@ window.seleccionarACIndexCaja = function(listId, idx){
   document.getElementById(listId).style.display='none';
   acStateCaja[listId]=null;
   if(it.tipo === 'nuevo') guardarProveedorSiEsNuevo(it.valor);
+  if(listId === 'ac_cliente') onClienteInputCaja();
 };
 
 window.manejarTecladoACCaja = function(e, listId){
@@ -989,10 +982,21 @@ window.showTab = function(name, el) {
   if (name==='boletas') { if(typeof window.initBoletasTab==='function') window.initBoletasTab(); }
 };
 
-// TOGGLE CHEQUE FIELDS
+// TOGGLE CHEQUE FIELDS (Nuevo Movimiento)
+// Cuenta=Cheque + Tipo=Ingreso  -> carga un cheque NUEVO que entra a cartera (como antes).
+// Cuenta=Cheque + Tipo=Egreso   -> paga usando cheque(s) ya en cartera (pagoChequeWrap).
 window.toggleChequeFields = function() {
+  const tipo = document.getElementById('tipo').value;
   const cuenta = document.getElementById('cuenta').value;
-  document.getElementById('chequeFieldsWrap').style.display = cuenta==='Cheque' ? '' : 'none';
+  const esNuevoCheque = cuenta==='Cheque' && tipo==='Ingreso';
+  const esPagoCheque = cuenta==='Cheque' && tipo==='Egreso';
+  document.getElementById('chequeFieldsWrap').style.display = esNuevoCheque ? '' : 'none';
+  document.getElementById('pagoChequeWrap').style.display = esPagoCheque ? '' : 'none';
+  const facturaWrap = document.getElementById('facturaFieldWrap');
+  const importeWrap = document.getElementById('importeFieldWrap');
+  if(facturaWrap) facturaWrap.style.display = esPagoCheque ? 'none' : '';
+  if(importeWrap) importeWrap.style.display = esPagoCheque ? 'none' : '';
+  if(esPagoCheque) prepararPagoChequeForm();
 };
 window.toggleChequeFieldsModal = function() {
   const cuenta = document.getElementById('eCuenta').value;
@@ -1015,6 +1019,9 @@ function initFirestore() {
     allMovimientos.sort((a,b)=>(b.ts||0)-(a.ts||0));
     procesarVencimientosCheques();
     renderSaldos(); renderFiltroMesMovimientos(); filtrar(); renderCC(); renderReportes(); renderCheques();
+    // Si el formulario de "Pagar con Cheque(s)" está abierto, refresca la lista de cheques disponibles
+    const pagoWrap = document.getElementById('pagoChequeWrap');
+    if(pagoWrap && pagoWrap.style.display!=='none') renderListaChequesPagoCheque();
     // Si ya había una conciliación procesada en pantalla, la recalcula contra los movimientos actuales
     if (concLineasBanco.length) compararConciliacionConCaja();
     ocultarSpinner();
@@ -1031,6 +1038,9 @@ function initFirestore() {
       const titulo = (document.getElementById('titleDetalleCC').textContent||'').replace('📋 ','');
       if(titulo) renderCreditoEnDetalleCC(titulo);
     }
+    // Refresca el aviso de crédito del formulario de pago con cheque, si está visible
+    const pagoWrap = document.getElementById('pagoChequeWrap');
+    if(pagoWrap && pagoWrap.style.display!=='none') verificarCreditoProveedorPago();
   });
 
   // ── Listeners del módulo Operaciones (solo lectura desde Caja) ──
@@ -1102,11 +1112,21 @@ function renderSaldos() {
   document.getElementById('saldoTotal').className = 'card-value '+(total>=0?'green':'red');
 }
 
+function dec2(n){ return Math.round((Number(n||0) + Number.EPSILON) * 100) / 100; }
+window.dec2 = dec2;
+
 // GUARDAR MOVIMIENTO
 window.guardarMovimiento = async function() {
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   const tipo = document.getElementById('tipo').value;
   const cuenta = document.getElementById('cuenta').value;
+
+  // Egreso + Cheque = pagar con cheque(s) de la cartera (flujo separado)
+  if (tipo==='Egreso' && cuenta==='Cheque') {
+    await guardarPagoConCheque();
+    return;
+  }
+
   const factura = document.getElementById('factura').value.trim();
   const cliente = document.getElementById('cliente').value.trim();
   const detalle = document.getElementById('detalle').value.trim();
@@ -1216,10 +1236,10 @@ window.limpiarForm = function() {
   ['factura','cliente','detalle','importe','observaciones','numeroCheque','bancoCheque','fechaVencCheque','pagadorCheque','endosadoA'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   const ip=document.getElementById('importePreview'); if(ip) ip.textContent='';
   const ec=document.getElementById('estadoCheque');if(ec)ec.value='En cartera';
-  document.getElementById('chequeFieldsWrap').style.display='none';
   document.getElementById('endosadoAWrap').style.display='none';
   document.getElementById('cuenta').value='Caja';
   cerrarACCaja('ac_cliente');
+  toggleChequeFields();
 };
 
 function renderFiltroMesMovimientos(){
@@ -1367,53 +1387,156 @@ window.guardarEdicion=async function(){
 };
 
 /* ══════════════════════════════════════════════════════════════════════
-   ── PAGO CON CHEQUE(S) ENDOSADOS (multi-cheque + complemento) ────────
-   Al confirmar un pago:
-   1) Cada cheque tildado se actualiza: estadoCheque='Endosado' (queda
-      excluido de los saldos, como ya funcionaba antes: esa plata nunca
-      estuvo disponible en caja, se usó directamente para pagar).
-   2) Si se usan cheques, se crea UN Egreso en 'movimientos' con cuenta
-      'Cheque', marcado con excluirDeSaldos:true.
-   3) Si se agrega un complemento en efectivo/transferencia (porque los
-      cheques tildados no alcanzan a cubrir el total), se crea OTRO
-      Egreso en la cuenta elegida (Caja/Banco/Mercado Pago) SIN excluir
-      de saldos, porque esa sí es plata real que sale de la cuenta.
-   4) Si el total pagado (cheques + complemento) SUPERA el total de
-      facturas cubiertas, la diferencia queda como CRÉDITO A NUESTRO
-      FAVOR con ese proveedor (se descuenta de una futura factura de él).
-      OJO: el sobrante es a favor NUESTRO, no del proveedor — le dimos
-      más plata de la que nos cobraba, así que nos la tiene que devolver
-      en la próxima operación.
-   5) Si el total pagado es MENOR al total de facturas, no se bloquea: se
-      registra lo pagado y el resto queda pendiente para cargarlo después
-      (con otro cheque, transferencia, etc.).
+   ── CRÉDITOS A NUESTRO FAVOR: consumo (total o parcial) ───────────────
+   Se usa tanto al aplicar el crédito automáticamente en un pago con
+   cheque(s), como al usarlo manualmente desde Cta. Corriente. Consume
+   los créditos pendientes de un proveedor en orden FIFO (más viejo
+   primero). Si un crédito alcanza para cubrir todo lo que se consume,
+   se borra. Si sobra parte del crédito, se actualiza el monto restante
+   en el mismo documento (no se borra hasta llegar a $0).
+   Devuelve el monto realmente consumido (por si el proveedor tenía
+   menos crédito disponible del que se pidió aplicar).
    ══════════════════════════════════════════════════════════════════════ */
-let endosoFilasCount = 0;
-let endosoChequePreseleccionado = null;
+async function consumirCreditoProveedor(proveedor, montoAConsumir){
+  let restante = dec2(montoAConsumir);
+  let consumidoTotal = 0;
+  if(restante<=0.009) return 0;
+  const nombreNorm = (proveedor||'').trim().toLowerCase();
+  const pendientes = allCreditosCheques
+    .filter(c=>!c.usado && (c.proveedor||'').trim().toLowerCase()===nombreNorm)
+    .sort((a,b)=>(a.ts||0)-(b.ts||0));
+  for(const c of pendientes){
+    if(restante<=0.009) break;
+    const disponible = dec2(Number(c.monto||0));
+    if(disponible<=0.009) continue;
+    if(disponible <= restante + 0.009){
+      await deleteDoc(doc(db,'caja_creditos_cheques', c.id));
+      consumidoTotal = dec2(consumidoTotal + disponible);
+      restante = dec2(restante - disponible);
+    } else {
+      const nuevoMonto = dec2(disponible - restante);
+      await updateDoc(doc(db,'caja_creditos_cheques', c.id), {
+        monto: nuevoMonto,
+        ultimaAplicacionTs: Date.now(),
+        ultimaAplicacionPor: currentUser.nombre
+      });
+      consumidoTotal = dec2(consumidoTotal + restante);
+      restante = 0;
+    }
+  }
+  return consumidoTotal;
+}
 
-window.abrirEndosoCheque = function(id){
+function creditoPendienteProveedor(nombre){
+  const n=(nombre||'').trim().toLowerCase();
+  if(!n) return 0;
+  return dec2(allCreditosCheques.filter(c=>!c.usado && (c.proveedor||'').trim().toLowerCase()===n).reduce((s,c)=>s+Number(c.monto||0),0));
+}
+window.creditoPendienteProveedor = creditoPendienteProveedor;
+
+// Botón "💰 Usar crédito" en el detalle de Cta. Corriente (uso manual, sin estar cargando un pago)
+window.usarCreditoManual = async function(proveedor){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
-  const m = allMovimientos.find(x=>x.id===id);
-  if(!m) return;
-  endosoChequePreseleccionado = id;
-  endosoFilasCount = 0;
-  document.getElementById('endosoDestino').value = '';
-  document.getElementById('endosoFilasWrap').innerHTML = '';
-  agregarFilaEndoso();
-  document.getElementById('endosoCuentaComplemento').value = 'Caja';
-  document.getElementById('endosoMontoComplemento').value = '';
-  renderListaChequesEndoso(id);
-  calcularResumenEndoso();
-  document.getElementById('modalEndosoCheque').classList.add('open');
+  const total = creditoPendienteProveedor(proveedor);
+  if(total<=0.009){ toast('No hay crédito pendiente para este proveedor','error'); return; }
+  const input = prompt(`¿Cuánto crédito querés usar/aplicar de ${proveedor}? (disponible: ${fmtMoney(total)})`, String(total));
+  if(input===null) return;
+  const monto = parsearMontoAR(input);
+  if(isNaN(monto) || monto<=0){ toast('Monto inválido','error'); return; }
+  if(monto > total + 0.009){ toast('Ese monto supera el crédito disponible','error'); return; }
+  try{
+    const aplicado = await consumirCreditoProveedor(proveedor, dec2(monto));
+    toast(`Crédito usado ✓ (${fmtMoney(aplicado)})`,'success');
+    renderCreditoEnDetalleCC(proveedor);
+  }catch(e){ toast('Error: '+e.message,'error'); }
 };
 
-window.cerrarModalEndoso = function(){
-  document.getElementById('modalEndosoCheque').classList.remove('open');
-  endosoChequePreseleccionado = null;
+/* ══════════════════════════════════════════════════════════════════════
+   ── PAGAR CON CHEQUE(S) — integrado al formulario "Nuevo Movimiento" ──
+   Se activa eligiendo Tipo=Egreso + Cuenta=Cheque. Al confirmar:
+   1) Si el proveedor tiene crédito a nuestro favor pendiente, y el
+      usuario dejó tildado "Aplicar crédito automáticamente" (tildado
+      por defecto), ese crédito se descuenta primero del total a cubrir.
+   2) Cada cheque tildado se actualiza: estadoCheque='Endosado' (queda
+      excluido de los saldos: esa plata nunca estuvo disponible en caja,
+      se usó directamente para pagar).
+   3) Si se usan cheques, se crea UN Egreso en 'movimientos' con cuenta
+      'Cheque', marcado con excluirDeSaldos:true.
+   4) Si se agrega un complemento en efectivo/transferencia, se crea
+      OTRO Egreso en la cuenta elegida (Caja/Banco/Mercado Pago), SIN
+      excluir de saldos (esa sí es plata real que sale de la cuenta).
+   5) Si el total pagado (cheques + complemento) SUPERA el neto a cubrir
+      (facturas menos crédito aplicado), la diferencia queda como NUEVO
+      crédito a nuestro favor con ese proveedor.
+   6) Si el total pagado es MENOR, no se bloquea: se registra lo pagado
+      y el resto queda pendiente para cargarlo después.
+   ══════════════════════════════════════════════════════════════════════ */
+let pagoChequeFilasCount = 0;
+let pagoChequePreseleccionarId = null;
+
+function prepararPagoChequeForm(){
+  document.getElementById('pagoChequeFilasWrap').innerHTML = '';
+  pagoChequeFilasCount = 0;
+  agregarFilaPagoCheque();
+  const selComp=document.getElementById('pagoChequeCuentaComplemento'); if(selComp) selComp.value='Caja';
+  const inpComp=document.getElementById('pagoChequeMontoComplemento'); if(inpComp) inpComp.value='';
+  renderListaChequesPagoCheque(pagoChequePreseleccionarId);
+  verificarCreditoProveedorPago();
+  calcularResumenPagoCheque();
+  pagoChequePreseleccionarId = null;
+}
+
+window.onClienteInputCaja = function(){
+  const tipo = document.getElementById('tipo').value;
+  const cuenta = document.getElementById('cuenta').value;
+  if(cuenta==='Cheque' && tipo==='Egreso') verificarCreditoProveedorPago();
 };
 
-function renderListaChequesEndoso(preseleccionarId){
-  const wrap = document.getElementById('endosoChequesWrap');
+function verificarCreditoProveedorPago(){
+  const destino = document.getElementById('cliente').value.trim();
+  const wrap = document.getElementById('pagoChequeCreditoAviso');
+  if(!wrap) return;
+  const total = creditoPendienteProveedor(destino);
+  if(!destino || total<=0.009){
+    wrap.style.display='none';
+    wrap.innerHTML='';
+    calcularResumenPagoCheque();
+    return;
+  }
+  wrap.style.display='';
+  wrap.innerHTML = `
+    <div class="credito-aviso-pago">
+      <label>
+        <input type="checkbox" id="pagoChequeAplicarCredito" checked onchange="calcularResumenPagoCheque()" />
+        <span>💰 <strong>${destino}</strong> tiene <strong>${fmtMoney(total)}</strong> de crédito a nuestro favor. Aplicar automáticamente en este pago.</span>
+      </label>
+    </div>`;
+  calcularResumenPagoCheque();
+}
+
+window.agregarFilaPagoCheque = function(){
+  pagoChequeFilasCount++;
+  const id = 'pagoChequeFila_'+pagoChequeFilasCount;
+  const wrap = document.getElementById('pagoChequeFilasWrap');
+  const div = document.createElement('div');
+  div.className = 'endoso-fila';
+  div.id = id;
+  div.innerHTML = `
+    <input type="text" placeholder="N° factura o concepto" class="pago-cheque-factura" />
+    <input type="text" placeholder="Monto" inputmode="decimal" class="pago-cheque-monto" oninput="calcularResumenPagoCheque()" />
+    <button type="button" class="endoso-quitar" onclick="quitarFilaPagoCheque('${id}')">✕</button>
+  `;
+  wrap.appendChild(div);
+};
+
+window.quitarFilaPagoCheque = function(id){
+  const el = document.getElementById(id);
+  if(el) el.remove();
+  calcularResumenPagoCheque();
+};
+
+function renderListaChequesPagoCheque(preseleccionarId){
+  const wrap = document.getElementById('pagoChequeChequesWrap');
   if(!wrap) return;
   const candidatos = allMovimientos
     .filter(m=>m.cuenta==='Cheque' && m.numeroCheque && (m.estadoCheque==='En cartera' || m.estadoCheque==='Depositado'))
@@ -1422,93 +1545,86 @@ function renderListaChequesEndoso(preseleccionarId){
     wrap.innerHTML = '<div style="padding:10px;color:#888;font-size:12px;">No hay cheques disponibles en cartera.</div>';
     return;
   }
-  wrap.innerHTML = candidatos.map(m=>`
-    <label class="endoso-cheque-row">
-      <input type="checkbox" class="endoso-cheque-check" data-id="${m.id}" data-importe="${m.importe}" ${m.id===preseleccionarId?'checked':''} onchange="calcularResumenEndoso()" />
+  // conserva los que ya estaban tildados al re-renderizar (por ej. cuando llega un snapshot nuevo)
+  const tildadosActuales = new Set([...document.querySelectorAll('.pago-cheque-check:checked')].map(chk=>chk.dataset.id));
+  wrap.innerHTML = candidatos.map(m=>{
+    const marcado = m.id===preseleccionarId || tildadosActuales.has(m.id);
+    return `<label class="endoso-cheque-row">
+      <input type="checkbox" class="pago-cheque-check" data-id="${m.id}" data-importe="${m.importe}" ${marcado?'checked':''} onchange="calcularResumenPagoCheque()" />
       <span class="ecr-info">Ch. N° ${m.numeroCheque} · ${m.bancoCheque||'-'} · ${m.cliente}${m.fechaVencCheque?(' · vence '+m.fechaVencCheque.split('-').reverse().join('/')):''}</span>
       <span class="ecr-monto">${fmtMoney(m.importe)}</span>
-    </label>
-  `).join('');
+    </label>`;
+  }).join('');
 }
 
-window.agregarFilaEndoso = function(){
-  endosoFilasCount++;
-  const id = 'endosoFila_'+endosoFilasCount;
-  const wrap = document.getElementById('endosoFilasWrap');
-  const div = document.createElement('div');
-  div.className = 'endoso-fila';
-  div.id = id;
-  div.innerHTML = `
-    <input type="text" placeholder="N° factura o concepto" class="endoso-factura" />
-    <input type="text" placeholder="Monto" inputmode="decimal" class="endoso-monto" oninput="calcularResumenEndoso()" />
-    <button type="button" class="endoso-quitar" onclick="quitarFilaEndoso('${id}')">✕</button>
-  `;
-  wrap.appendChild(div);
-};
-
-window.quitarFilaEndoso = function(id){
-  const el = document.getElementById(id);
-  if(el) el.remove();
-  calcularResumenEndoso();
-};
-
-window.calcularResumenEndoso = function(){
-  const montosFacturas = [...document.querySelectorAll('#endosoFilasWrap .endoso-monto')].map(inp => parsearMontoAR(inp.value)).filter(n=>!isNaN(n) && n>0);
+window.calcularResumenPagoCheque = function(){
+  const montosFacturas = [...document.querySelectorAll('#pagoChequeFilasWrap .pago-cheque-monto')].map(inp=>parsearMontoAR(inp.value)).filter(n=>!isNaN(n)&&n>0);
   const totalFacturas = dec2(montosFacturas.reduce((s,n)=>s+n,0));
 
-  const checksTildados = [...document.querySelectorAll('.endoso-cheque-check:checked')];
+  const destino = document.getElementById('cliente').value.trim();
+  const creditoDisponible = creditoPendienteProveedor(destino);
+  const aplicarCk = document.getElementById('pagoChequeAplicarCredito');
+  const creditoAplicado = (aplicarCk && aplicarCk.checked) ? dec2(Math.min(creditoDisponible, totalFacturas)) : 0;
+  const netoACubrir = dec2(totalFacturas - creditoAplicado);
+
+  const checksTildados = [...document.querySelectorAll('.pago-cheque-check:checked')];
   const totalCheques = dec2(checksTildados.reduce((s,chk)=>s+(Number(chk.dataset.importe)||0),0));
 
-  const montoComplemento = dec2(parsearMontoAR(document.getElementById('endosoMontoComplemento')?.value||'') || 0);
+  const montoComplemento = dec2(parsearMontoAR(document.getElementById('pagoChequeMontoComplemento')?.value||'')||0);
   const totalPagado = dec2(totalCheques + montoComplemento);
-  const diferencia = dec2(totalPagado - totalFacturas);
+  const diferencia = dec2(totalPagado - netoACubrir);
 
-  const el = document.getElementById('endosoResumen');
-  let claseDif = '', txtDif = '';
-  if(diferencia > 0.009){ claseDif='sobra-pos'; txtDif = `Sobran ${fmtMoney(diferencia)} — queda como crédito a NUESTRO favor con este proveedor`; }
-  else if(diferencia < -0.009){ claseDif='falta'; txtDif = `Faltan ${fmtMoney(Math.abs(diferencia))} para cubrir el total — quedará pendiente, podés cargar el resto después`; }
-  else { txtDif = 'Cubre exactamente el total, sin sobrante ni faltante'; }
+  const el = document.getElementById('pagoChequeResumen');
+  let claseDif='', txtDif='';
+  if(diferencia>0.009){ claseDif='sobra-pos'; txtDif=`Sobran ${fmtMoney(diferencia)} — queda como crédito a NUESTRO favor con este proveedor`; }
+  else if(diferencia<-0.009){ claseDif='falta'; txtDif=`Faltan ${fmtMoney(Math.abs(diferencia))} para cubrir el total — quedará pendiente, podés cargar el resto después`; }
+  else { txtDif='Cubre exactamente el total, sin sobrante ni faltante'; }
   if(el) el.innerHTML = `
     <div class="row"><span>Total facturas</span><strong>${fmtMoney(totalFacturas)}</strong></div>
+    ${creditoAplicado>0.009?`<div class="row"><span>Crédito aplicado</span><strong style="color:#d97706">− ${fmtMoney(creditoAplicado)}</strong></div>`:''}
+    <div class="row"><span>Neto a cubrir</span><strong>${fmtMoney(netoACubrir)}</strong></div>
     <div class="row"><span>Cheques tildados</span><strong>${fmtMoney(totalCheques)}</strong></div>
     <div class="row"><span>Complemento (efectivo/transf.)</span><strong>${fmtMoney(montoComplemento)}</strong></div>
     <div class="row"><span>Total pagado</span><strong>${fmtMoney(totalPagado)}</strong></div>
     <div class="row"><span>Diferencia</span><span class="${claseDif}">${txtDif}</span></div>
   `;
-  return { totalFacturas, totalCheques, montoComplemento, totalPagado, diferencia };
+  return { totalFacturas, creditoDisponible, creditoAplicado, netoACubrir, totalCheques, montoComplemento, totalPagado, diferencia };
 };
 
-window.guardarEndosoCheque = async function(){
-  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
-  const destino = document.getElementById('endosoDestino').value.trim();
-  if(!destino){ toast('Completá a quién se le paga','error'); return; }
+async function guardarPagoConCheque(){
+  const destino = document.getElementById('cliente').value.trim();
+  if(!destino){ toast('Completá a quién se le paga (Cliente / Proveedor)','error'); return; }
 
-  const filas = [...document.querySelectorAll('#endosoFilasWrap .endoso-fila')].map(div=>{
-    const factura = div.querySelector('.endoso-factura').value.trim();
-    const monto = parsearMontoAR(div.querySelector('.endoso-monto').value);
+  const filas = [...document.querySelectorAll('#pagoChequeFilasWrap .endoso-fila')].map(div=>{
+    const factura = div.querySelector('.pago-cheque-factura').value.trim();
+    const monto = parsearMontoAR(div.querySelector('.pago-cheque-monto').value);
     return { factura, monto };
   }).filter(f => !isNaN(f.monto) && f.monto>0);
   if(!filas.length){ toast('Cargá al menos una factura/concepto con monto','error'); return; }
 
-  const checksTildados = [...document.querySelectorAll('.endoso-cheque-check:checked')];
+  const checksTildados = [...document.querySelectorAll('.pago-cheque-check:checked')];
   const chequeIds = checksTildados.map(chk=>chk.dataset.id);
   const chequesMovs = chequeIds.map(id=>allMovimientos.find(m=>m.id===id)).filter(Boolean);
 
-  const montoComplemento = dec2(parsearMontoAR(document.getElementById('endosoMontoComplemento').value) || 0);
-  const cuentaComplemento = document.getElementById('endosoCuentaComplemento').value;
+  const montoComplemento = dec2(parsearMontoAR(document.getElementById('pagoChequeMontoComplemento').value) || 0);
+  const cuentaComplemento = document.getElementById('pagoChequeCuentaComplemento').value;
 
   if(!chequesMovs.length && montoComplemento<=0){ toast('Tildá al menos un cheque o cargá un complemento en efectivo/transferencia','error'); return; }
 
-  const totalCheques = dec2(chequesMovs.reduce((s,m)=>s+(Number(m.importe)||0),0));
-  const totalFacturas = dec2(filas.reduce((s,f)=>s+f.monto,0));
-  const totalPagado = dec2(totalCheques + montoComplemento);
-  const sobra = dec2(totalPagado - totalFacturas);
+  const resumen = calcularResumenPagoCheque();
+  const { creditoAplicado, netoACubrir, totalCheques, diferencia } = resumen;
 
-  const btn = document.querySelector('#modalEndosoCheque .btn-primary');
+  const btn = document.getElementById('btnGuardarMovimiento');
   if(btn){ btn.disabled = true; btn.textContent = '⏳ Guardando...'; }
 
   try{
     const numerosCheques = chequesMovs.map(m=>m.numeroCheque).filter(Boolean);
+
+    // 0) Aplica el crédito del proveedor (si correspondía)
+    let creditoRealmenteAplicado = 0;
+    if(creditoAplicado>0.009){
+      creditoRealmenteAplicado = await consumirCreditoProveedor(destino, creditoAplicado);
+    }
 
     // 1) Actualiza cada cheque tildado
     for(const m of chequesMovs){
@@ -1527,19 +1643,22 @@ window.guardarEndosoCheque = async function(){
     // 2) Egreso contable por el total de los cheques (no toca saldos)
     if(totalCheques>0){
       const detalleFacturas = filas.map(f => `${f.factura||'s/n'}: ${fmtMoney(f.monto)}`).join(' · ');
+      let detalleTxt = `Pago con cheque(s) N° ${numerosCheques.join(', ')} — cubre: ${detalleFacturas}`;
+      if(creditoRealmenteAplicado>0.009) detalleTxt += ` (crédito aplicado: ${fmtMoney(creditoRealmenteAplicado)})`;
       await addDoc(collection(db,'movimientos'), {
         tipo: 'Egreso',
         cuenta: 'Cheque',
         factura: filas.map(f=>f.factura).filter(Boolean).join(', '),
         cliente: destino,
-        detalle: `Pago con cheque(s) N° ${numerosCheques.join(', ')} — cubre: ${detalleFacturas}`,
+        detalle: detalleTxt,
         importe: totalCheques,
-        observaciones: 'Generado automáticamente al endosar cheque(s)',
+        observaciones: document.getElementById('observaciones').value.trim() || 'Generado automáticamente al pagar con cheque(s)',
         fecha: today(), ts: Date.now(), creadoPor: currentUser.nombre,
         origenEndosoCheque: true,
         chequesOrigenIds: chequeIds,
         chequesNumerosOrigen: numerosCheques,
         facturasEndosadas: filas,
+        creditoAplicado: creditoRealmenteAplicado>0.009 ? creditoRealmenteAplicado : null,
         excluirDeSaldos: true
       });
     }
@@ -1560,11 +1679,11 @@ window.guardarEndosoCheque = async function(){
       });
     }
 
-    // 4) Si sobra, se guarda como crédito A NUESTRO FAVOR con este proveedor
-    if(sobra > 0.009){
+    // 4) Si sobra, se guarda como NUEVO crédito a NUESTRO FAVOR con este proveedor
+    if(diferencia > 0.009){
       await addDoc(collection(db,'caja_creditos_cheques'), {
         proveedor: destino,
-        monto: sobra,
+        monto: diferencia,
         chequesOrigenIds: chequeIds,
         chequesNumero: numerosCheques.join(', '),
         fecha: today(), ts: Date.now(),
@@ -1575,27 +1694,43 @@ window.guardarEndosoCheque = async function(){
 
     try { await guardarProveedorSiEsNuevo(destino); } catch(e){}
 
-    cerrarModalEndoso();
-    let msg = 'Pago registrado ✓';
-    if(sobra>0.009) msg += ` (crédito a nuestro favor: ${fmtMoney(sobra)})`;
-    else if(sobra<-0.009) msg += ` (quedó pendiente: ${fmtMoney(Math.abs(sobra))})`;
+    limpiarForm();
+    let msg = 'Pago con cheque(s) registrado ✓';
+    if(creditoRealmenteAplicado>0.009) msg += ` (crédito aplicado: ${fmtMoney(creditoRealmenteAplicado)})`;
+    if(diferencia>0.009) msg += ` (nuevo crédito a favor: ${fmtMoney(diferencia)})`;
+    else if(diferencia<-0.009) msg += ` (quedó pendiente: ${fmtMoney(Math.abs(diferencia))})`;
     toast(msg, 'success');
   }catch(e){
     console.error(e);
     toast('Error al registrar el pago: '+e.message,'error');
   }finally{
-    if(btn){ btn.disabled = false; btn.textContent = '💾 Confirmar pago'; }
+    if(btn){ btn.disabled = false; btn.textContent = '💾 Guardar Movimiento'; }
   }
+}
+
+// Atajo desde la pestaña Cheques: cambia a Movimientos, arma Tipo=Egreso + Cuenta=Cheque
+// y deja YA tildado ese cheque puntual en la lista de medios de pago.
+window.irAPagarConCheque = function(chequeId){
+  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
+  pagoChequePreseleccionarId = chequeId;
+  const primerTab = document.querySelectorAll('.tabs .tab')[0];
+  showTab('movimientos', primerTab);
+  document.getElementById('tipo').value = 'Egreso';
+  document.getElementById('cuenta').value = 'Cheque';
+  toggleChequeFields(); // dispara prepararPagoChequeForm(), que tilda el cheque preseleccionado
+  document.getElementById('page-movimientos').scrollIntoView({behavior:'smooth'});
+  setTimeout(()=>document.getElementById('cliente').focus(), 300);
 };
 
-// ── Créditos por cheques endosados: render en Reportes ──
+// ── Créditos por cheques endosados: render en Reportes + card resumen en Movimientos ──
 function renderCreditosCheques(){
   const tbody = document.getElementById('tablaCreditosCheques');
-  if(!tbody) return;
   const pendientes = allCreditosCheques.filter(c=>!c.usado);
   const totalPendiente = pendientes.reduce((s,c)=>s+Number(c.monto||0),0);
   const elTot = document.getElementById('credTotalPendiente'); if(elTot) elTot.textContent = fmtMoney(totalPendiente);
   const elCant = document.getElementById('credCantPendiente'); if(elCant) elCant.textContent = pendientes.length;
+  const elHeader = document.getElementById('saldoCreditoHeader'); if(elHeader) elHeader.textContent = fmtMoney(totalPendiente);
+  if (!tbody) return;
 
   const esAdmin = currentUser?.rol==='admin';
   tbody.innerHTML = allCreditosCheques.map(c=>`
@@ -1626,11 +1761,14 @@ function renderCreditoEnDetalleCC(cliente){
   const pendientes = allCreditosCheques.filter(c=>!c.usado && (c.proveedor||'').toLowerCase()===(cliente||'').toLowerCase());
   if(!pendientes.length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
   const total = pendientes.reduce((s,c)=>s+Number(c.monto||0),0);
+  const puedeUsar = currentUser?.rol!=='viewer';
+  const clienteEscapado = cliente.replace(/'/g,"\\'").replace(/"/g,'&quot;');
   wrap.style.display = 'block';
   wrap.innerHTML = `
     <div class="cheque-detalle-box" style="background:#fff7ed;border-color:#fed7aa;">
       <div class="row"><span class="lbl">🔀 Crédito a nuestro favor:</span><span class="val" style="color:#d97706">${fmtMoney(total)}</span></div>
-      <div style="font-size:11px;color:#94a3b8;">${pendientes.length} crédito(s) pendiente(s) para descontar de una próxima factura de este proveedor</div>
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">${pendientes.length} crédito(s) pendiente(s) para descontar de una próxima factura de este proveedor</div>
+      ${puedeUsar?`<button class="btn btn-warning btn-sm" onclick="usarCreditoManual('${clienteEscapado}')">💰 Usar crédito</button>`:''}
     </div>
   `;
 }
@@ -1666,7 +1804,7 @@ window.renderCheques=function(){
     let di='';if(m.fechaVencCheque){const fv=new Date(m.fechaVencCheque+'T00:00:00');const d=Math.round((fv-hoy)/(1000*60*60*24));di=d>=0?`<br><span style="font-size:10px;color:#888">Vence en ${d} días</span>`:`<br><span style="font-size:10px;color:#dc2626">Venció hace ${Math.abs(d)} días</span>`;}
     const estadoHtml=`<span class="badge ${bc}">${e}</span>`+(e==='Endosado'&&m.endosadoA?`<br><span style="font-size:10px;color:#3730a3">A: ${m.endosadoA}</span>`:'');
     const puedeEndosar = !esViewer && (e==='En cartera' || e==='Depositado');
-    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td>${estadoHtml}</td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${puedeEndosar?` <button class="btn btn-warning btn-sm" onclick="abrirEndosoCheque('${m.id}')">🔀 Pagar</button>`:''}${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
+    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td>${estadoHtml}</td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${puedeEndosar?` <button class="btn btn-warning btn-sm" onclick="irAPagarConCheque('${m.id}')">🔀 Pagar</button>`:''}${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
   }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">Sin cheques</td></tr>';
 
   document.getElementById('cheques-paginacion').innerHTML = totalPaginasCh>1 ? `
@@ -1750,9 +1888,6 @@ function estilizarHojaExcel(ws, opts){
   }
 }
 window.estilizarHojaExcel = estilizarHojaExcel;
-
-function dec2(n){ return Math.round((Number(n||0) + Number.EPSILON) * 100) / 100; }
-window.dec2 = dec2;
 
 window.exportarChequesExcel=function(){
   const filas=allMovimientos.filter(m=>m.cuenta==='Cheque'&&m.numeroCheque).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
