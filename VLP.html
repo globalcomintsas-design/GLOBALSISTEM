@@ -235,6 +235,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Expo pendientes</div><div class="card-value blue" id="pExpo">0</div></div>
         <div class="card"><div class="card-label">Impo pendientes</div><div class="card-value purple" id="pImpo">0</div></div>
         <div class="card"><div class="card-label">ZF pendientes</div><div class="card-value green" id="pZF">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="document.getElementById('filtroSimPend').value='ANUL';renderPendientes();document.getElementById('tablaPendientes').scrollIntoView({behavior:'smooth',block:'start'})" title="Filtra la tabla por Estado SIM = ANUL"><div class="card-label">ANUL pendientes</div><div class="card-value red" id="pAnul">0</div></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -808,18 +809,19 @@ function now() { return ahoraLocal(); }
 function todayISO() { return fechaISOLocal(ahoraLocal()); }
 
 // ---- ARCHIVADO AUTOMÁTICO DE ANULADAS SIN PAGAR ----
-// Una operación ANUL que NUNCA se cobró no aporta nada a los reportes de
-// cobranza y solo genera ruido (dashboard, pendientes, %cobrado, etc.).
-// Regla: si estado_sim === 'ANUL' y la operación está pagada === false,
-// se marca archivada:true (desaparece de todo, ya que casi todas las
-// funciones de render ya filtran por !o.archivada). Si esa misma operación
-// se termina cobrando (llega el VLP), se desarchiva sola y vuelve a
-// aparecer en Pagadas + en la card "ANUL Pagadas" del Dashboard.
-// El histórico de DUX (ANUL nunca cobradas) NO es información útil para
-// este sistema — por eso se archivan y no se muestran en ningún lado,
-// salvo que se paguen.
+// (ver nota histórica más abajo, en calcularArchivada) — este bloque queda
+// documentado para trazabilidad de la decisión anterior.
 function calcularArchivada(estadoSim, pagada) {
-  return estadoSim === 'ANUL' && !pagada;
+  // NOTA (cambio 2026-08-21): antes esta función archivaba (ocultaba de todo
+  // reporte) cualquier ANUL sin pagar, asumiendo que una ANUL nunca genera
+  // trabajo facturable. Eso ocultaba casos reales: operaciones que se
+  // anularon pero donde igual se armó y retiró el legajo de AFIP (trabajo
+  // hecho = corresponde cobrarlo). Ahora las ANUL NO se archivan más: quedan
+  // visibles como pendientes (con fecha_operativa = "Retiro legajo de AFIP",
+  // ver procesarDatosExcelDUX) hasta que aparezcan conciliadas en un VLP. Se
+  // deja la función (en vez de borrar sus llamadas) para no tocar el resto
+  // del flujo de import/pago; hoy siempre devuelve false.
+  return false;
 }
 
 // ---- RUEDA DE CARGA GLOBAL ----
@@ -1007,6 +1009,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
   const COL_SITU=col['Situación']??8;
   const COL_ADUANA=col['Aduana']??9;
   const COL_ESTADO=col['Estado']??13;
+  const COL_RETIRO_AFIP=col['Retiro legajo de AFIP']??15;
   const COL_MERC=col['Mercaderia']??19;
   const COL_PLAZA=col['Plaza / Cumplido']??20;
   const COL_OBS=col['Observaciones']??27;
@@ -1037,16 +1040,26 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     const dest=String(r[COL_DEST]||'');
     const codigoReg=dest.length>=9?dest.substring(5,9):'';
     const tipoOp=REGIMENES[codigoReg]||'REVISAR';
-    // Fecha operativa: EXPO sale primero de "Fecha de mercadería a bordo"; si
-    // no está cargada, usa "Plaza / Cumplido" como respaldo (puede pasar que
-    // ya esté cumplida en plaza y se hayan olvidado de cargar el bordo).
-    // El resto (IMPO, ZF, etc.) sale únicamente de "Plaza / Cumplido".
+    const estadoSim=String(r[COL_SIM]||'');
+    // Fecha operativa:
+    // - Si la operación está ANUL: la mercadería nunca llega a "a bordo" ni a
+    //   "Plaza/Cumplido" (se anuló antes). La evidencia de que igual hicimos
+    //   el trabajo (armar y retirar el legajo de AFIP) es la fecha de
+    //   "Retiro legajo de AFIP": esa pasa a ser la fecha operativa, para que
+    //   la operación aparezca como pendiente de cobro hasta que se concilie
+    //   con un VLP. Si no tiene esa fecha cargada, no laburamos nada y queda
+    //   sin fecha operativa (no entra a ningún reporte).
+    // - Para el resto: EXPO sale primero de "Fecha de mercadería a bordo"; si
+    //   no está cargada, usa "Plaza / Cumplido" como respaldo. El resto
+    //   (IMPO, ZF, etc.) sale únicamente de "Plaza / Cumplido".
     // Todas las fechas que llegan del Excel DUX pasan por parseExcelDate(),
     // que las devuelve en hora LOCAL sin corrimiento de día (ver módulo de
     // fechas más arriba).
     let fechaOp=null;
     let fechaVinoDeDux=false;
-    if(tipoOp==='EXPORTACION') {
+    if(estadoSim==='ANUL') {
+      if(r[COL_RETIRO_AFIP]) { fechaOp=parseExcelDate(r[COL_RETIRO_AFIP]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+    } else if(tipoOp==='EXPORTACION') {
       if(r[COL_BORDO]) { fechaOp=parseExcelDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
       if(!fechaVinoDeDux && r[COL_PLAZA]) { fechaOp=parseExcelDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     } else {
@@ -1055,11 +1068,13 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     let fechaOfic=parseExcelDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
     let fechaBordo=parseExcelDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
     let fechaPlaza=parseExcelDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
+    let fechaRetiroAfip=parseExcelDate(r[COL_RETIRO_AFIP]);if(fechaRetiroAfip&&isNaN(fechaRetiroAfip))fechaRetiroAfip=null;
     // Validación de rango: evita FirebaseError "Timestamp seconds out of range"
     fechaOp=fechaValidaODefault(fechaOp,null);
     fechaOfic=fechaValidaODefault(fechaOfic,null);
     fechaBordo=fechaValidaODefault(fechaBordo,null);
     fechaPlaza=fechaValidaODefault(fechaPlaza,null);
+    fechaRetiroAfip=fechaValidaODefault(fechaRetiroAfip,null);
 
     // Si DUX no trajo fecha pero la operación ya tenía una cargada a mano
     // (fecha_operativa_manual), la conservamos para no perder la corrección
@@ -1071,8 +1086,6 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       if(fPrev && !isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
     }
 
-    const estadoSim=String(r[COL_SIM]||'');
-
     const nuevosDatos={
       operacion:opNorm,operacion_raw:r[COL_OP],cliente:String(r[COL_CLI]||''),
       destinacion:dest,aduana:String(r[COL_ADUANA]||''),codigo_regimen:codigoReg,
@@ -1080,6 +1093,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       estado_sim:estadoSim,situacion:String(r[COL_SITU]||''),
       estado:String(r[COL_ESTADO]||''),fecha_oficializacion:fechaOfic,
       fecha_mer_a_bordo:fechaBordo,cumplido_plaza:fechaPlaza,
+      fecha_retiro_afip:fechaRetiroAfip,
       fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMesOperativo(fechaOp):null,
       fecha_operativa_manual:esManual,
       observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
@@ -1111,7 +1125,7 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       const ref=doc(db,'operaciones_vlp',opNorm);
       const existente=existentes[opNorm];
       if(!existente) {
-        // ANUL sin pagar → se archiva directo, no aporta al histórico de cobranza.
+        // Las ANUL ya NO se archivan automáticamente (ver calcularArchivada).
         const archivadaCalc=calcularArchivada(estadoSim,false);
         batch.set(ref,{...nuevosDatos,pagada:false,fecha_pago:null,vlp_pago:null,
           numero_doc_vlp:null,razon_social_vlp:null,importe_vlp:null,origen:'SOLO_DUX',
@@ -1481,10 +1495,15 @@ window.renderPendientes=function() {
     return fa-fb;
   });
 
-  document.getElementById('pTotal').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).length;
-  document.getElementById('pExpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='EXPORTACION').length;
-  document.getElementById('pImpo').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='IMPORTACION').length;
-  document.getElementById('pZF').textContent=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa&&o.tipo_operacion==='ZONA_FRANCA').length;
+  const baseDenom=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
+  document.getElementById('pTotal').textContent=baseDenom.length;
+  document.getElementById('pExpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='EXPORTACION').length;
+  document.getElementById('pImpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='IMPORTACION').length;
+  document.getElementById('pZF').textContent=baseDenom.filter(o=>o.tipo_operacion==='ZONA_FRANCA').length;
+  // Card ANUL pendientes: mismo array ya cargado en memoria (allOps), sin
+  // lecturas extra a Firestore — misma lógica de "pocas lecturas" que el
+  // resto del sistema.
+  document.getElementById('pAnul').textContent=baseDenom.filter(o=>o.estado_sim==='ANUL').length;
 
   document.getElementById('tablaPendientes').innerHTML=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
@@ -1852,7 +1871,9 @@ window.renderFechasFaltantes=function() {
   // son las únicas que ya están en condiciones de tener fecha operativa
   // cargada (mercadería a bordo para EXPO / cumplido en plaza para el resto)
   // y a las que realmente les falta ese dato en DUX. SALI, PRES, vacío u
-  // otros estados no se muestran acá.
+  // otros estados no se muestran acá. Las ANUL tienen su propio circuito
+  // (fecha operativa = Retiro legajo de AFIP, ver procesarDatosExcelDUX) y
+  // por eso no entran a este reporte.
   const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&(o.estado_sim==='AUTO'||o.estado_sim==='CANC')&&(o.estado||'').toUpperCase()!=='OFI');
 
   document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
@@ -2244,8 +2265,8 @@ window.abrirModalDash = function(tipo) {
       return o.pagada&&f&&f.getFullYear()===anioActual;
     },
     // Mismo criterio que la card y la pestaña Pendientes: exige fecha
-    // operativa. Al estar las ANUL sin pagar ya archivadas de antemano,
-    // "ops" (que filtra !archivada) nunca las incluye acá tampoco.
+    // operativa. Las ANUL con Retiro AFIP cargado entran acá igual que
+    // cualquier otra pendiente.
     pendientes: o=>!o.pagada&&o.fecha_operativa,
     revisar: o=>o.tipo_operacion==='REVISAR',
     sinDux: o=>o.origen==='SOLO_VLP',
@@ -2321,39 +2342,45 @@ function badgeOrigen(o) {
 }
 
 // ====================================================
-// LIMPIEZA ÚNICA DE HISTÓRICO — ANUL SIN PAGAR
+// LIMPIEZA ÚNICA DE HISTÓRICO — DESARCHIVAR ANUL SIN PAGAR
 // ====================================================
 // Ejecutar UNA sola vez desde la consola del navegador (F12 → Console),
-// escribiendo: archivarAnulHistoricas()
-// Archiva todas las operaciones ANUL sin pagar que ya existían en el
-// sistema antes de este cambio. De acá en adelante, el propio import de
-// DUX se encarga de archivarlas automáticamente (ver calcularArchivada()).
-window.archivarAnulHistoricas = async function() {
-  const aArchivar = allOps.filter(o=>o.estado_sim==='ANUL'&&!o.pagada&&!o.archivada);
-  if(!aArchivar.length){ toast('No hay ANUL sin pagar para archivar','success'); return; }
-  if(!confirm(`¿Archivar ${aArchivar.length} operaciones ANUL sin pagar? Esta acción es para limpieza única del histórico.`)) return;
+// escribiendo: desarchivarAnulHistoricas()
+// Revierte el archivado automático que hacía el sistema hasta el
+// 2026-08-21 sobre las ANUL sin pagar. No les asigna fecha operativa (eso
+// requiere reimportar el DUX, que ahora sí trae "Retiro legajo de AFIP" —
+// ver procesarDatosExcelDUX): sólo las saca de archivada para que, si el
+// próximo reimport de DUX les encuentra esa fecha, puedan aparecer en
+// Pendientes. Es más simple reimportar el último DUX después de este
+// cambio: el propio import ya deja archivada:false en todos los casos
+// (ver calcularArchivada()), así que esta función es sólo un atajo por si
+// no se va a reimportar DUX de inmediato.
+window.desarchivarAnulHistoricas = async function() {
+  const aDesarchivar = allOps.filter(o=>o.estado_sim==='ANUL'&&!o.pagada&&o.archivada);
+  if(!aDesarchivar.length){ toast('No hay ANUL archivadas para revertir','success'); return; }
+  if(!confirm(`¿Desarchivar ${aDesarchivar.length} operaciones ANUL sin pagar? (no les carga fecha operativa; para eso reimportá el DUX)`)) return;
   mostrarCarga();
   try {
     const ahora=ahoraLocal();
     const BATCH_SIZE=490;
-    for(let i=0;i<aArchivar.length;i+=BATCH_SIZE){
+    for(let i=0;i<aDesarchivar.length;i+=BATCH_SIZE){
       const batch=writeBatch(db);
-      aArchivar.slice(i,i+BATCH_SIZE).forEach(o=>{
-        batch.update(doc(db,'operaciones_vlp',o.id),{archivada:true,ts_actualizacion:ahora});
+      aDesarchivar.slice(i,i+BATCH_SIZE).forEach(o=>{
+        batch.update(doc(db,'operaciones_vlp',o.id),{archivada:false,ts_actualizacion:ahora});
       });
       await batch.commit();
     }
     const batchLog=writeBatch(db);
-    aArchivar.forEach(o=>{
+    aDesarchivar.forEach(o=>{
       batchLog.set(doc(collection(db,'log_conciliaciones')),{
         tipo_evento:'OPERACION_ARCHIVADA',operacion:o.operacion,
-        descripcion:'ANUL sin pagar archivada (limpieza histórico único)',
+        descripcion:'ANUL sin pagar desarchivada (reversión de la limpieza histórica única — ya no se archivan)',
         vlp_archivo:'',dux_archivo:'',fecha_evento:ahora,
-        usuario:currentUser.nombre,datos_antes:{archivada:false},datos_despues:{archivada:true}
+        usuario:currentUser.nombre,datos_antes:{archivada:true},datos_despues:{archivada:false}
       });
     });
     await batchLog.commit();
-    toast(`${aArchivar.length} ANUL archivadas ✓`,'success');
+    toast(`${aDesarchivar.length} ANUL desarchivadas ✓ — reimportá el DUX para que tomen fecha operativa`,'success');
     await cargarOperaciones();
   } finally { ocultarCarga(); }
 };
