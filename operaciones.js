@@ -616,15 +616,15 @@ window.recalcularFormulario = function(){
     tcInputEl.style.borderColor = '';
     tcInputEl.style.background  = '';
 
-    document.getElementById('prev_neto').textContent  = '$ ' + fmt(totalNeto);
-    document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
-    document.getElementById('prev_bruto').textContent = '$ ' + fmt(bruto);
+    document.getElementById('prev_neto').textContent  = '$ ' + fmt2(totalNeto);
+    document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt2(iva) : '— Sin factura';
+    document.getElementById('prev_bruto').textContent = '$ ' + fmt2(bruto);
     document.getElementById('prev_neto').style.color  = '';
     document.getElementById('prev_bruto').style.color = '';
     document.getElementById('prev_iva').style.color   = tieneFactura ? '' : '#dc2626';
 
     const desglose = items.map(i =>
-      `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt(i.pesos)}</span>`
+      `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt2(i.pesos)}</span>`
     ).join(' ');
     document.getElementById('desglose-prev').innerHTML = desglose;
     document.getElementById('op-numero-preview').textContent = '→ Op #' + generarNumOp();
@@ -1909,20 +1909,20 @@ window.recalcMudanza = function(){
   tcInputEl.style.borderColor = '';
   tcInputEl.style.background  = '';
 
-  document.getElementById('mud_neto').textContent        = '$ ' + fmt(honorNeto);
-  document.getElementById('mud_iva').textContent         = mudTieneFactura ? '$ ' + fmt(iva) : '— Sin factura';
-  document.getElementById('mud_bruto').textContent       = '$ ' + fmt(bruto);
-  document.getElementById('mud_gastos_total').textContent = '$ ' + fmt(totalGastos);
-  document.getElementById('mud_neto_final').textContent  = '$ ' + fmt(netofinal);
+  document.getElementById('mud_neto').textContent        = '$ ' + fmt2(honorNeto);
+  document.getElementById('mud_iva').textContent         = mudTieneFactura ? '$ ' + fmt2(iva) : '— Sin factura';
+  document.getElementById('mud_bruto').textContent       = '$ ' + fmt2(bruto);
+  document.getElementById('mud_gastos_total').textContent = '$ ' + fmt2(totalGastos);
+  document.getElementById('mud_neto_final').textContent  = '$ ' + fmt2(netofinal);
 
   const items = [
-    `USD ${usd} × TC ${tc} = $${fmt(honorNeto)}`,
-    mudTieneFactura ? `IVA 21%: $${fmt(iva)}` : `Sin factura (sin IVA)`,
-    `Precinto: $${fmt(precinto)}`,
-    `Fiscal: $${fmt(fiscal)}`,
-    digitalizacion > 0 ? `Digitalización: $${fmt(digitalizacion)}` : null,
-    `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt(gastoRamiro)}`,
-    otros > 0 ? `Otros: $${fmt(otros)}` : null,
+    `USD ${usd} × TC ${tc} = $${fmt2(honorNeto)}`,
+    mudTieneFactura ? `IVA 21%: $${fmt2(iva)}` : `Sin factura (sin IVA)`,
+    `Precinto: $${fmt2(precinto)}`,
+    `Fiscal: $${fmt2(fiscal)}`,
+    digitalizacion > 0 ? `Digitalización: $${fmt2(digitalizacion)}` : null,
+    `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt2(gastoRamiro)}`,
+    otros > 0 ? `Otros: $${fmt2(otros)}` : null,
     vencResidencia ? `Residencia: ${estRes.label}` : null
   ].filter(Boolean);
   document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
