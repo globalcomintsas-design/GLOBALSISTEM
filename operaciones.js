@@ -115,6 +115,7 @@ function etiquetaTipoDespachante(tipo){
     case 'desp_externo': return { txt:'Externo ⭐', style:'background:#fef3c7;color:#92400e' };
     case 'apoderado':    return { txt:'Apoderado',  style:'background:#ede9fe;color:#5b21b6' };
     case 'kotinya':      return { txt:'Kotinya/Ramiro', style:'background:#fef9c3;color:#92400e' };
+    case 'despachante_pesos': return { txt:'Tarifa en $', style:'background:#e0f2fe;color:#075985' };
     default:             return { txt:'Despachante', style:'' };
   }
 }
@@ -311,6 +312,56 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
   renderSaldos();
 });
 
+// ── TARIFAS: persistencia en Firestore ──
+// Todos los campos de tarifa (USD y pesos) se guardan en un único documento de
+// configuración para que, al modificarlos, queden guardados y no se pierdan al
+// recargar la página ni al entrar desde otra compu. Se guardan como texto (tal cual
+// están en los inputs) y se restauran apenas carga la página.
+const TARIFA_IDS = [
+  't_vn','t_r','t_sobre','t_cam_vn','t_cam_r','t_senasa_p','t_senasa_prod','t_hoja',
+  't_mic','t_mic_foja','t_multinota','t_finsem',
+  't_apoderado','t_kotinya','t_ramiro_op','t_cam_apod','t_mov_ad','t_adicionales',
+  't_prem_vn','t_prem_r','t_prem_cam_vn','t_prem_cam_r',
+  't_pesos_vn','t_pesos_r'
+];
+
+let cargandoTarifas = false; // evita re-guardar mientras se están poblando los campos desde Firestore
+let tarifasTimeout = null;
+
+function guardarTarifasDebounced(){
+  if(cargandoTarifas) return;
+  clearTimeout(tarifasTimeout);
+  tarifasTimeout = setTimeout(async () => {
+    const datos = {};
+    TARIFA_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if(el) datos[id] = el.value;
+    });
+    try {
+      await setDoc(doc(db,'config','tarifas_operaciones'), datos, { merge:true });
+      toast('💾 Tarifas guardadas');
+    } catch(e){
+      console.warn('Error guardando tarifas:', e);
+      toast('❌ Error al guardar tarifas: ' + e.message);
+    }
+  }, 600);
+}
+window.guardarTarifasDebounced = guardarTarifasDebounced;
+
+onSnapshot(doc(db,'config','tarifas_operaciones'), snap => {
+  if(!snap.exists()) return;
+  cargandoTarifas = true;
+  const datos = snap.data();
+  TARIFA_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && datos[id] !== undefined && datos[id] !== null && datos[id] !== ''){
+      el.value = datos[id];
+    }
+  });
+  cargandoTarifas = false;
+  recalcularFormulario();
+});
+
 // ── Log de vinculaciones automáticas desde Caja ──
 // Se alimenta desde caja.html (colección 'log_vinculaciones_caja') cada vez que se carga
 // un Ingreso y el sistema intenta vincularlo con Operaciones (pago por factura, pago
@@ -398,11 +449,12 @@ window.onTipoDespachoChange = function(){
   const tKot  = parseFloat(document.getElementById('t_kotinya').value) || 85;
   const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
 
-  if(['desp_externo','apoderado','kotinya'].includes(tipo)){
+  if(['desp_externo','apoderado','kotinya','despachante_pesos'].includes(tipo)){
     badge.style.display = 'inline-block';
-    if(tipo === 'apoderado')    badge.textContent = `APODERADO USD ${tApod}`;
-    else if(tipo === 'kotinya') badge.textContent = `KOTINYA USD ${tKot} · PAGO RAMIRO USD ${tRam}`;
-    else                        badge.textContent = '+20% PREMIUM';
+    if(tipo === 'apoderado')             badge.textContent = `APODERADO USD ${tApod}`;
+    else if(tipo === 'kotinya')          badge.textContent = `KOTINYA USD ${tKot} · PAGO RAMIRO USD ${tRam}`;
+    else if(tipo === 'despachante_pesos') badge.textContent = '💲 TARIFA EN PESOS';
+    else                                 badge.textContent = '+20% PREMIUM';
   } else {
     badge.style.display = 'none';
   }
@@ -473,7 +525,7 @@ window.onCambiarDespachante = function(){
   }
 
   const cli = clientes.find(c => c.nombre === nombre);
-  const tiposValidos = ['desp_externo','apoderado','kotinya'];
+  const tiposValidos = ['desp_externo','apoderado','kotinya','despachante_pesos'];
   if(cli){
     document.getElementById('tipo_desp_global').value = tiposValidos.includes(cli.tipo) ? cli.tipo : 'despachante';
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
@@ -500,6 +552,7 @@ function getTarifas(){
   const esPremium   = tipo === 'desp_externo';
   const _esApoderado = tipo === 'apoderado';
   const _esKotinya   = tipo === 'kotinya';
+  const _esPesos     = tipo === 'despachante_pesos';
   const tcInput = document.getElementById('op_tc').value;
   const tcFalta = tcInput === '' || isNaN(parseFloat(tcInput)) || parseFloat(tcInput) <= 0;
   const tc = tcFalta ? 0 : parseFloat(tcInput);
@@ -515,6 +568,11 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
   } else if(esMultinota){
     usd(parseFloat(document.getElementById('t_multinota').value) || 2, 'Multinota');
+  } else if(_esPesos && !esMIC && !esAdicionales){
+    const hon_pesos = canal === 'R'
+      ? parseFloat(document.getElementById('t_pesos_r').value)
+      : parseFloat(document.getElementById('t_pesos_vn').value);
+    pesos(hon_pesos || 0, `Honorarios canal ${canal} (tarifa $)`);
   } else if(!esMIC && !esAdicionales){
     let hon_usd;
     if(esPremium){
@@ -676,6 +734,7 @@ function construirDatosOperacion(){
     esPremium:    tipo === 'desp_externo',
     esKotinya:    tipo === 'kotinya',
     esApoderado:  tipo === 'apoderado',
+    esTarifaPesos: tipo === 'despachante_pesos',
     ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
     esMIC,
     esMultinota,
@@ -816,9 +875,9 @@ window.editarOperacion = function(id){
   // Tipo de operación (EXPO/IMPO/TRAN/MIC/MULTINOTA) -> ajusta visibilidad de checks
   onTipoChange();
 
-  // Tipo de despacho (despachante/premium/apoderado/kotinya)
+  // Tipo de despacho (despachante/premium/apoderado/kotinya/despachante_pesos)
   document.getElementById('tipo_desp_global').value =
-    o.tipoDespGlobal || (o.esApoderado ? 'apoderado' : o.esKotinya ? 'kotinya' : o.esPremium ? 'desp_externo' : 'despachante');
+    o.tipoDespGlobal || (o.esApoderado ? 'apoderado' : o.esKotinya ? 'kotinya' : o.esPremium ? 'desp_externo' : o.esTarifaPesos ? 'despachante_pesos' : 'despachante');
   onTipoDespachoChange();
 
   // Restaurar checkboxes/cantidades (por si onTipoChange los reseteó)
@@ -1111,7 +1170,7 @@ function renderTabla(){
     <tr>
       <td class="mono">${o.numOp||'-'}</td>
       <td>${o.fecha||''}</td>
-      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e;margin-left:4px;">PREM</span>':o.esKotinya?'<span class="tag" style="background:#fef9c3;color:#92400e;margin-left:4px;">KOT</span>':o.esApoderado?'<span class="tag" style="background:#ede9fe;color:#5b21b6;margin-left:4px;">APOD</span>':''}</td>
+      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e;margin-left:4px;">PREM</span>':o.esKotinya?'<span class="tag" style="background:#fef9c3;color:#92400e;margin-left:4px;">KOT</span>':o.esApoderado?'<span class="tag" style="background:#ede9fe;color:#5b21b6;margin-left:4px;">APOD</span>':o.esTarifaPesos?'<span class="tag" style="background:#e0f2fe;color:#075985;margin-left:4px;">$ARS</span>':''}</td>
       <td>${o.cliente||''}</td>
       <td class="mono">${o.destinacion||''}</td>
       <td class="mono">${o.mic||'-'}</td>
