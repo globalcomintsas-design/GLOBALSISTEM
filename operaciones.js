@@ -467,6 +467,12 @@ window.onTipoDespachoChange = function(){
   canalGroup.style.opacity = sinCanal ? '0.4' : '';
   canalGroup.style.pointerEvents = sinCanal ? 'none' : '';
 
+  // El TC no aplica cuando la tarifa es en pesos (no hay conversión USD->$): se oculta
+  // el campo entero y deja de ser obligatorio para poder guardar.
+  const esPesosTipo = tipo === 'despachante_pesos';
+  const tcGroup = document.getElementById('op_tc').closest('.form-group');
+  tcGroup.style.display = esPesosTipo ? 'none' : '';
+
   recalcularFormulario();
 };
 
@@ -554,8 +560,14 @@ function getTarifas(){
   const _esKotinya   = tipo === 'kotinya';
   const _esPesos     = tipo === 'despachante_pesos';
   const tcInput = document.getElementById('op_tc').value;
-  const tcFalta = tcInput === '' || isNaN(parseFloat(tcInput)) || parseFloat(tcInput) <= 0;
-  const tc = tcFalta ? 0 : parseFloat(tcInput);
+  const tcParsed  = parseFloat(tcInput);
+  const tcValido  = !isNaN(tcParsed) && tcParsed > 0;
+  // Con tarifa en pesos no hay conversión USD->$, así que el TC deja de ser obligatorio.
+  // Si quedó un TC cargado de antes (ej. venía de otro tipo de despacho) se sigue
+  // usando para convertir algún adicional que esté tarifado en USD; si no hay ninguno
+  // cargado, se usa 1 para que esos adicionales no queden en $0 por falta de TC.
+  const tcFalta = _esPesos ? false : !tcValido;
+  const tc = _esPesos ? (tcValido ? tcParsed : 1) : (tcFalta ? 0 : tcParsed);
 
   const items = [];
   const usd   = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
@@ -769,8 +781,9 @@ window.guardarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
-  if(!tcVal || tcVal <= 0){
+  if(!esPesosTipo && (!tcVal || tcVal <= 0)){
     toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
     document.getElementById('op_tc').focus();
     return;
@@ -815,8 +828,9 @@ window.actualizarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
-  if(!tcVal || tcVal <= 0){
+  if(!esPesosTipo && (!tcVal || tcVal <= 0)){
     toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
     document.getElementById('op_tc').focus();
     return;
