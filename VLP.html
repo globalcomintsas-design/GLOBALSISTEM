@@ -123,6 +123,17 @@ tr:hover td{background:#fafbff;}
 .antig-count{font-size:12px;font-weight:700;min-width:30px;}
 .antig-visual{flex:1;height:8px;background:#e2e8f0;border-radius:4px;overflow:hidden;}
 .antig-fill{height:100%;border-radius:4px;}
+.msel{position:relative;}
+.msel-btn{width:100%;text-align:left;padding:7px 9px;border-radius:7px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;background:#fff;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:6px;}
+.msel-btn:after{content:'▾';font-size:10px;color:#888;}
+.msel-panel{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px;z-index:60;box-shadow:0 8px 24px rgba(0,0,0,.14);max-height:230px;overflow-y:auto;margin-top:4px;min-width:170px;}
+.msel-panel.open{display:block;}
+.msel-panel label{display:flex;align-items:center;gap:7px;font-size:12px;padding:5px 4px;cursor:pointer;border-radius:5px;}
+.msel-panel label:hover{background:#f8fafc;}
+.msel-panel label input{width:auto;margin:0;accent-color:#1e3a8a;}
+.msel-actions{display:flex;gap:6px;margin-top:6px;border-top:1px solid #f0f4f8;padding-top:6px;}
+.msel-actions button{flex:1;background:none;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:10px;cursor:pointer;color:#1e3a8a;font-family:'DM Sans',sans-serif;}
+.msel-actions button:hover{background:#eff6ff;}
 @media(max-width:500px){.cards{grid-template-columns:1fr 1fr;}.ficha-grid{grid-column:1/-1;grid-template-columns:1fr;}}
 </style>
 </head>
@@ -235,7 +246,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Expo pendientes</div><div class="card-value blue" id="pExpo">0</div></div>
         <div class="card"><div class="card-label">Impo pendientes</div><div class="card-value purple" id="pImpo">0</div></div>
         <div class="card"><div class="card-label">ZF pendientes</div><div class="card-value green" id="pZF">0</div></div>
-        <div class="card" style="cursor:pointer" onclick="document.getElementById('filtroSimPend').value='ANUL';renderPendientes();document.getElementById('tablaPendientes').scrollIntoView({behavior:'smooth',block:'start'})" title="Filtra la tabla por Estado SIM = ANUL"><div class="card-label">ANUL pendientes</div><div class="card-value red" id="pAnul">0</div></div>
+        <div class="card" style="cursor:pointer" onclick="mselSetValues('mselSimPend',['ANUL']);renderPendientes();document.getElementById('tablaPendientes').scrollIntoView({behavior:'smooth',block:'start'})" title="Filtra la tabla por Estado SIM = ANUL"><div class="card-label">ANUL pendientes</div><div class="card-value red" id="pAnul">0</div></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -247,8 +258,39 @@ tr:hover td{background:#fafbff;}
         <div class="search-bar"><input type="text" id="buscarPend" placeholder="Buscar operación, cliente, mercadería..." oninput="renderPendientes()" /></div>
         <div class="filtros">
           <div><label>Mes operativo</label><input type="month" id="filtroMesPend" onchange="renderPendientes()" /></div>
-          <div><label>Tipo</label><select id="filtroTipoPend" onchange="renderPendientes()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option><option>REVISAR</option></select></div>
-          <div><label>Estado SIM</label><select id="filtroSimPend" onchange="renderPendientes()"><option value="">Todos</option><option>CANC</option><option>AUTO</option><option>SALI</option><option>PRES</option><option>ANUL</option></select></div>
+          <div class="field">
+            <label>Tipo</label>
+            <div class="msel" id="mselTipoPend">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselTipoPend')">Todos</button>
+              <div class="msel-panel" id="panel-mselTipoPend">
+                <label><input type="checkbox" value="EXPORTACION" onchange="mselUpdateLabel('mselTipoPend');renderPendientes()"> EXPORTACION</label>
+                <label><input type="checkbox" value="IMPORTACION" onchange="mselUpdateLabel('mselTipoPend');renderPendientes()"> IMPORTACION</label>
+                <label><input type="checkbox" value="ZONA_FRANCA" onchange="mselUpdateLabel('mselTipoPend');renderPendientes()"> ZONA_FRANCA</label>
+                <label><input type="checkbox" value="REVISAR" onchange="mselUpdateLabel('mselTipoPend');renderPendientes()"> REVISAR</label>
+                <div class="msel-actions">
+                  <button type="button" onclick="mselSetValues('mselTipoPend',['EXPORTACION','IMPORTACION','ZONA_FRANCA','REVISAR']);renderPendientes()">Todos</button>
+                  <button type="button" onclick="mselSetValues('mselTipoPend',[]);renderPendientes()">Ninguno</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="field">
+            <label>Estado SIM</label>
+            <div class="msel" id="mselSimPend">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselSimPend')">Todos</button>
+              <div class="msel-panel" id="panel-mselSimPend">
+                <label><input type="checkbox" value="CANC" onchange="mselUpdateLabel('mselSimPend');renderPendientes()"> CANC</label>
+                <label><input type="checkbox" value="AUTO" onchange="mselUpdateLabel('mselSimPend');renderPendientes()"> AUTO</label>
+                <label><input type="checkbox" value="SALI" onchange="mselUpdateLabel('mselSimPend');renderPendientes()"> SALI</label>
+                <label><input type="checkbox" value="PRES" onchange="mselUpdateLabel('mselSimPend');renderPendientes()"> PRES</label>
+                <label><input type="checkbox" value="ANUL" onchange="mselUpdateLabel('mselSimPend');renderPendientes()"> ANUL</label>
+                <div class="msel-actions">
+                  <button type="button" onclick="mselSetValues('mselSimPend',['CANC','AUTO','SALI','PRES','ANUL']);renderPendientes()">Todos</button>
+                  <button type="button" onclick="mselSetValues('mselSimPend',[]);renderPendientes()">Ninguno</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div><label>Origen</label><select id="filtroOrigenPend" onchange="renderPendientes()"><option value="">Todos</option><option value="SOLO_DUX">Solo DUX</option><option value="SOLO_VLP">Solo VLP</option><option value="COMPLETO">Completo</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosPend()" style="width:100%">✕ Limpiar</button></div>
         </div>
@@ -291,7 +333,21 @@ tr:hover td{background:#fafbff;}
         <div class="search-bar"><input type="text" id="buscarPag" placeholder="Buscar operación, cliente, VLP..." oninput="renderPagadas()" /></div>
         <div class="filtros">
           <div><label>Mes operativo</label><input type="month" id="filtroMesPag" onchange="renderPagadas()" /></div>
-          <div><label>Tipo</label><select id="filtroTipoPag" onchange="renderPagadas()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option></select></div>
+          <div class="field">
+            <label>Tipo</label>
+            <div class="msel" id="mselTipoPag">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselTipoPag')">Todos</button>
+              <div class="msel-panel" id="panel-mselTipoPag">
+                <label><input type="checkbox" value="EXPORTACION" onchange="mselUpdateLabel('mselTipoPag');renderPagadas()"> EXPORTACION</label>
+                <label><input type="checkbox" value="IMPORTACION" onchange="mselUpdateLabel('mselTipoPag');renderPagadas()"> IMPORTACION</label>
+                <label><input type="checkbox" value="ZONA_FRANCA" onchange="mselUpdateLabel('mselTipoPag');renderPagadas()"> ZONA_FRANCA</label>
+                <div class="msel-actions">
+                  <button type="button" onclick="mselSetValues('mselTipoPag',['EXPORTACION','IMPORTACION','ZONA_FRANCA']);renderPagadas()">Todos</button>
+                  <button type="button" onclick="mselSetValues('mselTipoPag',[]);renderPagadas()">Ninguno</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div><label>VLP</label><select id="filtroVLPPag" onchange="renderPagadas()"><option value="">Todos</option></select></div>
           <div><label>Origen pago</label><select id="filtroOrigenPago" onchange="renderPagadas()"><option value="">Todos</option><option value="VLP">VLP</option><option value="FACTURA_PROPIA">Factura Propia</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosPag()" style="width:100%">✕ Limpiar</button></div>
@@ -380,7 +436,21 @@ tr:hover td{background:#fafbff;}
         </div>
         <div class="search-bar"><input type="text" id="buscarFF" placeholder="Buscar operación, cliente..." oninput="renderFechasFaltantes()" /></div>
         <div class="filtros">
-          <div><label>Tipo</label><select id="filtroTipoFF" onchange="renderFechasFaltantes()"><option value="">Todos</option><option>EXPORTACION</option><option>IMPORTACION</option><option>ZONA_FRANCA</option></select></div>
+          <div class="field">
+            <label>Tipo</label>
+            <div class="msel" id="mselTipoFF">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselTipoFF')">Todos</button>
+              <div class="msel-panel" id="panel-mselTipoFF">
+                <label><input type="checkbox" value="EXPORTACION" onchange="mselUpdateLabel('mselTipoFF');renderFechasFaltantes()"> EXPORTACION</label>
+                <label><input type="checkbox" value="IMPORTACION" onchange="mselUpdateLabel('mselTipoFF');renderFechasFaltantes()"> IMPORTACION</label>
+                <label><input type="checkbox" value="ZONA_FRANCA" onchange="mselUpdateLabel('mselTipoFF');renderFechasFaltantes()"> ZONA_FRANCA</label>
+                <div class="msel-actions">
+                  <button type="button" onclick="mselSetValues('mselTipoFF',['EXPORTACION','IMPORTACION','ZONA_FRANCA']);renderFechasFaltantes()">Todos</button>
+                  <button type="button" onclick="mselSetValues('mselTipoFF',[]);renderFechasFaltantes()">Ninguno</button>
+                </div>
+              </div>
+            </div>
+          </div>
           <div style="display:flex;align-items:center;gap:6px;padding-bottom:6px">
             <input type="checkbox" id="filtroVerDescartadasFF" onchange="renderFechasFaltantes()" style="width:auto" />
             <label style="margin:0;font-size:11px">Ver descartadas</label>
@@ -627,6 +697,37 @@ function toast(msg,type='') {
   setTimeout(()=>el.classList.add('show'),10);
   setTimeout(()=>el.classList.remove('show'),4000);
 }
+
+// ---- MULTISELECT DE FILTROS (Tipo / Estado SIM) ----
+window.toggleMsel=function(id) {
+  document.querySelectorAll('.msel-panel.open').forEach(p=>{
+    if(p.id!=='panel-'+id) p.classList.remove('open');
+  });
+  const panel=document.getElementById('panel-'+id);
+  if(panel) panel.classList.toggle('open');
+};
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.msel')) {
+    document.querySelectorAll('.msel-panel.open').forEach(p=>p.classList.remove('open'));
+  }
+});
+window.mselGetValues=function(id) {
+  const panel=document.getElementById('panel-'+id);
+  if(!panel) return [];
+  return [...panel.querySelectorAll('input[type=checkbox]:checked')].map(c=>c.value);
+};
+window.mselSetValues=function(id, values) {
+  const panel=document.getElementById('panel-'+id);
+  if(!panel) return;
+  panel.querySelectorAll('input[type=checkbox]').forEach(c=>{ c.checked = values.includes(c.value); });
+  mselUpdateLabel(id);
+};
+window.mselUpdateLabel=function(id) {
+  const vals=mselGetValues(id);
+  const btn=document.querySelector('#'+id+' > .msel-btn');
+  if(!btn) return;
+  btn.textContent = vals.length===0 ? 'Todos' : (vals.length===1 ? vals[0] : vals.length+' seleccionados');
+};
 
 // ============================================================================
 // ÚNICA FUENTE DE VERDAD PARA FECHAS — TODO EL SISTEMA TRABAJA EN HORA LOCAL
@@ -1476,8 +1577,8 @@ function renderBarAnt(label,n,max,color) {
 window.renderPendientes=function() {
   const buscar=(document.getElementById('buscarPend')?.value||'').toLowerCase();
   const filtMes=document.getElementById('filtroMesPend')?.value||'';
-  const filtTipo=document.getElementById('filtroTipoPend')?.value||'';
-  const filtSim=document.getElementById('filtroSimPend')?.value||'';
+  const filtTipo=mselGetValues('mselTipoPend');
+  const filtSim=mselGetValues('mselSimPend');
   const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
 
   const hoy=hoyLocal();
@@ -1485,8 +1586,8 @@ window.renderPendientes=function() {
 
   if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
   if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
-  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
-  if(filtSim)fil=fil.filter(o=>o.estado_sim===filtSim);
+  if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
+  if(filtSim.length)fil=fil.filter(o=>filtSim.includes(o.estado_sim));
   if(filtOrigen)fil=fil.filter(o=>o.origen===filtOrigen);
 
   fil.sort((a,b)=>{
@@ -1534,7 +1635,9 @@ window.renderPendientes=function() {
 
 window.limpiarFiltrosPend=function(){
   ['buscarPend','filtroMesPend'].forEach(id=>document.getElementById(id).value='');
-  ['filtroTipoPend','filtroSimPend','filtroOrigenPend'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('filtroOrigenPend').value='';
+  mselSetValues('mselTipoPend',[]);
+  mselSetValues('mselSimPend',[]);
   renderPendientes();
 };
 
@@ -1618,14 +1721,14 @@ window.confirmarPagoFactura = async function() {
 window.renderPagadas=function() {
   const buscar=(document.getElementById('buscarPag')?.value||'').toLowerCase();
   const filtMes=document.getElementById('filtroMesPag')?.value||'';
-  const filtTipo=document.getElementById('filtroTipoPag')?.value||'';
+  const filtTipo=mselGetValues('mselTipoPag');
   const filtVLP=document.getElementById('filtroVLPPag')?.value||'';
   const filtOrigenPago=document.getElementById('filtroOrigenPago')?.value||'';
 
   let fil=allOps.filter(o=>o.pagada&&!o.archivada);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
   if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
-  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
+  if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
   if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
   if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
   if(filtOrigenPago==='FACTURA_PROPIA')fil=fil.filter(o=>o.origen_pago==='FACTURA_PROPIA');
@@ -1688,7 +1791,8 @@ function actualizarSelectVLP() {
 
 window.limpiarFiltrosPag=function(){
   ['buscarPag','filtroMesPag'].forEach(id=>document.getElementById(id).value='');
-  ['filtroTipoPag','filtroVLPPag','filtroOrigenPago'].forEach(id=>document.getElementById(id).value='');
+  ['filtroVLPPag','filtroOrigenPago'].forEach(id=>document.getElementById(id).value='');
+  mselSetValues('mselTipoPag',[]);
   renderPagadas();
 };
 
@@ -1864,7 +1968,7 @@ window.limpiarFiltrosCepas=function(){['filtroMesCepas','filtroADCepas','filtroL
 // ====================================================
 window.renderFechasFaltantes=function() {
   const buscar=(document.getElementById('buscarFF')?.value||'').toLowerCase();
-  const filtTipo=document.getElementById('filtroTipoFF')?.value||'';
+  const filtTipo=mselGetValues('mselTipoFF');
   const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
 
   // Solo entran al reporte las operaciones cuyo Estado SIM es AUTO o CANC:
@@ -1883,7 +1987,7 @@ window.renderFechasFaltantes=function() {
 
   let fil=verDescartadas?base.filter(o=>o.reporte_fecha_descartado):base.filter(o=>!o.reporte_fecha_descartado);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')).toLowerCase().includes(buscar));
-  if(filtTipo)fil=fil.filter(o=>o.tipo_operacion===filtTipo);
+  if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
 
   document.getElementById('tablaFF').innerHTML=fil.map(o=>`<tr>
       <td><strong>${o.operacion}</strong></td>
@@ -1932,7 +2036,7 @@ window.restaurarReporteFF=async function(id) {
 
 window.limpiarFiltrosFF=function(){
   document.getElementById('buscarFF').value='';
-  document.getElementById('filtroTipoFF').value='';
+  mselSetValues('mselTipoFF',[]);
   document.getElementById('filtroVerDescartadasFF').checked=false;
   renderFechasFaltantes();
 };
