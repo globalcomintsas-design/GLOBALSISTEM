@@ -1318,9 +1318,13 @@ window.renderDashboard = function(){
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
   // ── "Cobrado" y "Pendiente" son del PERÍODO filtrado (mes elegido arriba), no históricos ──
+  // OJO: se usa mesDeFecha() (no un simple startsWith) porque los pagos que llegan
+  // automáticos desde Caja a veces vienen en formato argentino "DD/MM/YYYY", y compararlos
+  // como si fueran ISO "YYYY-MM-DD" los dejaba afuera del período (por eso aparecía $0
+  // de "Pagado" en la tabla de despachantes aunque sí hubieran entrado pagos ese mes).
   const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
   let totCobradoPeriodo = pagos
-    .filter(p => despFiltrados.includes(p.despachante) && (!filtMes || (p.fecha||'').startsWith(filtMes)))
+    .filter(p => despFiltrados.includes(p.despachante) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
     .reduce((a,b) => a + (b.monto||0), 0);
 
   // Mudanzas: cobradas/sin cobrar ya vienen filtradas por el mismo período (mudFiltradas)
@@ -1388,7 +1392,9 @@ window.renderDashboard = function(){
   });
   // Incluir también a los despachantes que tuvieron un PAGO este mes aunque no
   // hayan cargado ninguna operación este mes (para que no desaparezcan de la tabla).
-  pagos.filter(p => (p.fecha||'').startsWith(_mesActualDash)).forEach(p => {
+  // Se usa mesDeFecha() por la misma razón que arriba: pagos automáticos de Caja
+  // pueden venir en formato "DD/MM/YYYY".
+  pagos.filter(p => mesDeFecha(p.fecha) === _mesActualDash).forEach(p => {
     if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
   });
 
@@ -1415,7 +1421,9 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
-            const pagadoMes = pagos.filter(p => p.despachante === k && (p.fecha||'').startsWith(_mesActualDash)).reduce((a,b)=>a+(b.monto||0),0);
+            // Pagado en el mes en curso, usando mesDeFecha() para soportar tanto fechas
+            // ISO (cargadas a mano) como fechas argentinas (auto desde Caja).
+            const pagadoMes = pagos.filter(p => p.despachante === k && mesDeFecha(p.fecha) === _mesActualDash).reduce((a,b)=>a+(b.monto||0),0);
             const { saldo } = calcularSaldoDespachante(k); // saldo histórico real (incluye deuda de meses anteriores)
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
             return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
