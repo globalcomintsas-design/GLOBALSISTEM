@@ -257,7 +257,13 @@ tr:hover td{background:#fafbff;}
         </div>
         <div class="search-bar"><input type="text" id="buscarPend" placeholder="Buscar operación, cliente, mercadería..." oninput="renderPendientes()" /></div>
         <div class="filtros">
-          <div><label>Mes operativo</label><input type="month" id="filtroMesPend" onchange="renderPendientes()" /></div>
+          <div class="field">
+            <label>Mes operativo</label>
+            <div class="msel" id="mselMesPend">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselMesPend')">Todos</button>
+              <div class="msel-panel" id="panel-mselMesPend"></div>
+            </div>
+          </div>
           <div class="field">
             <label>Tipo</label>
             <div class="msel" id="mselTipoPend">
@@ -332,7 +338,13 @@ tr:hover td{background:#fafbff;}
         </div>
         <div class="search-bar"><input type="text" id="buscarPag" placeholder="Buscar operación, cliente, VLP..." oninput="renderPagadas()" /></div>
         <div class="filtros">
-          <div><label>Mes operativo</label><input type="month" id="filtroMesPag" onchange="renderPagadas()" /></div>
+          <div class="field">
+            <label>Mes operativo</label>
+            <div class="msel" id="mselMesPag">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselMesPag')">Todos</button>
+              <div class="msel-panel" id="panel-mselMesPag"></div>
+            </div>
+          </div>
           <div class="field">
             <label>Tipo</label>
             <div class="msel" id="mselTipoPag">
@@ -403,7 +415,13 @@ tr:hover td{background:#fafbff;}
           </div>
         </div>
         <div class="filtros">
-          <div><label>Mes operativo</label><input type="month" id="filtroMesCepas" onchange="renderCepas()" /></div>
+          <div class="field">
+            <label>Mes operativo</label>
+            <div class="msel" id="mselMesCepas">
+              <button type="button" class="msel-btn" onclick="toggleMsel('mselMesCepas')">Todos</button>
+              <div class="msel-panel" id="panel-mselMesCepas"></div>
+            </div>
+          </div>
           <div><label>AD Camión</label><select id="filtroADCepas" onchange="renderCepas()"><option value="">Todos</option><option value="con">Con AD</option><option value="sin">Sin AD</option></select></div>
           <div><label>Liquidado</label><select id="filtroLiquidCepas" onchange="renderCepas()"><option value="">Todos</option><option value="si">Liquidado</option><option value="no">Pendiente</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosCepas()" style="width:100%">✕ Limpiar</button></div>
@@ -698,7 +716,7 @@ function toast(msg,type='') {
   setTimeout(()=>el.classList.remove('show'),4000);
 }
 
-// ---- MULTISELECT DE FILTROS (Tipo / Estado SIM) ----
+// ---- MULTISELECT DE FILTROS (Tipo / Estado SIM / Mes) ----
 window.toggleMsel=function(id) {
   document.querySelectorAll('.msel-panel.open').forEach(p=>{
     if(p.id!=='panel-'+id) p.classList.remove('open');
@@ -728,6 +746,50 @@ window.mselUpdateLabel=function(id) {
   if(!btn) return;
   btn.textContent = vals.length===0 ? 'Todos' : (vals.length===1 ? vals[0] : vals.length+' seleccionados');
 };
+
+// ---- POBLADO DINÁMICO DE MESES DISPONIBLES (Pendientes / Pagadas / CEPAS) ----
+// Cada pestaña arma su propio multiselect de "Mes operativo" con los meses que
+// realmente existen dentro del subconjunto de operaciones que esa pestaña
+// muestra (pendientes sin pagar, pagadas, o CEPAS), ordenados de más reciente
+// a más antiguo. Se llama después de cada cargarOperaciones().
+function poblarMesesPend() {
+  const panel = document.getElementById('panel-mselMesPend');
+  if(!panel) return;
+  const seleccionados = mselGetValues('mselMesPend');
+  const meses = [...new Set(allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).map(o=>o.mes_operativo).filter(Boolean))].sort().reverse();
+  panel.innerHTML = meses.map(m=>`<label><input type="checkbox" value="${m}" ${seleccionados.includes(m)?'checked':''} onchange="mselUpdateLabel('mselMesPend');renderPendientes()"> ${m}</label>`).join('')
+    + `<div class="msel-actions">
+         <button type="button" onclick="mselSetValues('mselMesPend',${JSON.stringify(meses)});renderPendientes()">Todos</button>
+         <button type="button" onclick="mselSetValues('mselMesPend',[]);renderPendientes()">Ninguno</button>
+       </div>`;
+  mselUpdateLabel('mselMesPend');
+}
+
+function poblarMesesPag() {
+  const panel = document.getElementById('panel-mselMesPag');
+  if(!panel) return;
+  const seleccionados = mselGetValues('mselMesPag');
+  const meses = [...new Set(allOps.filter(o=>o.pagada&&!o.archivada).map(o=>o.mes_operativo).filter(Boolean))].sort().reverse();
+  panel.innerHTML = meses.map(m=>`<label><input type="checkbox" value="${m}" ${seleccionados.includes(m)?'checked':''} onchange="mselUpdateLabel('mselMesPag');renderPagadas()"> ${m}</label>`).join('')
+    + `<div class="msel-actions">
+         <button type="button" onclick="mselSetValues('mselMesPag',${JSON.stringify(meses)});renderPagadas()">Todos</button>
+         <button type="button" onclick="mselSetValues('mselMesPag',[]);renderPagadas()">Ninguno</button>
+       </div>`;
+  mselUpdateLabel('mselMesPag');
+}
+
+function poblarMesesCepas() {
+  const panel = document.getElementById('panel-mselMesCepas');
+  if(!panel) return;
+  const seleccionados = mselGetValues('mselMesCepas');
+  const meses = [...new Set(allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO')).map(o=>o.mes_operativo).filter(Boolean))].sort().reverse();
+  panel.innerHTML = meses.map(m=>`<label><input type="checkbox" value="${m}" ${seleccionados.includes(m)?'checked':''} onchange="mselUpdateLabel('mselMesCepas');renderCepas()"> ${m}</label>`).join('')
+    + `<div class="msel-actions">
+         <button type="button" onclick="mselSetValues('mselMesCepas',${JSON.stringify(meses)});renderCepas()">Todos</button>
+         <button type="button" onclick="mselSetValues('mselMesCepas',[]);renderCepas()">Ninguno</button>
+       </div>`;
+  mselUpdateLabel('mselMesCepas');
+}
 
 // ============================================================================
 // ÚNICA FUENTE DE VERDAD PARA FECHAS — TODO EL SISTEMA TRABAJA EN HORA LOCAL
@@ -976,6 +1038,10 @@ async function cargarOperaciones() {
   snapPendientes.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
   snapPagadas.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
   allOps = Object.values(mapaOps);
+
+  poblarMesesPend();
+  poblarMesesPag();
+  poblarMesesCepas();
 
   renderDashboard();
   renderPendientes();
@@ -1576,7 +1642,7 @@ function renderBarAnt(label,n,max,color) {
 // ====================================================
 window.renderPendientes=function() {
   const buscar=(document.getElementById('buscarPend')?.value||'').toLowerCase();
-  const filtMes=document.getElementById('filtroMesPend')?.value||'';
+  const filtMes=mselGetValues('mselMesPend');
   const filtTipo=mselGetValues('mselTipoPend');
   const filtSim=mselGetValues('mselSimPend');
   const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
@@ -1585,7 +1651,7 @@ window.renderPendientes=function() {
   let fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
 
   if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
-  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtMes.length)fil=fil.filter(o=>filtMes.includes(o.mes_operativo));
   if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
   if(filtSim.length)fil=fil.filter(o=>filtSim.includes(o.estado_sim));
   if(filtOrigen)fil=fil.filter(o=>o.origen===filtOrigen);
@@ -1634,10 +1700,11 @@ window.renderPendientes=function() {
 };
 
 window.limpiarFiltrosPend=function(){
-  ['buscarPend','filtroMesPend'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('buscarPend').value='';
   document.getElementById('filtroOrigenPend').value='';
   mselSetValues('mselTipoPend',[]);
   mselSetValues('mselSimPend',[]);
+  mselSetValues('mselMesPend',[]);
   renderPendientes();
 };
 
@@ -1720,14 +1787,14 @@ window.confirmarPagoFactura = async function() {
 // ====================================================
 window.renderPagadas=function() {
   const buscar=(document.getElementById('buscarPag')?.value||'').toLowerCase();
-  const filtMes=document.getElementById('filtroMesPag')?.value||'';
+  const filtMes=mselGetValues('mselMesPag');
   const filtTipo=mselGetValues('mselTipoPag');
   const filtVLP=document.getElementById('filtroVLPPag')?.value||'';
   const filtOrigenPago=document.getElementById('filtroOrigenPago')?.value||'';
 
   let fil=allOps.filter(o=>o.pagada&&!o.archivada);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
-  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtMes.length)fil=fil.filter(o=>filtMes.includes(o.mes_operativo));
   if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
   if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
   if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
@@ -1790,9 +1857,10 @@ function actualizarSelectVLP() {
 }
 
 window.limpiarFiltrosPag=function(){
-  ['buscarPag','filtroMesPag'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('buscarPag').value='';
   ['filtroVLPPag','filtroOrigenPago'].forEach(id=>document.getElementById(id).value='');
   mselSetValues('mselTipoPag',[]);
+  mselSetValues('mselMesPag',[]);
   renderPagadas();
 };
 
@@ -1926,12 +1994,12 @@ window.exportarViajesExcel=function(){
 // CEPAS
 // ====================================================
 window.renderCepas=function() {
-  const filtMes=document.getElementById('filtroMesCepas')?.value||'';
+  const filtMes=mselGetValues('mselMesCepas');
   const filtAD=document.getElementById('filtroADCepas')?.value||'';
   const filtLiquid=document.getElementById('filtroLiquidCepas')?.value||'';
 
   let fil=allOps.filter(o=>!o.archivada&&o.mercaderia&&o.mercaderia.toUpperCase().includes('MOSTO'));
-  if(filtMes)fil=fil.filter(o=>o.mes_operativo===filtMes);
+  if(filtMes.length)fil=fil.filter(o=>filtMes.includes(o.mes_operativo));
   if(filtAD==='con')fil=fil.filter(o=>o.cepas_ad_camion&&o.cepas_ad_camion.trim()!=='');
   if(filtAD==='sin')fil=fil.filter(o=>!o.cepas_ad_camion||o.cepas_ad_camion.trim()==='');
   if(filtLiquid==='si')fil=fil.filter(o=>o.cepas_liquidado);
@@ -1961,7 +2029,12 @@ window.renderCepas=function() {
   }).join('')||'<tr><td colspan="11" style="text-align:center;color:#888;padding:20px">Sin operaciones CEPAS</td></tr>';
 };
 
-window.limpiarFiltrosCepas=function(){['filtroMesCepas','filtroADCepas','filtroLiquidCepas'].forEach(id=>document.getElementById(id).value='');renderCepas();};
+window.limpiarFiltrosCepas=function(){
+  document.getElementById('filtroADCepas').value='';
+  document.getElementById('filtroLiquidCepas').value='';
+  mselSetValues('mselMesCepas',[]);
+  renderCepas();
+};
 
 // ====================================================
 // FECHAS FALTANTES (reporte)
