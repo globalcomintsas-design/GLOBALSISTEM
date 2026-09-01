@@ -92,6 +92,28 @@ let usuarioEligioMesListado = false;
 window.marcarMesListadoElegidoPorUsuario = function(){ usuarioEligioMesListado = true; };
 
 // ── UTILS ──
+
+// ── FECHA / MES "DE HOY" EN HORA LOCAL (no UTC) ──
+// OJO: `new Date().toISOString()` siempre devuelve la fecha en UTC. Como Argentina está
+// UTC-3, pasada cierta hora de la noche (ej. después de las 21hs) el reloj UTC ya cruzó
+// a la fecha del día siguiente, y el sistema terminaba mostrando "mañana" (o el mes
+// siguiente) como si ya hubiera llegado, aunque acá todavía no fuera esa fecha. Estas
+// dos funciones arman la fecha/mes "de hoy" usando SIEMPRE la hora local del navegador
+// (getFullYear/getMonth/getDate son locales), y se usan en todos lados donde antes se
+// usaba new Date().toISOString() para saber "qué día/mes es hoy".
+function fechaLocalISO(d = new Date()){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+window.fechaLocalISO = fechaLocalISO;
+
+function mesLocalISO(d = new Date()){
+  return fechaLocalISO(d).slice(0,7);
+}
+window.mesLocalISO = mesLocalISO;
+
 function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
 window.fmt = fmt;
 
@@ -269,9 +291,9 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
   }
 };
 
-// ── Fecha default ──
-document.getElementById('op_fecha').value    = new Date().toISOString().split('T')[0];
-document.getElementById('mud_fecha').value   = new Date().toISOString().split('T')[0];
+// ── Fecha default (hora local, no UTC) ──
+document.getElementById('op_fecha').value    = fechaLocalISO();
+document.getElementById('mud_fecha').value   = fechaLocalISO();
 
 // Auto fin de semana según fecha
 document.getElementById('op_fecha').addEventListener('change', function(){
@@ -1301,7 +1323,7 @@ function renderFiltros(){
     // como opción (aunque todavía no haya operaciones cargadas ese mes) y arrancan
     // seleccionados en el mes en curso hasta que el usuario elija otro mes a mano
     // (incluido "Todos los meses"). Se recalcula en CADA render de filtros, no solo una vez.
-    const mesActual = new Date().toISOString().slice(0,7);
+    const mesActual = mesLocalISO();
     if(![...sel.options].some(o => o.value === mesActual)){
       const opt = document.createElement('option');
       opt.value = mesActual;
@@ -1419,7 +1441,7 @@ window.renderDashboard = function(){
   // Cuando hay un despachante elegido (filtCorr), esta tabla queda acotada a SOLO ese
   // despachante: tanto las operaciones del mes elegido como los pagos que se le suman
   // se filtran por filtCorr.
-  const _mesActualDash = new Date().toISOString().slice(0,7);
+  const _mesActualDash = mesLocalISO();
   const mesTablaDesp = filtMes || _mesActualDash;
   const opsMesTabla = operaciones.filter(o => mesDeFecha(o.fecha) === mesTablaDesp && (!filtCorr || o.despachante === filtCorr));
 
@@ -1717,7 +1739,7 @@ function poblarSelectorMesSaldos(){
   const v = sel.value;
   const mesesOps   = operaciones.map(o => mesDeFecha(o.fecha)).filter(Boolean);
   const mesesPagos = pagos.map(p => mesDeFecha(p.fecha)).filter(Boolean);
-  const mesActual  = new Date().toISOString().slice(0,7);
+  const mesActual  = mesLocalISO();
   const meses = [...new Set([...mesesOps, ...mesesPagos, mesActual])].sort().reverse();
   sel.innerHTML = '<option value="">Todos los meses (histórico)</option>' +
     meses.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -1735,7 +1757,7 @@ function renderSaldos(){
     sel.value = v;
   }
   const fechaEl = document.getElementById('pago_fecha');
-  if(fechaEl && !fechaEl.value) fechaEl.value = new Date().toISOString().split('T')[0];
+  if(fechaEl && !fechaEl.value) fechaEl.value = fechaLocalISO();
 
   // Filtro de mes de la tabla de saldos ('' = histórico completo, igual que antes)
   poblarSelectorMesSaldos();
@@ -2847,7 +2869,7 @@ window.generarRemito = async function(){
   if(!seleccionadas.length){ toast('⚠️ Tildá al menos una operación'); return; }
 
   const numero = remitos.length + 1;
-  const fechaHoy = new Date().toISOString().split('T')[0];
+  const fechaHoy = fechaLocalISO();
   const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
 
   const opsData = seleccionadas
