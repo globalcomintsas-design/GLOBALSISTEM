@@ -1130,6 +1130,32 @@ window.ejecutarAsignarFacturaMasiva = async function(){
   toggleFacturaLotePanel();
 };
 
+// ── MAPA DE PENDIENTE DE PAGO POR OPERACIÓN (para el filtro "Solo pendientes de pago") ──
+// Usa la misma cobertura "exigible" (Neto mientras no tenga factura, Bruto una vez
+// facturada) que ya se usa en la pestaña Saldos, para que el filtro sea consistente
+// con lo que ahí se considera deuda real pendiente. pendiente > 0.5 => sigue debiéndose.
+function mapaPendientePorOperacion(){
+  const map = {};
+  const despachantesConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))];
+  despachantesConOps.forEach(desp => {
+    calcularCoberturaExigibleFIFO(desp).forEach(o => { map[o.id] = o.pendiente; });
+  });
+  return map;
+}
+window.mapaPendientePorOperacion = mapaPendientePorOperacion;
+
+// Filtra un array de operaciones según el select "filtro_pendiente" del Listado
+// ('' = todas, 'pendiente' = con saldo pendiente > $0.5, 'cubierta' = ya cubierta/pagada)
+function aplicarFiltroPendiente(ops, filtroPendiente){
+  if(!filtroPendiente) return ops;
+  const pendienteMap = mapaPendientePorOperacion();
+  return ops.filter(o => {
+    const pend = pendienteMap[o.id] || 0;
+    return filtroPendiente === 'pendiente' ? pend > 0.5 : pend <= 0.5;
+  });
+}
+window.aplicarFiltroPendiente = aplicarFiltroPendiente;
+
 // ── RENDER TABLA OPERACIONES ──
 function renderTabla(){
   const tbody = document.getElementById('tbody-ops');
@@ -1142,11 +1168,13 @@ function renderTabla(){
   const filtMes   = document.getElementById('filtro_mes')?.value || '';
   const filtDesde = document.getElementById('filtro_fecha_desde')?.value || '';
   const filtHasta = document.getElementById('filtro_fecha_hasta')?.value || '';
+  const filtPendiente = document.getElementById('filtro_pendiente')?.value || '';
   let ops = [...operaciones];
   if(filtCorr)  ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)   ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroPendiente(ops, filtPendiente);
 
   // Más nueva primero: la última operación cargada arriba de todo, y así hacia atrás.
   ops.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
@@ -1322,9 +1350,11 @@ window.renderDashboard = function(){
   // automáticos desde Caja a veces vienen en formato argentino "DD/MM/YYYY", y compararlos
   // como si fueran ISO "YYYY-MM-DD" los dejaba afuera del período (por eso aparecía $0
   // de "Pagado" en la tabla de despachantes aunque sí hubieran entrado pagos ese mes).
+  // Los pagos también se filtran por despachante (filtCorr) cuando corresponde, para
+  // que "Cobrado"/"Pendiente" del período reflejen SOLO al despachante elegido.
   const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
   let totCobradoPeriodo = pagos
-    .filter(p => despFiltrados.includes(p.despachante) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
+    .filter(p => despFiltrados.includes(p.despachante) && (!filtCorr || p.despachante === filtCorr) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
     .reduce((a,b) => a + (b.monto||0), 0);
 
   // Mudanzas: cobradas/sin cobrar ya vienen filtradas por el mismo período (mudFiltradas)
@@ -1381,6 +1411,9 @@ window.renderDashboard = function(){
   // "Por despachante" siempre muestra el MES EN CURSO (no depende del selector de mes del
   // dashboard). El saldo mostrado es el saldo HISTÓRICO real (incluye deuda de meses
   // anteriores), igual al de la pestaña Saldos.
+  // Cuando hay un despachante elegido (filtCorr), esta tabla queda acotada a SOLO ese
+  // despachante: tanto las operaciones del mes en curso como los pagos que se le suman
+  // se filtran por filtCorr (antes los pagos de CUALQUIER despachante se colaban acá).
   const _mesActualDash = new Date().toISOString().slice(0,7);
   const opsMesActual = operaciones.filter(o => o.fecha?.startsWith(_mesActualDash) && (!filtCorr || o.despachante === filtCorr));
 
@@ -1393,12 +1426,14 @@ window.renderDashboard = function(){
   // Incluir también a los despachantes que tuvieron un PAGO este mes aunque no
   // hayan cargado ninguna operación este mes (para que no desaparezcan de la tabla).
   // Se usa mesDeFecha() por la misma razón que arriba: pagos automáticos de Caja
-  // pueden venir en formato "DD/MM/YYYY".
-  pagos.filter(p => mesDeFecha(p.fecha) === _mesActualDash).forEach(p => {
+  // pueden venir en formato "DD/MM/YYYY". Respeta el filtro de despachante (filtCorr).
+  pagos.filter(p => mesDeFecha(p.fecha) === _mesActualDash && (!filtCorr || p.despachante === filtCorr)).forEach(p => {
     if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
   });
 
-  // Mudanzas por cliente (siempre se muestra, filtrado solo por mes)
+  // Mudanzas por cliente (siempre se muestra, filtrado solo por mes) — solo tiene
+  // sentido cuando NO hay un despachante puntual elegido, porque las mudanzas no
+  // están asociadas a ningún despachante.
   const byClienteMud = {};
   mudFiltradas.forEach(m => {
     const cl = m.cliente || 'Sin nombre';
@@ -1408,15 +1443,20 @@ window.renderDashboard = function(){
   });
 
   // Mudanzas con residencia pendiente (amarillo o rojo) — no depende de los filtros del dashboard,
-  // es un estado vigente independiente del mes/despachante seleccionado.
+  // es un estado vigente independiente del mes/despachante seleccionado. Tampoco tiene
+  // sentido mostrarla cuando se filtró por un despachante puntual.
   const mudResidenciaPendiente = mudanzas
     .map(m => ({ ...m, _est: estadoResidencia(m) }))
     .filter(m => m._est.clase !== 'ok')
     .sort((a,b) => (a.vencimientoResidencia||'').localeCompare(b.vencimientoResidencia||''));
 
-  document.getElementById('dash-detalle').innerHTML = `
+  const tituloDespachantes = filtCorr
+    ? `Despachante seleccionado: ${filtCorr} — mes en curso (${_mesActualDash})`
+    : `Despachantes — mes en curso (${_mesActualDash})`;
+
+  const cardDespachantes = `
     <div class="section-card" style="margin:0;">
-      <h3>Despachantes — mes en curso (${_mesActualDash})</h3>
+      <h3>${tituloDespachantes}</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
@@ -1427,11 +1467,13 @@ window.renderDashboard = function(){
             const { saldo } = calcularSaldoDespachante(k); // saldo histórico real (incluye deuda de meses anteriores)
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
             return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
-          }).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">Sin operaciones ni pagos este mes</td></tr>'}
+          }).join('') || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">${filtCorr ? 'Sin operaciones ni pagos de este despachante este mes' : 'Sin operaciones ni pagos este mes'}</td></tr>`}
         </tbody>
       </table>
       <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Total" y "Pagado" son del mes en curso. "Saldo" es el saldo histórico real (Neto de operaciones sin factura + Neto+IVA de operaciones ya facturadas, menos pagos), igual al que ves en la pestaña Saldos.</div>
-    </div>
+    </div>`;
+
+  const cardResidencia = `
     <div class="section-card" style="margin:0;">
       <h3>🏠 Residencia pendiente</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
@@ -1442,7 +1484,9 @@ window.renderDashboard = function(){
           ).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px;">Sin residencias pendientes 🎉</td></tr>'}
         </tbody>
       </table>
-    </div>
+    </div>`;
+
+  const cardMudanzas = `
     <div class="section-card" style="margin:0;">
       <h3>📦 Mudanzas por cliente</h3>
       <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
@@ -1453,8 +1497,14 @@ window.renderDashboard = function(){
           ).join('') || '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Sin mudanzas en el período</td></tr>'}
         </tbody>
       </table>
-    </div>
-  `;
+    </div>`;
+
+  // Cuando hay un despachante puntual seleccionado, las mudanzas y la residencia no le
+  // pertenecen a ningún despachante en particular, así que se ocultan esas dos tarjetas
+  // y el dashboard queda enfocado únicamente en los datos de ese despachante.
+  document.getElementById('dash-detalle').innerHTML = filtCorr
+    ? cardDespachantes
+    : (cardDespachantes + cardResidencia + cardMudanzas);
 };
 
 // ── CORREGIR ETIQUETAS VIEJAS (Sobre→Armado, SENASA-P→SENASA-Embalaje) ──
@@ -1846,11 +1896,13 @@ window.exportarExcel = function(){
   const filtMes  = document.getElementById('filtro_mes').value;
   const filtDesde = document.getElementById('filtro_fecha_desde')?.value || '';
   const filtHasta = document.getElementById('filtro_fecha_hasta')?.value || '';
+  const filtPendiente = document.getElementById('filtro_pendiente')?.value || '';
   let ops = [...operaciones];
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroPendiente(ops, filtPendiente);
 
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
 
@@ -1870,12 +1922,17 @@ window.exportarExcel = function(){
   // Sin redondeo a entero: solo se recorta a 2 decimales (centavos exactos), nada de Math.round a pesos
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','OBSERVAC'];
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','ESTADO PAGO','OBSERVAC'];
 
   const opsOrdenadas = [...ops].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
+  // Mapa de pendiente (mismo criterio "exigible" que Saldos) para la columna ESTADO PAGO
+  const pendienteMap = mapaPendientePorOperacion();
+
   const rows = opsOrdenadas.map(o => {
     const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+    const pend = pendienteMap[o.id] || 0;
+    const estadoPago = pend > 0.5 ? 'PENDIENTE' : 'PAGADO/CUBIERTO';
     return [
       fmtFechaAR(o.fecha),
       o.despachante || '',
@@ -1888,6 +1945,7 @@ window.exportarExcel = function(){
       dec2(o.bruto),
       o.tc || '',
       o.totalUsd || '',
+      estadoPago,
       obsCompleto
     ];
   });
@@ -1897,20 +1955,21 @@ window.exportarExcel = function(){
   const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL',`${ops.length} op(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', totPagado ? `Total pagado: $${fmt2(totPagado)}` : ''];
+  const totalRow = ['TOTAL',`${ops.length} op(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', totPagado ? `Total pagado: $${fmt2(totPagado)}` : ''];
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:32}
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:16},{wch:32}
   ];
 
   // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
   // las filas de datos (sin incluir la fila TOTAL). Si el rango es solo la fila de
   // encabezado, Excel no sabe hasta dónde llega la tabla y el SUBTOTAL de abajo no
-  // se recalcula bien al filtrar.
+  // se recalcula bien al filtrar. Con la columna ESTADO PAGO en la grilla y el
+  // autofiltro activo, en Excel también se puede filtrar manualmente por "PENDIENTE".
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   const firstDataRow = 2;
   const lastDataRow  = 1 + rows.length;
@@ -1943,7 +2002,8 @@ window.exportarExcel = function(){
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
 
   const rangoNombre = (filtDesde || filtHasta) ? `${filtDesde||'inicio'}_a_${filtHasta||'hoy'}` : (filtMes||'todos');
-  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}.xlsx`
+  const sufijoPendiente = filtPendiente === 'pendiente' ? '_pendientes' : (filtPendiente === 'cubierta' ? '_cubiertas' : '');
+  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}${sufijoPendiente}.xlsx`
     .replace(/\s+/g,'_');
 
   XLSX.writeFile(wb, nombreArchivo);
