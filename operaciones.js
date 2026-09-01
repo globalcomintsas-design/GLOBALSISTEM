@@ -1408,28 +1408,40 @@ window.renderDashboard = function(){
     </div>` : ''}
   `;
 
-  // "Por despachante" siempre muestra el MES EN CURSO (no depende del selector de mes del
-  // dashboard). El saldo mostrado es el saldo HISTÓRICO real (incluye deuda de meses
-  // anteriores), igual al de la pestaña Saldos.
+  // "Por despachante": ANTES esta tabla quedaba fija al mes calendario real del sistema
+  // sin importar qué mes eligieras arriba en "dash_mes" — por eso, si elegías por ejemplo
+  // 2026-08 pero la fecha real de hoy ya era septiembre, la tabla mostraba "(2026-09)"
+  // vacía en vez de los datos de agosto. Ahora respeta el mes elegido en el selector del
+  // Dashboard (filtMes); si no elegiste ningún mes ("Todos los meses"), usa el mes
+  // calendario actual como valor por defecto, igual que antes.
+  // El saldo mostrado sigue siendo el saldo HISTÓRICO real (incluye deuda de meses
+  // anteriores), igual al de la pestaña Saldos — no se limita al mes de la tabla.
   // Cuando hay un despachante elegido (filtCorr), esta tabla queda acotada a SOLO ese
-  // despachante: tanto las operaciones del mes en curso como los pagos que se le suman
-  // se filtran por filtCorr (antes los pagos de CUALQUIER despachante se colaban acá).
+  // despachante: tanto las operaciones del mes elegido como los pagos que se le suman
+  // se filtran por filtCorr.
   const _mesActualDash = new Date().toISOString().slice(0,7);
-  const opsMesActual = operaciones.filter(o => o.fecha?.startsWith(_mesActualDash) && (!filtCorr || o.despachante === filtCorr));
+  const mesTablaDesp = filtMes || _mesActualDash;
+  const opsMesTabla = operaciones.filter(o => mesDeFecha(o.fecha) === mesTablaDesp && (!filtCorr || o.despachante === filtCorr));
 
   const byCorr = {};
-  opsMesActual.forEach(o => {
+  opsMesTabla.forEach(o => {
     if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
     byCorr[o.despachante].ops++;
     byCorr[o.despachante].bruto += o.bruto||0;
   });
-  // Incluir también a los despachantes que tuvieron un PAGO este mes aunque no
-  // hayan cargado ninguna operación este mes (para que no desaparezcan de la tabla).
+  // Incluir también a los despachantes que tuvieron un PAGO en ese mes aunque no
+  // hayan cargado ninguna operación ese mes (para que no desaparezcan de la tabla).
   // Se usa mesDeFecha() por la misma razón que arriba: pagos automáticos de Caja
   // pueden venir en formato "DD/MM/YYYY". Respeta el filtro de despachante (filtCorr).
-  pagos.filter(p => mesDeFecha(p.fecha) === _mesActualDash && (!filtCorr || p.despachante === filtCorr)).forEach(p => {
+  pagos.filter(p => mesDeFecha(p.fecha) === mesTablaDesp && (!filtCorr || p.despachante === filtCorr)).forEach(p => {
     if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
   });
+  // Además, si NO hay un despachante puntual elegido, se agregan TODOS los despachantes
+  // registrados (aunque no hayan tenido ni operaciones ni pagos ese mes), para tener el
+  // panorama completo de una sola vista y no solo los que tuvieron movimiento.
+  if(!filtCorr){
+    despachantesNombres.forEach(n => { if(!byCorr[n]) byCorr[n] = {ops:0, bruto:0}; });
+  }
 
   // Mudanzas por cliente (siempre se muestra, filtrado solo por mes) — solo tiene
   // sentido cuando NO hay un despachante puntual elegido, porque las mudanzas no
@@ -1450,9 +1462,10 @@ window.renderDashboard = function(){
     .filter(m => m._est.clase !== 'ok')
     .sort((a,b) => (a.vencimientoResidencia||'').localeCompare(b.vencimientoResidencia||''));
 
+  const esMesActualTabla = mesTablaDesp === _mesActualDash;
   const tituloDespachantes = filtCorr
-    ? `Despachante seleccionado: ${filtCorr} — mes en curso (${_mesActualDash})`
-    : `Despachantes — mes en curso (${_mesActualDash})`;
+    ? `Despachante seleccionado: ${filtCorr} — ${esMesActualTabla ? 'mes en curso' : 'mes'} (${mesTablaDesp})`
+    : `Despachantes — ${esMesActualTabla ? 'mes en curso' : 'mes'} (${mesTablaDesp})`;
 
   const cardDespachantes = `
     <div class="section-card" style="margin:0;">
@@ -1461,16 +1474,16 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
-            // Pagado en el mes en curso, usando mesDeFecha() para soportar tanto fechas
+            // Pagado en el mes de la tabla, usando mesDeFecha() para soportar tanto fechas
             // ISO (cargadas a mano) como fechas argentinas (auto desde Caja).
-            const pagadoMes = pagos.filter(p => p.despachante === k && mesDeFecha(p.fecha) === _mesActualDash).reduce((a,b)=>a+(b.monto||0),0);
+            const pagadoMes = pagos.filter(p => p.despachante === k && mesDeFecha(p.fecha) === mesTablaDesp).reduce((a,b)=>a+(b.monto||0),0);
             const { saldo } = calcularSaldoDespachante(k); // saldo histórico real (incluye deuda de meses anteriores)
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
             return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
-          }).join('') || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">${filtCorr ? 'Sin operaciones ni pagos de este despachante este mes' : 'Sin operaciones ni pagos este mes'}</td></tr>`}
+          }).join('') || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">${filtCorr ? 'Sin operaciones ni pagos de este despachante en ' + mesTablaDesp : 'Sin operaciones, pagos ni despachantes registrados en ' + mesTablaDesp}</td></tr>`}
         </tbody>
       </table>
-      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Total" y "Pagado" son del mes en curso. "Saldo" es el saldo histórico real (Neto de operaciones sin factura + Neto+IVA de operaciones ya facturadas, menos pagos), igual al que ves en la pestaña Saldos.</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Ops" y "Total" son operaciones cargadas en <strong>${mesTablaDesp}</strong> (el mes que elegiste arriba en el filtro; si no elegís ninguno, muestra el mes calendario actual). "Pagado" es lo que ese despachante pagó en ese mismo mes. "Saldo" es el saldo histórico real (Neto de operaciones sin factura + Neto+IVA de operaciones ya facturadas, menos todos los pagos), igual al que ves en la pestaña Saldos — no se limita al mes de arriba.</div>
     </div>`;
 
   const cardResidencia = `
