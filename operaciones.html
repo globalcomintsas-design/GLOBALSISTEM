@@ -359,6 +359,11 @@
             <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
             <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
             <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
+            <select id="filtro_pendiente" onchange="resetPaginaListado()" title="Filtrar por estado de cobro/pago">
+              <option value="">Todas (pagadas y pendientes)</option>
+              <option value="pendiente">⚠️ Solo pendientes de pago</option>
+              <option value="cubierta">✅ Solo cubiertas / pagadas</option>
+            </select>
           </div>
           <button class="btn-outline" onclick="toggleFacturaLotePanel()">🧾 Asignar factura (lote)</button>
           <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
