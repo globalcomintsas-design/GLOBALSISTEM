@@ -1963,43 +1963,92 @@ window.exportarExcel = function(){
     return `${d}/${m}/${y}`;
   };
 
+  // Los pagos a veces vienen con fecha ISO (cargados a mano) y a veces en formato
+  // argentino D/M/YYYY o DD/MM/YYYY (los que llegan automáticos desde Caja). Estas dos
+  // funciones normalizan cualquiera de los dos formatos: una para MOSTRAR (siempre
+  // DD/MM/YYYY) y otra para ORDENAR cronológicamente junto con las operaciones (siempre
+  // YYYY-MM-DD, que ordena bien como texto).
+  const fmtFechaMostrar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return fmtFechaAR(f.slice(0,10));
+    return f; // ya viene en formato argentino
+  };
+  const fechaISOparaOrdenar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0,10);
+    const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return '';
+  };
+
   // Sin redondeo a entero: solo se recorta a 2 decimales (centavos exactos), nada de Math.round a pesos
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','ESTADO PAGO','OBSERVAC'];
-
-  const opsOrdenadas = [...ops].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','ESTADO PAGO','PAGOS','OBSERVAC'];
 
   // Mapa de pendiente (mismo criterio "exigible" que Saldos) para la columna ESTADO PAGO
   const pendienteMap = mapaPendientePorOperacion();
 
-  const rows = opsOrdenadas.map(o => {
+  // Cada operación y cada pago se arman como {fechaISO, row} para poder mezclarlos y
+  // ordenarlos juntos cronológicamente en una sola tabla (una fila de PAGO se intercala
+  // en la fecha real en que se hizo, entre las operaciones).
+  const filasOps = ops.map(o => {
     const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
     const pend = pendienteMap[o.id] || 0;
     const estadoPago = pend > 0.5 ? 'PENDIENTE' : 'PAGADO/CUBIERTO';
-    return [
-      fmtFechaAR(o.fecha),
-      o.despachante || '',
-      o.cliente || '',
-      o.destinacion || '',
-      o.canal || '',
-      o.zpa || '',
-      dec2(o.neto),
-      dec2(o.iva),
-      dec2(o.bruto),
-      o.tc || '',
-      o.totalUsd || '',
-      estadoPago,
-      obsCompleto
-    ];
+    return {
+      fechaISO: o.fecha || '',
+      row: [
+        fmtFechaAR(o.fecha),
+        o.despachante || '',
+        o.cliente || '',
+        o.destinacion || '',
+        o.canal || '',
+        o.zpa || '',
+        dec2(o.neto),
+        dec2(o.iva),
+        dec2(o.bruto),
+        o.tc || '',
+        o.totalUsd || '',
+        estadoPago,
+        '', // PAGOS: vacío en las filas de operación
+        obsCompleto
+      ]
+    };
   });
+
+  const filasPagos = pagosFiltrados.map(p => {
+    const refFactura = p.numFactura ? `Fact. ${p.numFactura}` : 'Pago genérico (sin factura)';
+    const origen = p.origenCaja ? ' · Auto Caja' : '';
+    const obsPago = [p.obs, refFactura + origen].filter(Boolean).join(' | ');
+    return {
+      fechaISO: fechaISOparaOrdenar(p.fecha),
+      row: [
+        fmtFechaMostrar(p.fecha),
+        p.despachante || '',
+        'PAGO',
+        '', '', '',
+        '', '', '', '', '', '', // VALOR, IVA, SUB TOTAL, TC, VALOR USD, ESTADO PAGO: vacío en filas de pago
+        dec2(p.monto || 0),     // PAGOS
+        obsPago
+      ]
+    };
+  });
+
+  // Se combinan y se ordenan por fecha (operaciones y pagos mezclados cronológicamente);
+  // a igual fecha, la operación va antes que el pago.
+  const filasCombinadas = [...filasOps, ...filasPagos]
+    .sort((a,b) => a.fechaISO.localeCompare(b.fechaISO) || (a.row[2]==='PAGO'?1:-1) - (b.row[2]==='PAGO'?1:-1));
+  const rows = filasCombinadas.map(f => f.row);
 
   const totNeto   = ops.reduce((a,b) => a + (b.neto||0), 0);
   const totIva    = ops.reduce((a,b) => a + (b.iva||0), 0);
   const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL',`${ops.length} op(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', totPagado ? `Total pagado: $${fmt2(totPagado)}` : ''];
+  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', dec2(totPagado), ''];
 
   // ── SALDO ANTERIOR: cuando se filtra por UN despachante puntual y por un período
   // (mes elegido, o rango de fechas "desde"), se agrega una fila arriba del encabezado
@@ -2024,7 +2073,7 @@ window.exportarExcel = function(){
     filaSaldo[0] = 'SALDO ANTERIOR';
     filaSaldo[1] = filtCorr;
     filaSaldo[8] = dec2(saldoAnterior); // misma columna que SUB TOTAL, para sumar visualmente
-    filaSaldo[12] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`;
+    filaSaldo[13] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`;
     saldoAnteriorRows = [filaSaldo];
     headerRowIndex = 1;
 
@@ -2036,7 +2085,7 @@ window.exportarExcel = function(){
     const filaDeudaTotal = new Array(header.length).fill('');
     filaDeudaTotal[0] = 'DEUDA TOTAL A LA FECHA';
     filaDeudaTotal[8] = dec2(saldoAnterior + totBruto);
-    filaDeudaTotal[12] = 'Saldo anterior + Subtotal del período filtrado';
+    filaDeudaTotal[13] = 'Saldo anterior + Subtotal del período filtrado';
     deudaTotalRows = [filaDeudaTotal];
   }
 
@@ -2045,7 +2094,7 @@ window.exportarExcel = function(){
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:16},{wch:32}
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:16},{wch:12},{wch:32}
   ];
 
   // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
@@ -2053,7 +2102,8 @@ window.exportarExcel = function(){
   // DEUDA TOTAL, si las hay). Si el rango es solo la fila de encabezado, Excel no sabe
   // hasta dónde llega la tabla y el SUBTOTAL de abajo no se recalcula bien al filtrar.
   // Con la columna ESTADO PAGO en la grilla y el autofiltro activo, en Excel también se
-  // puede filtrar manualmente por "PENDIENTE".
+  // puede filtrar manualmente por "PENDIENTE"; y con la columna PAGOS, por "PAGO" en la
+  // columna CLIENTE se puede aislar solo las filas de pago.
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   const headerRowNum = 1 + headerRowIndex;       // fila Excel (1-indexed) del encabezado
   const firstDataRow = headerRowNum + 1;
@@ -2066,9 +2116,9 @@ window.exportarExcel = function(){
   {
     // Cantidad de operaciones visibles (columna B, junto al rótulo TOTAL)
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
-    ws[addrCant] = { t:'str', v: `${rows.length} op(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" op(s)"` };
+    ws[addrCant] = { t:'str', v: `${rows.length} fila(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" fila(s)"` };
 
-    [6,7,8].forEach(c => { // VALOR, IVA, SUB TOTAL
+    [6,7,8,12].forEach(c => { // VALOR, IVA, SUB TOTAL, PAGOS
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
@@ -2105,8 +2155,8 @@ window.exportarExcel = function(){
   estilizarHojaExcel(ws, {
     numCols: header.length,
     numDataRows: rows.length,
-    colsDecimal2: [6,7,8],       // VALOR, IVA, SUB TOTAL
-    colsNumericas: [6,7,8,9,10], // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+    colsDecimal2: [6,7,8,12],       // VALOR, IVA, SUB TOTAL, PAGOS
+    colsNumericas: [6,7,8,9,10,12], // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGOS
     headerRowIndex
   });
 
