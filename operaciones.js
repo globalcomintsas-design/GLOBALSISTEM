@@ -1878,11 +1878,11 @@ function renderTablaClientes(){
 // Aplica bordes finos a toda la grilla, encabezado azul con letra blanca, fila TOTAL
 // destacada en rojo, y fuente Arial tamaño 7 en todo (encabezado, datos y total).
 function estilizarHojaExcel(ws, opts){
-  const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
+  const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [], headerRowIndex = 0 } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const formatoDecimal = '#,##0.00';
-  const totalRowIdx = 1 + numDataRows; // fila 0-index de la fila TOTAL
+  const totalRowIdx = headerRowIndex + 1 + numDataRows; // fila 0-index de la fila TOTAL
 
   const range = XLSX.utils.decode_range(ws['!ref']);
   for(let R = range.s.r; R <= range.e.r; R++){
@@ -1890,11 +1890,20 @@ function estilizarHojaExcel(ws, opts){
       const addr = XLSX.utils.encode_cell({ r: R, c: C });
       if(!ws[addr]) ws[addr] = { t: 's', v: '' };
 
-      if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+      if(R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].z = formatoDecimal;
       }
 
-      if(R === 0){
+      if(R < headerRowIndex){
+        // Fila(s) previas al encabezado (ej. "SALDO ANTERIOR"): destacada en naranja
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: '92400E' } },
+          fill: { fgColor: { rgb: 'FEF3C7' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else if(R === headerRowIndex){
         // Encabezado: negrita, fondo azul, letra blanca, Arial 7
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
@@ -1992,7 +2001,31 @@ window.exportarExcel = function(){
 
   const totalRow = ['TOTAL',`${ops.length} op(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', totPagado ? `Total pagado: $${fmt2(totPagado)}` : ''];
 
-  const aoa = [header, ...rows, totalRow];
+  // ── SALDO ANTERIOR: cuando se filtra por UN despachante puntual y por un período
+  // (mes elegido, o rango de fechas "desde"), se agrega una fila arriba del encabezado
+  // con la deuda que ese despachante ya arrastraba de ANTES del período filtrado. Así,
+  // al pasarle la planilla, la deuda real es "SALDO ANTERIOR" + "SUB TOTAL" del período,
+  // en vez de que el Excel solo muestre lo facturado en ese mes puntual (que hacía que
+  // pareciera que debía menos de lo que realmente debe). Usa la misma cobertura FIFO
+  // "exigible" que ya se usa en la pestaña Saldos, para que el número coincida.
+  let saldoAnteriorRows = [];
+  let headerRowIndex = 0;
+  if(filtCorr && (filtMes || filtDesde)){
+    const cutoff = filtDesde || (filtMes + '-01');
+    const cobertura = calcularCoberturaExigibleFIFO(filtCorr);
+    const saldoAnterior = cobertura
+      .filter(o => (o.fecha||'') < cutoff)
+      .reduce((a,b) => a + b.pendiente, 0);
+    const filaSaldo = new Array(header.length).fill('');
+    filaSaldo[0] = 'SALDO ANTERIOR';
+    filaSaldo[1] = filtCorr;
+    filaSaldo[8] = dec2(saldoAnterior); // misma columna que SUB TOTAL, para sumar visualmente
+    filaSaldo[12] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)} (no está incluida en el SUBTOTAL de la fila TOTAL de abajo — sumarla a mano para saber la deuda real)`;
+    saldoAnteriorRows = [filaSaldo];
+    headerRowIndex = 1;
+  }
+
+  const aoa = [...saldoAnteriorRows, header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
@@ -2001,15 +2034,17 @@ window.exportarExcel = function(){
   ];
 
   // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
-  // las filas de datos (sin incluir la fila TOTAL). Si el rango es solo la fila de
-  // encabezado, Excel no sabe hasta dónde llega la tabla y el SUBTOTAL de abajo no
-  // se recalcula bien al filtrar. Con la columna ESTADO PAGO en la grilla y el
-  // autofiltro activo, en Excel también se puede filtrar manualmente por "PENDIENTE".
+  // las filas de datos (sin incluir la fila TOTAL ni la fila de SALDO ANTERIOR, si la
+  // hay). Si el rango es solo la fila de encabezado, Excel no sabe hasta dónde llega la
+  // tabla y el SUBTOTAL de abajo no se recalcula bien al filtrar. Con la columna ESTADO
+  // PAGO en la grilla y el autofiltro activo, en Excel también se puede filtrar
+  // manualmente por "PENDIENTE".
   const lastCol = XLSX.utils.encode_col(header.length - 1);
-  const firstDataRow = 2;
-  const lastDataRow  = 1 + rows.length;
-  const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
-  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+  const headerRowNum = 1 + headerRowIndex;       // fila Excel (1-indexed) del encabezado
+  const firstDataRow = headerRowNum + 1;
+  const lastDataRow  = headerRowNum + rows.length;
+  const totalRowNum  = lastDataRow + 1;          // fila Excel (1-indexed) de la fila TOTAL
+  ws['!autofilter'] = { ref: `A${headerRowNum}:${lastCol}${lastDataRow}` };
 
   // ── TOTAL con fórmulas: al filtrar en Excel (autofiltro), estas celdas
   // recalculan solas y muestran la suma / cantidad SOLO de las filas visibles ──
@@ -2030,7 +2065,8 @@ window.exportarExcel = function(){
     numCols: header.length,
     numDataRows: rows.length,
     colsDecimal2: [6,7,8],       // VALOR, IVA, SUB TOTAL
-    colsNumericas: [6,7,8,9,10]  // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+    colsNumericas: [6,7,8,9,10], // VALOR, IVA, SUB TOTAL, TC, VALOR USD
+    headerRowIndex
   });
 
   const wb = XLSX.utils.book_new();
