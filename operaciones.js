@@ -2009,23 +2009,38 @@ window.exportarExcel = function(){
   // pareciera que debía menos de lo que realmente debe). Usa la misma cobertura FIFO
   // "exigible" que ya se usa en la pestaña Saldos, para que el número coincida.
   let saldoAnteriorRows = [];
+  let deudaTotalRows = [];
   let headerRowIndex = 0;
+  let saldoAnterior = 0;
+  let hayDeudaAnterior = false;
   if(filtCorr && (filtMes || filtDesde)){
     const cutoff = filtDesde || (filtMes + '-01');
     const cobertura = calcularCoberturaExigibleFIFO(filtCorr);
-    const saldoAnterior = cobertura
+    saldoAnterior = cobertura
       .filter(o => (o.fecha||'') < cutoff)
       .reduce((a,b) => a + b.pendiente, 0);
+    hayDeudaAnterior = true;
     const filaSaldo = new Array(header.length).fill('');
     filaSaldo[0] = 'SALDO ANTERIOR';
     filaSaldo[1] = filtCorr;
     filaSaldo[8] = dec2(saldoAnterior); // misma columna que SUB TOTAL, para sumar visualmente
-    filaSaldo[12] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)} (no está incluida en el SUBTOTAL de la fila TOTAL de abajo — sumarla a mano para saber la deuda real)`;
+    filaSaldo[12] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`;
     saldoAnteriorRows = [filaSaldo];
     headerRowIndex = 1;
+
+    // Fila extra, DESPUÉS de la fila TOTAL, con la suma real: Saldo anterior + Subtotal
+    // del período. Se calcula acá con un valor "de arranque" y más abajo se le pone la
+    // fórmula de Excel (=celda SALDO ANTERIOR + celda SUBTOTAL de la fila TOTAL), para
+    // que si filtrás/ocultás filas en Excel con el autofiltro, este total se recalcule
+    // solo y siga siendo la deuda real actualizada.
+    const filaDeudaTotal = new Array(header.length).fill('');
+    filaDeudaTotal[0] = 'DEUDA TOTAL A LA FECHA';
+    filaDeudaTotal[8] = dec2(saldoAnterior + totBruto);
+    filaDeudaTotal[12] = 'Saldo anterior + Subtotal del período filtrado';
+    deudaTotalRows = [filaDeudaTotal];
   }
 
-  const aoa = [...saldoAnteriorRows, header, ...rows, totalRow];
+  const aoa = [...saldoAnteriorRows, header, ...rows, totalRow, ...deudaTotalRows];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
@@ -2034,11 +2049,11 @@ window.exportarExcel = function(){
   ];
 
   // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
-  // las filas de datos (sin incluir la fila TOTAL ni la fila de SALDO ANTERIOR, si la
-  // hay). Si el rango es solo la fila de encabezado, Excel no sabe hasta dónde llega la
-  // tabla y el SUBTOTAL de abajo no se recalcula bien al filtrar. Con la columna ESTADO
-  // PAGO en la grilla y el autofiltro activo, en Excel también se puede filtrar
-  // manualmente por "PENDIENTE".
+  // las filas de datos (sin incluir la fila TOTAL ni las filas de SALDO ANTERIOR /
+  // DEUDA TOTAL, si las hay). Si el rango es solo la fila de encabezado, Excel no sabe
+  // hasta dónde llega la tabla y el SUBTOTAL de abajo no se recalcula bien al filtrar.
+  // Con la columna ESTADO PAGO en la grilla y el autofiltro activo, en Excel también se
+  // puede filtrar manualmente por "PENDIENTE".
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   const headerRowNum = 1 + headerRowIndex;       // fila Excel (1-indexed) del encabezado
   const firstDataRow = headerRowNum + 1;
@@ -2060,6 +2075,32 @@ window.exportarExcel = function(){
     });
   }
 
+  // ── DEUDA TOTAL A LA FECHA = celda SALDO ANTERIOR + celda SUB TOTAL de la fila TOTAL,
+  // como fórmula de Excel (no un número fijo), para que quede sumado automáticamente y
+  // se siga recalculando si filtrás filas con el autofiltro. También se le da un estilo
+  // propio (verde) para que se note que es el número final, distinto del TOTAL del período.
+  if(hayDeudaAnterior){
+    const deudaRowIdx = totalRowNum; // 0-based: la fila justo después de TOTAL
+    const saldoAnteriorCellAddr = XLSX.utils.encode_cell({ r: 0, c: 8 }); // fila SALDO ANTERIOR, col SUB TOTAL
+    const subtotalCellAddr      = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 8 }); // fila TOTAL, col SUB TOTAL
+    const addrValor = XLSX.utils.encode_cell({ r: deudaRowIdx, c: 8 });
+    ws[addrValor] = { t:'n', v: dec2(saldoAnterior + totBruto), f: `${saldoAnteriorCellAddr}+${subtotalCellAddr}` };
+
+    const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+    const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+    for(let c = 0; c < header.length; c++){
+      const addr = XLSX.utils.encode_cell({ r: deudaRowIdx, c });
+      if(!ws[addr]) ws[addr] = { t:'s', v:'' };
+      ws[addr].s = {
+        font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '166534' } },
+        border: bordeTodo,
+        alignment: { horizontal: c === 8 ? 'right' : 'left' },
+        numFmt: c === 8 ? '#,##0.00' : undefined
+      };
+    }
+  }
+
   // ── Estilo unificado (bordes, encabezado azul, TOTAL en rojo, Arial 7) ──
   estilizarHojaExcel(ws, {
     numCols: header.length,
@@ -2068,6 +2109,26 @@ window.exportarExcel = function(){
     colsNumericas: [6,7,8,9,10], // VALOR, IVA, SUB TOTAL, TC, VALOR USD
     headerRowIndex
   });
+
+  // El estilo de la fila DEUDA TOTAL se pisa arriba antes de estilizarHojaExcel para
+  // que quede en verde; como estilizarHojaExcel también recorre esa fila (queda dentro
+  // del rango de la hoja) y la pintaría como fila de datos normal, se la vuelve a
+  // aplicar acá DESPUÉS, para que el verde quede como estilo final.
+  if(hayDeudaAnterior){
+    const deudaRowIdx = totalRowNum;
+    const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+    const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+    for(let c = 0; c < header.length; c++){
+      const addr = XLSX.utils.encode_cell({ r: deudaRowIdx, c });
+      ws[addr].s = {
+        font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '166534' } },
+        border: bordeTodo,
+        alignment: { horizontal: c === 8 ? 'right' : 'left' },
+        numFmt: c === 8 ? '#,##0.00' : undefined
+      };
+    }
+  }
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
