@@ -902,7 +902,40 @@
   <div id="tab-remitos" style="display:none;">
 
     <div class="section-card">
-      <h3>🧾 Generar recibo</h3>
+      <h3>🧾 Recibo genérico (fotocopias, MIC, varios)</h3>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Recibimos de</label>
+          <input type="text" id="recgen_de" placeholder="Nombre de quien paga">
+        </div>
+        <div class="form-group">
+          <label>Fecha</label>
+          <input type="date" id="recgen_fecha">
+        </div>
+        <div class="form-group">
+          <label>Concepto</label>
+          <select id="recgen_concepto_sel" onchange="onCambiarConceptoGenerico()">
+            <option value="Impresión de fotocopias">Impresión de fotocopias</option>
+            <option value="Impresión de MIC">Impresión de MIC</option>
+            <option value="otro">Otro (especificar)</option>
+          </select>
+        </div>
+        <div class="form-group" id="recgen_concepto_otro_wrap" style="display:none;">
+          <label>Especificar concepto</label>
+          <input type="text" id="recgen_concepto_otro" placeholder="Detalle del concepto">
+        </div>
+        <div class="form-group">
+          <label>Monto ($)</label>
+          <input type="number" id="recgen_monto" placeholder="$ 0" step="0.01">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn-success" onclick="generarReciboGenerico()">🧾 Generar recibo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <h3>🧾 Generar recibo por operaciones</h3>
       <div class="form-row">
         <div class="form-group">
           <label>Despachante</label>
