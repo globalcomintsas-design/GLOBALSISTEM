@@ -123,6 +123,16 @@ function fmt2(n){
 }
 window.fmt2 = fmt2;
 
+// ── PUNTO SI VACÍO (para exportaciones a Excel) ──
+// Reemplaza valores vacíos ('' / null / undefined) por un punto '.', para que en la
+// planilla quede explícito que ese campo NO se cargó (en vez de dejar la celda en
+// blanco, que se puede confundir con "se olvidaron de exportarlo"). No toca números
+// (incluido el 0), solo strings vacíos / null / undefined.
+function puntoSiVacio(v){
+  return (v === '' || v === null || typeof v === 'undefined') ? '.' : v;
+}
+window.puntoSiVacio = puntoSiVacio;
+
 function toast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -294,6 +304,7 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
 // ── Fecha default (hora local, no UTC) ──
 document.getElementById('op_fecha').value    = fechaLocalISO();
 document.getElementById('mud_fecha').value   = fechaLocalISO();
+document.getElementById('recgen_fecha').value = fechaLocalISO();
 
 // Auto fin de semana según fecha
 document.getElementById('op_fecha').addEventListener('change', function(){
@@ -514,8 +525,12 @@ window.onTipoChange = function(){
   const destinGroup = document.getElementById('destinacion-group');
   const canalGroup  = document.getElementById('op_canal').closest('.form-group');
 
-  // Tipo "Adicionales": no tiene destinación ni canal, se ocultan por completo
-  destinGroup.style.display = esAdicionales ? 'none' : '';
+  // Tipo "Adicionales" y "MIC": no tienen destinación/permiso, se oculta el campo
+  // y se limpia lo que tuviera cargado (para que no quede un valor viejo guardándose
+  // por accidente al pasar de otro tipo de operación a MIC/Adicionales).
+  const sinDestinacion = esAdicionales || esMIC;
+  destinGroup.style.display = sinDestinacion ? 'none' : '';
+  if(sinDestinacion) document.getElementById('op_destinacion').value = '';
 
   if(esMIC || esMultinota || esAdicionales){
     canalGroup.style.display = esAdicionales ? 'none' : '';
@@ -750,7 +765,10 @@ function construirDatosOperacion(){
     fecha: document.getElementById('op_fecha').value,
     despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
-    destinacion: esAdicionales ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
+    // MIC y Adicionales no tienen destinación/permiso: se guarda vacío aunque haya
+    // quedado un valor cargado de antes (ver también onTipoChange, que ya limpia el
+    // campo en pantalla apenas se elige alguno de estos dos tipos).
+    destinacion: (esAdicionales || esMIC) ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
     canal: (esMIC || esMultinota || esAdicionales) ? '' : document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
     tipo: document.getElementById('op_tipo').value,
@@ -803,6 +821,7 @@ window.guardarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esMICTipo = document.getElementById('op_tipo').value === 'MIC';
   const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
   if(!esPesosTipo && (!tcVal || tcVal <= 0)){
@@ -811,7 +830,7 @@ window.guardarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!esAdicionalesTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!esAdicionalesTipo && !esMICTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
   const datos = construirDatosOperacion();
   const op = {
@@ -850,6 +869,7 @@ window.actualizarOperacion = async function(){
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
   const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esMICTipo = document.getElementById('op_tipo').value === 'MIC';
   const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
   const tcVal = parseFloat(document.getElementById('op_tc').value);
   if(!esPesosTipo && (!tcVal || tcVal <= 0)){
@@ -858,7 +878,7 @@ window.actualizarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!esAdicionalesTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!esAdicionalesTipo && !esMICTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
 
   const datos = construirDatosOperacion();
 
@@ -909,6 +929,7 @@ window.editarOperacion = function(id){
   tieneFactura = o.tieneFactura !== false;
 
   // Tipo de operación (EXPO/IMPO/TRAN/MIC/MULTINOTA) -> ajusta visibilidad de checks
+  // (esto también limpia la destinación en pantalla si el tipo es MIC/Adicionales)
   onTipoChange();
 
   // Tipo de despacho (despachante/premium/apoderado/kotinya/despachante_pesos)
@@ -1993,7 +2014,8 @@ window.exportarExcel = function(){
 
   // Cada operación y cada pago se arman como {fechaISO, row} para poder mezclarlos y
   // ordenarlos juntos cronológicamente en una sola tabla (una fila de PAGO se intercala
-  // en la fecha real en que se hizo, entre las operaciones).
+  // en la fecha real en que se hizo, entre las operaciones). Los campos que no se
+  // cargaron para esa fila se dejan como '.' (puntoSiVacio) en vez de quedar en blanco.
   const filasOps = ops.map(o => {
     const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
     const pend = pendienteMap[o.id] || 0;
@@ -2015,7 +2037,7 @@ window.exportarExcel = function(){
         estadoPago,
         '', // PAGOS: vacío en las filas de operación
         obsCompleto
-      ]
+      ].map(puntoSiVacio)
     };
   });
 
@@ -2033,7 +2055,7 @@ window.exportarExcel = function(){
         '', '', '', '', '', '', // VALOR, IVA, SUB TOTAL, TC, VALOR USD, ESTADO PAGO: vacío en filas de pago
         dec2(p.monto || 0),     // PAGOS
         obsPago
-      ]
+      ].map(puntoSiVacio)
     };
   });
 
@@ -2048,7 +2070,7 @@ window.exportarExcel = function(){
   const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', dec2(totPagado), ''];
+  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', dec2(totPagado), ''].map(puntoSiVacio);
 
   // ── SALDO ANTERIOR: cuando se filtra por UN despachante puntual y por un período
   // (mes elegido, o rango de fechas "desde"), se agrega una fila arriba del encabezado
@@ -2074,7 +2096,7 @@ window.exportarExcel = function(){
     filaSaldo[1] = filtCorr;
     filaSaldo[8] = dec2(saldoAnterior); // misma columna que SUB TOTAL, para sumar visualmente
     filaSaldo[13] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`;
-    saldoAnteriorRows = [filaSaldo];
+    saldoAnteriorRows = [filaSaldo.map(puntoSiVacio)];
     headerRowIndex = 1;
 
     // Fila extra, DESPUÉS de la fila TOTAL, con la suma real: Saldo anterior + Subtotal
@@ -2086,7 +2108,7 @@ window.exportarExcel = function(){
     filaDeudaTotal[0] = 'DEUDA TOTAL A LA FECHA';
     filaDeudaTotal[8] = dec2(saldoAnterior + totBruto);
     filaDeudaTotal[13] = 'Saldo anterior + Subtotal del período filtrado';
-    deudaTotalRows = [filaDeudaTotal];
+    deudaTotalRows = [filaDeudaTotal.map(puntoSiVacio)];
   }
 
   const aoa = [...saldoAnteriorRows, header, ...rows, totalRow, ...deudaTotalRows];
@@ -2567,6 +2589,8 @@ window.exportarMudanzas = function(){
 
   const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
+  // Los campos que no se cargaron para esa mudanza quedan como '.' (puntoSiVacio) en
+  // vez de quedar en blanco, igual que en la exportación de Operaciones.
   const rows = ordenadas.map(m => {
     const estRes = estadoResidencia(m);
     return [
@@ -2579,7 +2603,7 @@ window.exportarMudanzas = function(){
       m.vencimientoResidencia ? fmtFechaAR(m.vencimientoResidencia) : '',
       estRes.label,
       m.obs || ''
-    ];
+    ].map(puntoSiVacio);
   });
 
   const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
@@ -2588,7 +2612,7 @@ window.exportarMudanzas = function(){
   const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
   const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
 
-  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', '', '', '', ''];
+  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', '', '', '', ''].map(puntoSiVacio);
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
@@ -2835,6 +2859,109 @@ function poblarSelectRemitoDespachante(){
   sel.value = v;
 }
 
+// ── CONCEPTO OTRO (recibo genérico) ──
+window.onCambiarConceptoGenerico = function(){
+  const sel = document.getElementById('recgen_concepto_sel').value;
+  document.getElementById('recgen_concepto_otro_wrap').style.display = sel === 'otro' ? '' : 'none';
+};
+
+// ── HTML del recibo genérico (fotocopias, MIC, u otro concepto libre) ──
+function construirHtmlReciboGenerico(numero, de, fecha, concepto, monto){
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;color:#1e293b;padding:40px;max-width:700px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px;}
+  .empresa-nombre{font-size:22px;font-weight:700;color:#1e3a8a;}
+  .empresa-sub{font-size:12px;color:#64748b;margin-top:2px;}
+  .empresa-datos{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;}
+  .recibo-titulo{text-align:right;}
+  .recibo-titulo .tag{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:15px;padding:6px 16px;border-radius:8px;display:inline-block;}
+  .recibo-num{font-size:12px;color:#64748b;margin-top:6px;}
+  .datos-recibo{display:flex;justify-content:space-between;margin-bottom:28px;font-size:13px;}
+  .cuerpo{font-size:15px;line-height:1.9;background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px;}
+  .cuerpo strong{color:#1e3a8a;}
+  .monto-destacado{font-size:26px;font-weight:700;color:#059669;margin:14px 0;}
+  .firma-box{display:flex;justify-content:space-between;margin-top:70px;}
+  .firma{width:220px;border-top:1px solid #94a3b8;text-align:center;padding-top:6px;font-size:11px;color:#64748b;}
+  @media print{ body{padding:20px;} }
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div class="empresa-nombre">${EMPRESA_REMITO.nombre}</div>
+      <div class="empresa-sub">${EMPRESA_REMITO.subtitulo}</div>
+      <div class="empresa-datos">
+        ${EMPRESA_REMITO.direccion}<br>
+        Tel: ${EMPRESA_REMITO.telefono}${EMPRESA_REMITO.cuit ? '<br>CUIT: '+EMPRESA_REMITO.cuit : ''}
+      </div>
+    </div>
+    <div class="recibo-titulo">
+      <span class="tag">RECIBO</span>
+      <div class="recibo-num">N° ${String(numero).padStart(5,'0')}</div>
+    </div>
+  </div>
+
+  <div class="datos-recibo">
+    <div><strong>Recibimos de:</strong> ${de || '-'}</div>
+    <div><strong>Fecha de emisión:</strong> ${fecha}</div>
+  </div>
+
+  <div class="cuerpo">
+    Recibimos la suma de
+    <div class="monto-destacado">$ ${fmt2(monto)}</div>
+    (Pesos Argentinos) en concepto de: <strong>${concepto}</strong>.
+  </div>
+
+  <div class="firma-box">
+    <div class="firma">Recibí conforme</div>
+    <div class="firma">Aclaración / DNI</div>
+  </div>
+
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`;
+}
+
+// ── GENERAR RECIBO GENÉRICO (fotocopias, MIC, u otro concepto libre, monto editable) ──
+window.generarReciboGenerico = async function(){
+  const de = document.getElementById('recgen_de').value.trim();
+  const fecha = document.getElementById('recgen_fecha').value || fechaLocalISO();
+  const selConcepto = document.getElementById('recgen_concepto_sel').value;
+  const concepto = selConcepto === 'otro'
+    ? document.getElementById('recgen_concepto_otro').value.trim()
+    : selConcepto;
+  const monto = parseFloat(document.getElementById('recgen_monto').value);
+
+  if(!concepto){ toast('⚠️ Ingresá el concepto del recibo'); return; }
+  if(!monto || monto <= 0){ toast('⚠️ Ingresá un monto válido'); return; }
+
+  const numero = remitos.length + 1;
+
+  try {
+    await addDoc(collection(db,'despachantees_remitos'), {
+      numero, fecha, total: monto, concepto, de,
+      generico: true,
+      despachante: de || 'Genérico',
+      ops: [],
+      generadoPor: user.username, ts: Date.now()
+    });
+
+    const html = construirHtmlReciboGenerico(numero, de, fecha, concepto, monto);
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+
+    document.getElementById('recgen_de').value = '';
+    document.getElementById('recgen_monto').value = '';
+    document.getElementById('recgen_concepto_otro').value = '';
+    toast('✅ Recibo genérico N° ' + numero + ' generado');
+  } catch(e){
+    toast('❌ Error al generar el recibo: ' + e.message);
+  }
+};
+
 window.renderRemitos = function(){
   poblarSelectRemitoDespachante();
   const desp = document.getElementById('remito_despachante').value;
@@ -2922,8 +3049,8 @@ function renderHistorialRemitos(){
     <tr>
       <td class="mono">${r.numero||''}</td>
       <td>${r.fecha||''}</td>
-      <td><strong>${r.despachante||''}</strong></td>
-      <td style="text-align:center;">${(r.ops||[]).length}</td>
+      <td><strong>${r.despachante||''}</strong>${r.generico ? ` <span class="tag" style="background:#fef9c3;color:#92400e;">Genérico${r.concepto ? ': '+r.concepto : ''}</span>` : ''}</td>
+      <td style="text-align:center;">${r.generico ? '-' : (r.ops||[]).length}</td>
       <td style="font-weight:700;color:#059669;">$${fmt2(r.total)}</td>
       <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button> <button class="btn-danger" onclick="eliminarRecibo('${r.id}')">✕</button></td>
     </tr>
@@ -3049,7 +3176,9 @@ window.generarRemito = async function(){
 window.reimprimirRemito = function(id){
   const r = remitos.find(x => x.id === id);
   if(!r) return;
-  const html = construirHtmlRemito(r.numero, r.despachante, r.fecha, r.ops||[], r.total||0);
+  const html = r.generico
+    ? construirHtmlReciboGenerico(r.numero, r.de, r.fecha, r.concepto, r.total||0)
+    : construirHtmlRemito(r.numero, r.despachante, r.fecha, r.ops||[], r.total||0);
   const w = window.open('', '_blank');
   w.document.write(html);
   w.document.close();
@@ -3058,10 +3187,15 @@ window.reimprimirRemito = function(id){
 window.eliminarRecibo = async function(id){
   const r = remitos.find(x => x.id === id);
   if(!r) return;
-  if(!confirm(`¿Eliminar el recibo N° ${r.numero} de ${r.despachante}? Las operaciones incluidas quedarán marcadas como "Sin recibo" y se van a poder volver a incluir en uno nuevo.`)) return;
+  const msg = r.generico
+    ? `¿Eliminar el recibo genérico N° ${r.numero}?`
+    : `¿Eliminar el recibo N° ${r.numero} de ${r.despachante}? Las operaciones incluidas quedarán marcadas como "Sin recibo" y se van a poder volver a incluir en uno nuevo.`;
+  if(!confirm(msg)) return;
   try {
-    for(const o of (r.ops||[])){
-      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: null });
+    if(!r.generico){
+      for(const o of (r.ops||[])){
+        await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: null });
+      }
     }
     await deleteDoc(doc(db,'despachantees_remitos', id));
     toast('Recibo eliminado');
