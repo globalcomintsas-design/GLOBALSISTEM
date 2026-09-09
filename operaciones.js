@@ -178,6 +178,33 @@ function estadoResidencia(m){
 }
 window.estadoResidencia = estadoResidencia;
 
+// ── ESTADO DE COBRO DE UNA MUDANZA (soporta pago parcial) ──
+// Antes "cobrado" era solo sí/no. Ahora se guarda `montoCobrado` (lo que efectivamente
+// se cobró en pesos) y se compara contra `bruto` para saber si está: sin cobrar, cobrado
+// parcialmente, o cobrado por completo. Se mantiene el campo booleano `cobrado` en el
+// documento (true solo cuando está 100% cobrado) por compatibilidad con lo que ya
+// depende de él (ej. desbloquear el pago a Ramiro). Para mudanzas viejas que solo tenían
+// el booleano `cobrado` (sin `montoCobrado` guardado), se lo reconstruye: si estaba
+// marcada como cobrada, se asume que se cobró el bruto completo; si no, que se cobró $0.
+function estadoCobro(m){
+  const bruto = m && m.bruto ? m.bruto : 0;
+  let cobrado;
+  if(m && m.montoCobrado !== undefined && m.montoCobrado !== null){
+    cobrado = m.montoCobrado;
+  } else {
+    cobrado = (m && m.cobrado) ? bruto : 0;
+  }
+  const saldo = bruto - cobrado;
+  if(cobrado <= 0.005){
+    return { estado:'no', label:'❌ Sin cobrar', bg:'#fee2e2', color:'#991b1b', cobrado, saldo };
+  }
+  if(saldo > 0.5){
+    return { estado:'parcial', label:`🟡 Parcial: $${fmt(cobrado)} de $${fmt(bruto)} (falta $${fmt(saldo)})`, bg:'#fef9c3', color:'#854d0e', cobrado, saldo };
+  }
+  return { estado:'si', label:'✅ Cobrado', bg:'#dcfce7', color:'#166534', cobrado, saldo };
+}
+window.estadoCobro = estadoCobro;
+
 // ── TOGGLE TARIFAS ──
 window.toggleTarifas = function(){
   const body = document.getElementById('tarifas-body');
@@ -301,16 +328,33 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
   }
 };
 
+// ── AUTO FIN DE SEMANA SEGÚN FECHA ──
+// Antes esta lógica vivía solo dentro de un listener 'change' del input de fecha. El
+// problema: 'change' únicamente dispara cuando el VALOR del campo cambia. Al guardar
+// una operación, limpiarFormulario() desmarca todos los checkboxes (incluido este) pero
+// NO toca la fecha — si seguís cargando operaciones el mismo día, el input de fecha
+// nunca vuelve a disparar 'change', así que el checkbox de Fin de semana quedaba
+// desmarcado a partir de la segunda carga del día, aunque siguiera siendo sábado o
+// domingo. Ahora es una función aparte que se llama tanto desde el listener de fecha
+// como cada vez que el formulario queda "limpio" (nueva carga / init), para que siempre
+// se reevalúe contra la fecha actual del campo, cambie o no.
+function actualizarFinSemPorFecha(){
+  const val = document.getElementById('op_fecha').value;
+  if(!val) return;
+  const d = new Date(val + 'T12:00:00');
+  const esFinsem = d.getDay() === 0 || d.getDay() === 6;
+  document.getElementById('chk_finsem').checked = esFinsem;
+}
+window.actualizarFinSemPorFecha = actualizarFinSemPorFecha;
+
 // ── Fecha default (hora local, no UTC) ──
 document.getElementById('op_fecha').value    = fechaLocalISO();
 document.getElementById('mud_fecha').value   = fechaLocalISO();
 document.getElementById('recgen_fecha').value = fechaLocalISO();
+actualizarFinSemPorFecha(); // evalúa fin de semana ya desde la primera carga de la página
 
-// Auto fin de semana según fecha
 document.getElementById('op_fecha').addEventListener('change', function(){
-  const d = new Date(this.value + 'T12:00:00');
-  const esFinsem = d.getDay() === 0 || d.getDay() === 6;
-  document.getElementById('chk_finsem').checked = esFinsem;
+  actualizarFinSemPorFecha();
   recalcularFormulario();
 });
 
@@ -999,6 +1043,10 @@ window.limpiarFormulario = function(){
   document.getElementById('op_tipo').value = 'EXPO';
   document.getElementById('tipo_desp_global').value = 'despachante';
   document.querySelectorAll('.chk-item input[type=checkbox]').forEach(c => c.checked = false);
+  // El paso de arriba desmarca TODOS los checkboxes, incluido Fin de semana — se lo
+  // vuelve a evaluar acá contra la fecha que sigue cargada en el campo, para que no
+  // quede desmarcado por error si seguís cargando operaciones el mismo sábado/domingo.
+  actualizarFinSemPorFecha();
   cerrarAC('ac_despachante');
   cerrarAC('ac_cliente');
   esApoderado = false;
@@ -1400,9 +1448,12 @@ window.renderDashboard = function(){
     .filter(p => despFiltrados.includes(p.despachante) && (!filtCorr || p.despachante === filtCorr) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
     .reduce((a,b) => a + (b.monto||0), 0);
 
-  // Mudanzas: cobradas/sin cobrar ya vienen filtradas por el mismo período (mudFiltradas)
-  const mudPagado    = mudFiltradas.filter(m => m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
-  const mudPendiente = mudFiltradas.filter(m => !m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
+  // Mudanzas: cobradas/sin cobrar/parciales ya vienen filtradas por el mismo período
+  // (mudFiltradas). Ahora se usa estadoCobro() para sumar el MONTO real cobrado y el
+  // saldo real pendiente de cada mudanza, en vez de todo-o-nada (antes una mudanza con
+  // pago parcial contaba entera como "pendiente" o entera como "cobrada").
+  const mudPagado    = mudFiltradas.reduce((a,b) => a + estadoCobro(b).cobrado, 0);
+  const mudPendiente = mudFiltradas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
   if(incluirMudEnTotales){
     totCobradoPeriodo += mudPagado;
   }
@@ -1414,7 +1465,7 @@ window.renderDashboard = function(){
   // (solo respeta el filtro de despachante, si eligió uno puntual)
   const nombresParaDeuda = filtCorr ? [filtCorr] : [...new Set(clientes.map(c => c.nombre))];
   const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
-  const mudPendienteHoy = filtCorr ? 0 : mudanzas.filter(m => !m.cobrado).reduce((a,b) => a + (b.bruto||0), 0);
+  const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
   const deudaTotalHoy = deudaDespachantesHoy + mudPendienteHoy;
 
   document.getElementById('kpis-wrap').innerHTML = `
@@ -2234,6 +2285,14 @@ window.recalcMudanza = function(){
   const totalGastos = precinto + fiscal + digitalizacion + gastoRamiro + otros;
   const netofinal   = honorNeto - totalGastos;
 
+  // Monto cobrado (pago parcial) — el campo mud_monto_cobrado reemplaza al viejo select
+  // sí/no de "cobrado". Se compara contra el bruto para saber si está sin cobrar,
+  // parcialmente cobrado, o cobrado por completo.
+  const montoCobradoInput = document.getElementById('mud_monto_cobrado');
+  const montoCobrado = montoCobradoInput ? (parseFloat(montoCobradoInput.value) || 0) : 0;
+  const saldoCobro = bruto - montoCobrado;
+  const cobradoCompleto = montoCobrado >= (bruto - 0.5);
+
   // Vista previa del estado de residencia en el formulario (si hay fecha cargada)
   const vencResidencia = document.getElementById('mud_venc_residencia')?.value || '';
   const residenciaCancelada = document.getElementById('mud_residencia_cancelada')?.value === 'si';
@@ -2248,7 +2307,7 @@ window.recalcMudanza = function(){
     document.getElementById('mud_gastos_total').textContent = '⚠️ Falta TC';
     document.getElementById('mud_neto_final').textContent  = '⚠️ Falta TC';
     document.getElementById('mud_desglose').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
-    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada };
+    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada, montoCobrado, cobrado: cobradoCompleto };
   }
 
   tcInputEl.style.borderColor = '';
@@ -2268,11 +2327,16 @@ window.recalcMudanza = function(){
     digitalizacion > 0 ? `Digitalización: $${fmt2(digitalizacion)}` : null,
     `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt2(gastoRamiro)}`,
     otros > 0 ? `Otros: $${fmt2(otros)}` : null,
-    vencResidencia ? `Residencia: ${estRes.label}` : null
+    vencResidencia ? `Residencia: ${estRes.label}` : null,
+    montoCobrado > 0
+      ? (cobradoCompleto
+          ? `✅ Cobrado: $${fmt2(montoCobrado)}`
+          : `🟡 Cobrado: $${fmt2(montoCobrado)} de $${fmt2(bruto)} (saldo $${fmt2(saldoCobro)})`)
+      : (bruto > 0 ? `❌ Sin cobrar (saldo $${fmt2(bruto)})` : null)
   ].filter(Boolean);
   document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
 
-  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada };
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada, montoCobrado, cobrado: cobradoCompleto };
 };
 
 window.guardarMudanza = async function(){
@@ -2309,7 +2373,11 @@ window.guardarMudanza = async function(){
     vencimientoResidencia: vals.vencimientoResidencia || '',
     residenciaCancelada: !!vals.residenciaCancelada,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
-    cobrado: document.getElementById('mud_cobrado').value === 'si',
+    // Monto realmente cobrado (soporta pago parcial). `cobrado` se sigue guardando
+    // como booleano, en true solo cuando ya se cobró el 100% del bruto, para no romper
+    // lo que ya depende de ese campo (ej. habilitar el pago a Ramiro).
+    montoCobrado: vals.montoCobrado,
+    cobrado: vals.cobrado,
     obs: document.getElementById('mud_obs').value.trim(),
     cargadoPor: user.username,
     ts: Date.now()
@@ -2336,7 +2404,8 @@ window.limpiarMudanza = function(){
   document.getElementById('mud_otros').value = '0';
   document.getElementById('mud_obs').value = '';
   document.getElementById('mud_ramiro_pagado').value = 'no';
-  document.getElementById('mud_cobrado').value = 'no';
+  const montoCobradoEl = document.getElementById('mud_monto_cobrado');
+  if(montoCobradoEl) montoCobradoEl.value = '0';
   document.getElementById('mud_tc').value = '';
   document.getElementById('mud_tiene_factura').value = 'si';
   document.getElementById('mud_venc_residencia').value = '';
@@ -2371,7 +2440,15 @@ window.editarMudanza = function(id){
   document.getElementById('mud_otros').value       = m.otros || 0;
   document.getElementById('mud_obs').value         = m.obs || '';
   document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
-  document.getElementById('mud_cobrado').value     = m.cobrado ? 'si' : 'no';
+  // Mudanzas viejas solo tenían el booleano `cobrado` (sin `montoCobrado` guardado):
+  // si estaba marcada como cobrada se asume que se cobró el bruto completo; si no,
+  // que todavía no se cobró nada. Mudanzas nuevas ya traen `montoCobrado` directo.
+  const montoCobradoEl = document.getElementById('mud_monto_cobrado');
+  if(montoCobradoEl){
+    montoCobradoEl.value = (m.montoCobrado !== undefined && m.montoCobrado !== null)
+      ? m.montoCobrado
+      : (m.cobrado ? (m.bruto || 0) : 0);
+  }
   document.getElementById('mud_tiene_factura').value = m.tieneFactura === false ? 'no' : 'si';
   document.getElementById('mud_venc_residencia').value = m.vencimientoResidencia || '';
   document.getElementById('mud_residencia_cancelada').value = m.residenciaCancelada ? 'si' : 'no';
@@ -2423,7 +2500,8 @@ window.actualizarMudanza = async function(){
     vencimientoResidencia: vals.vencimientoResidencia || '',
     residenciaCancelada: !!vals.residenciaCancelada,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
-    cobrado: document.getElementById('mud_cobrado').value === 'si',
+    montoCobrado: vals.montoCobrado,
+    cobrado: vals.cobrado,
     obs: document.getElementById('mud_obs').value.trim(),
     modificadoPor: user.username,
     tsEdit: Date.now()
@@ -2517,6 +2595,7 @@ function renderMudanzas(){
 
   tbody.innerHTML = pagina.map(m => {
     const estRes = estadoResidencia(m);
+    const estCobro = estadoCobro(m);
     return `
     <tr>
       <td>${m.fecha||''}</td>
@@ -2530,9 +2609,7 @@ function renderMudanzas(){
       <td style="font-weight:700;">$${fmt(m.bruto)}</td>
       <td style="color:#dc2626;">$${fmt(m.totalGastos)}</td>
       <td style="color:#059669;font-weight:700;">$${fmt(m.netoFinal)}</td>
-      <td>${m.cobrado
-        ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Cobrado</span>'
-        : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Sin cobrar</span>'}</td>
+      <td><span class="tag" style="background:${estCobro.bg};color:${estCobro.color};">${estCobro.label}</span></td>
       <td>${m.ramiroPagado === 'si'
         ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
         : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
@@ -2585,19 +2662,25 @@ window.exportarMudanzas = function(){
   };
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','RAMIRO PAGADO','FACTURA','VENC. RESIDENCIA','ESTADO RESIDENCIA','OBS'];
+  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','MONTO COBRADO','SALDO A COBRAR','RAMIRO PAGADO','FACTURA','VENC. RESIDENCIA','ESTADO RESIDENCIA','OBS'];
 
   const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
   // Los campos que no se cargaron para esa mudanza quedan como '.' (puntoSiVacio) en
-  // vez de quedar en blanco, igual que en la exportación de Operaciones.
+  // vez de quedar en blanco, igual que en la exportación de Operaciones. La columna
+  // COBRADO ahora distingue SI / PARCIAL / NO, y se agregan MONTO COBRADO y SALDO A
+  // COBRAR para poder ver el detalle del pago parcial en la planilla.
   const rows = ordenadas.map(m => {
     const estRes = estadoResidencia(m);
+    const ec = estadoCobro(m);
+    const cobradoTxt = ec.estado === 'si' ? 'SI' : (ec.estado === 'parcial' ? 'PARCIAL' : 'NO');
     return [
       fmtFechaAR(m.fecha), m.cliente||'', m.clienteFinal||'', m.destinacion||'',
       m.tc||'', m.valorUsd||'',
       dec2(m.honorNeto), dec2(m.iva), dec2(m.bruto), dec2(m.totalGastos), dec2(m.netoFinal),
-      m.cobrado ? 'SI' : 'NO',
+      cobradoTxt,
+      dec2(ec.cobrado),
+      dec2(ec.saldo),
       m.ramiroPagado === 'si' ? 'SI' : 'NO',
       m.tieneFactura === false ? 'NO' : 'SI',
       m.vencimientoResidencia ? fmtFechaAR(m.vencimientoResidencia) : '',
@@ -2611,15 +2694,17 @@ window.exportarMudanzas = function(){
   const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
   const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
   const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
+  const totCobrado = todas.reduce((a,b) => a + estadoCobro(b).cobrado, 0);
+  const totSaldoCobro = todas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
 
-  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', '', '', '', '', ''].map(puntoSiVacio);
+  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', dec2(totCobrado), dec2(totSaldoCobro), '', '', '', '', ''].map(puntoSiVacio);
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
     {wch:11},{wch:20},{wch:20},{wch:16},{wch:8},{wch:8},
-    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
+    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:13},{wch:13},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
   ];
 
   // Autofiltro: rango completo (encabezado + datos, sin la fila TOTAL) para que
@@ -2637,7 +2722,7 @@ window.exportarMudanzas = function(){
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} mudanza(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mudanza(s)"` };
 
-    [6,7,8,9,10].forEach(c => { // HONOR. NETO, IVA, BRUTO, GASTOS, NOS QUEDA
+    [6,7,8,9,10,12,13].forEach(c => { // HONOR. NETO, IVA, BRUTO, GASTOS, NOS QUEDA, MONTO COBRADO, SALDO A COBRAR
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
@@ -2648,8 +2733,8 @@ window.exportarMudanzas = function(){
   estilizarHojaExcel(ws, {
     numCols: header.length,
     numDataRows: rows.length,
-    colsDecimal2: [6,7,8,9,10],
-    colsNumericas: [4,5,6,7,8,9,10]
+    colsDecimal2: [6,7,8,9,10,12,13],
+    colsNumericas: [4,5,6,7,8,9,10,12,13]
   });
 
   const wb = XLSX.utils.book_new();
@@ -2687,6 +2772,9 @@ window.renderRamiro = function(){
   });
 
   mudanzas.forEach(m => {
+    // El pago a Ramiro por una mudanza solo se habilita cuando esa mudanza está
+    // COBRADA POR COMPLETO (ver estadoCobro) — con un cobro parcial todavía no se
+    // considera "cobrada" a estos efectos, igual que antes con el booleano `cobrado`.
     itemsTodos.push({
       tipo: 'Mudanza',
       fecha: m.fecha,
@@ -2695,7 +2783,7 @@ window.renderRamiro = function(){
       ramiroUsd: m.ramiroUsd || 190,
       pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
       estado: m.ramiroPagado || 'no',
-      cobrado: !!m.cobrado,
+      cobrado: estadoCobro(m).estado === 'si',
       id: m.id,
       col: 'mudanzas'
     });
@@ -2777,7 +2865,7 @@ window.renderRamiro = function(){
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           ${i.estado === 'no'
             ? (i.col === 'mudanzas' && !i.cobrado
-                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar</span>'
+                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar / cobro parcial</span>'
                 : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
             : `<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="editarRamiroItem('${i.id}','${i.col}')">✏️ Editar</button>`}
           <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
@@ -2818,10 +2906,10 @@ window.pagarRamiroItem = async function(id, col){
 };
 
 window.marcarTodoPagadoRamiro = async function(){
-  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas ya cobradas)')) return;
+  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas ya cobradas por completo)')) return;
   const pending = [
     ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
-    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && m.cobrado).map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
+    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && estadoCobro(m).estado === 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
   ];
   for(const p of pending){
     await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
