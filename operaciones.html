@@ -756,12 +756,12 @@
             <option value="si">✅ Pagado</option>
           </select>
         </div>
+        <!-- Antes era un select sí/no "¿Cobrado?". Ahora es un monto: soporta pago
+             parcial (ej: te pagaron $200.000 de $350.000). El estado (Sin cobrar /
+             Parcial / Cobrado) se calcula solo comparando esto contra el Total bruto. -->
         <div class="form-group">
-          <label>¿Cobrado?</label>
-          <select id="mud_cobrado">
-            <option value="no">❌ Pendiente de cobro</option>
-            <option value="si">✅ Cobrado</option>
-          </select>
+          <label>Monto cobrado ($)</label>
+          <input type="number" id="mud_monto_cobrado" value="0" oninput="recalcMudanza()" placeholder="$ 0">
         </div>
       </div>
 
