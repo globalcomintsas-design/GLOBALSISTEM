@@ -155,6 +155,9 @@ tr:hover td{background:#fafbff;}
 .endoso-resumen .falta{color:#dc2626;font-weight:700;}
 .credito-aviso-endoso{background:#fff;border-radius:8px;padding:10px 12px;border:1px solid #fed7aa;font-size:12px;color:#92400e;margin-bottom:4px;}
 .credito-aviso-endoso label{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.cc-anio-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
+.cc-anio-tab{padding:7px 16px;border-radius:20px;background:#eff6ff;color:#1e3a8a;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid #bfdbfe;user-select:none;}
+.cc-anio-tab.active{background:#1e3a8a;color:#fff;border-color:#1e3a8a;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -353,6 +356,7 @@ tr:hover td{background:#fafbff;}
     <div class="page" id="page-cuentacorriente">
       <div class="section">
         <div class="section-title">Cuenta Corriente por Cliente <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
+        <div id="ccAnioTabs" class="cc-anio-tabs"></div>
         <div class="search-bar"><input type="text" id="buscarCC" placeholder="Buscar cliente..." oninput="renderCC()" /></div>
         <div class="table-wrap">
           <table>
@@ -361,6 +365,34 @@ tr:hover td{background:#fafbff;}
           </table>
         </div>
       </div>
+
+      <div class="section">
+        <div class="section-title">👥 Costo de Personal (del año seleccionado)</div>
+        <div class="cards">
+          <div class="card">
+            <div class="card-label">Sueldo Neto</div>
+            <div class="card-value" id="cpSueldo">$ 0</div>
+            <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="verDetalleConcepto('sueldo')">Ver detalle</button>
+          </div>
+          <div class="card">
+            <div class="card-label">Autónomo</div>
+            <div class="card-value orange" id="cpAutonomo">$ 0</div>
+            <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="verDetalleConcepto('autonomo')">Ver detalle</button>
+          </div>
+          <div class="card">
+            <div class="card-label">Movilidad</div>
+            <div class="card-value blue" id="cpMovilidad">$ 0</div>
+            <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="verDetalleConcepto('movilidad')">Ver detalle</button>
+          </div>
+          <div class="card">
+            <div class="card-label">Fin de Semana</div>
+            <div class="card-value" id="cpFinDeSemana">$ 0</div>
+            <button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="verDetalleConcepto('finDeSemana')">Ver detalle</button>
+          </div>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;">Se arma solo con los pagos de Sueldos cargados a Caja desde que existe este desglose — los pagos anteriores no quedan incluidos acá.</div>
+      </div>
+
       <div class="section" id="detalleCC" style="display:none">
         <div class="section-title">
           <span id="titleDetalleCC">Detalle cliente</span>
@@ -726,6 +758,20 @@ tr:hover td{background:#fafbff;}
   </div>
 </div>
 
+<!-- MODAL DETALLE CONCEPTO (Sueldos/Autónomo/Movilidad/Fin de Semana) -->
+<div class="modal-bg" id="modalDetalleConcepto">
+  <div class="modal">
+    <div class="modal-title"><span id="tituloDetalleConcepto">Detalle</span> <button class="modal-close" onclick="cerrarModalConcepto()">✕</button></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Empleado</th><th>Monto</th></tr></thead>
+        <tbody id="tablaDetalleConcepto"></tbody>
+      </table>
+    </div>
+    <div class="btn-row" style="margin-top:16px"><button class="btn btn-outline" onclick="cerrarModalConcepto()">Cerrar</button></div>
+  </div>
+</div>
+
 <!-- MODAL EDITAR USUARIO -->
 <div class="modal-bg" id="modalEditarUsuario">
   <div class="modal">
@@ -811,6 +857,10 @@ let proveedoresNombresCaja = [];
 let clientesNombresCaja = [];
 window.clientesNombresCaja = clientesNombresCaja;
 
+// ── Cuenta Corriente: año seleccionado (tabs) ──
+let ccAnioSeleccionado = new Date().getFullYear();
+let costoPersonalActual = null;
+
 function actualizarClientesNombresCaja(){
   clientesNombresCaja = [...new Set([
     ...despachantesNombresCaja,
@@ -827,6 +877,10 @@ function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function today() { return new Date().toLocaleDateString('es-AR'); }
+function anioDeFecha(fecha){
+  const p=(fecha||'').split('/');
+  return p.length===3 ? Number(p[2]) : null;
+}
 
 // ── PARSEO DE MONTOS EN FORMATO ARGENTINO ──────────────────────────────────
 function parsearMontoAR(valorCrudo){
@@ -1918,26 +1972,99 @@ window.exportarChequesExcel=function(){
 };
 
 // CUENTA CORRIENTE
+function renderCCAnioTabs(){
+  const wrap=document.getElementById('ccAnioTabs');
+  if(!wrap) return;
+  const anios=[...new Set(allMovimientos.map(m=>anioDeFecha(m.fecha)).filter(Boolean))].sort((a,b)=>b-a);
+  const anioActual=new Date().getFullYear();
+  if(!anios.includes(anioActual)) anios.unshift(anioActual);
+  if(!anios.includes(ccAnioSeleccionado)) ccAnioSeleccionado=anios[0];
+  wrap.innerHTML=anios.map(a=>`<div class="cc-anio-tab${a===ccAnioSeleccionado?' active':''}" onclick="cambiarAnioCC(${a})">${a}</div>`).join('');
+}
+window.cambiarAnioCC=function(anio){
+  ccAnioSeleccionado=anio;
+  document.getElementById('detalleCC').style.display='none';
+  renderCC();
+};
+
+function calcularCostoPersonalAnio(anio){
+  const filtrados = allMovimientos.filter(m=>anioDeFecha(m.fecha)===anio);
+  const res = {
+    sueldo:{total:0, porEmpleado:{}},
+    autonomo:{total:0, porEmpleado:{}},
+    movilidad:{total:0, porEmpleado:{}},
+    finDeSemana:{total:0, porEmpleado:{}}
+  };
+  filtrados.forEach(m=>{
+    const nombre=m.cliente||'-';
+    if(m.conceptoSueldoNeto!==undefined){
+      const v=Number(m.conceptoSueldoNeto)||0;
+      res.sueldo.total+=v; res.sueldo.porEmpleado[nombre]=(res.sueldo.porEmpleado[nombre]||0)+v;
+    }
+    if(m.conceptoAutonomo){
+      const v=Number(m.conceptoAutonomo)||0;
+      res.autonomo.total+=v; res.autonomo.porEmpleado[nombre]=(res.autonomo.porEmpleado[nombre]||0)+v;
+    }
+    if(m.conceptoMovilidad){
+      const v=Number(m.conceptoMovilidad)||0;
+      res.movilidad.total+=v; res.movilidad.porEmpleado[nombre]=(res.movilidad.porEmpleado[nombre]||0)+v;
+    }
+    if(m.conceptoFinDeSemana){
+      const v=Number(m.conceptoFinDeSemana)||0;
+      res.finDeSemana.total+=v; res.finDeSemana.porEmpleado[nombre]=(res.finDeSemana.porEmpleado[nombre]||0)+v;
+    }
+    if(m.origenAdelanto && m.conceptoSueldos==='sueldos'){
+      const v=Number(m.importe)||0;
+      res.sueldo.total+=v; res.sueldo.porEmpleado[nombre]=(res.sueldo.porEmpleado[nombre]||0)+v;
+    }
+  });
+  return res;
+}
+window.calcularCostoPersonalAnio = calcularCostoPersonalAnio;
+
+function renderCostoPersonal(){
+  costoPersonalActual = calcularCostoPersonalAnio(ccAnioSeleccionado);
+  const elS=document.getElementById('cpSueldo'); if(elS) elS.textContent=fmtMoney(costoPersonalActual.sueldo.total);
+  const elA=document.getElementById('cpAutonomo'); if(elA) elA.textContent=fmtMoney(costoPersonalActual.autonomo.total);
+  const elM=document.getElementById('cpMovilidad'); if(elM) elM.textContent=fmtMoney(costoPersonalActual.movilidad.total);
+  const elF=document.getElementById('cpFinDeSemana'); if(elF) elF.textContent=fmtMoney(costoPersonalActual.finDeSemana.total);
+}
+
+const CONCEPTO_LABEL={ sueldo:'Sueldo Neto', autonomo:'Autónomo', movilidad:'Movilidad', finDeSemana:'Fin de Semana' };
+window.verDetalleConcepto=function(concepto){
+  if(!costoPersonalActual) costoPersonalActual=calcularCostoPersonalAnio(ccAnioSeleccionado);
+  const datos=costoPersonalActual[concepto];
+  document.getElementById('tituloDetalleConcepto').textContent=CONCEPTO_LABEL[concepto]+' · '+ccAnioSeleccionado;
+  const filas=Object.entries(datos.porEmpleado).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('tablaDetalleConcepto').innerHTML=filas.map(([nombre,monto])=>`<tr><td><strong>${nombre}</strong></td><td>${fmtMoney(monto)}</td></tr>`).join('')||'<tr><td colspan="2" style="text-align:center;color:#888;padding:16px">Sin datos en '+ccAnioSeleccionado+'</td></tr>';
+  document.getElementById('modalDetalleConcepto').classList.add('open');
+};
+window.cerrarModalConcepto=function(){document.getElementById('modalDetalleConcepto').classList.remove('open');};
+
 window.renderCC=function(){
+  renderCCAnioTabs();
   const buscar=(document.getElementById('buscarCC')?.value||'').toLowerCase();
+  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===ccAnioSeleccionado);
   const mapa={};
-  for(const m of allMovimientos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0,ultimo:'',movs:[]};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;mapa[cl].movs.push(m);if(!mapa[cl].ultimo||m.fecha>mapa[cl].ultimo)mapa[cl].ultimo=m.fecha;}
+  for(const m of movsAnio){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0,ultimo:'',movs:[]};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;mapa[cl].movs.push(m);if(!mapa[cl].ultimo||m.fecha>mapa[cl].ultimo)mapa[cl].ultimo=m.fecha;}
   const sorted=Object.entries(mapa).filter(([cl])=>!buscar||cl.toLowerCase().includes(buscar)).sort((a,b)=>b[1].ing-a[1].ing);
-  document.getElementById('tablaCC').innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.ing)}</td><td style="color:#dc2626">${fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtMoney(s)}</td><td>${d.ultimo||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCC('${cl}')">Ver detalle</button></td></tr>`;}).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">Sin datos</td></tr>';
+  document.getElementById('tablaCC').innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.ing)}</td><td style="color:#dc2626">${fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtMoney(s)}</td><td>${d.ultimo||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCC('${cl}')">Ver detalle</button></td></tr>`;}).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">Sin datos en '+ccAnioSeleccionado+'</td></tr>';
+  renderCostoPersonal();
 };
 window.verDetalleCC=function(cliente){
-  const movs=allMovimientos.filter(m=>m.cliente===cliente).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  document.getElementById('titleDetalleCC').textContent='📋 '+cliente;
-  document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('');
+  const movs=allMovimientos.filter(m=>m.cliente===cliente && anioDeFecha(m.fecha)===ccAnioSeleccionado).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  document.getElementById('titleDetalleCC').textContent='📋 '+cliente+' · '+ccAnioSeleccionado;
+  document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">Sin movimientos en '+ccAnioSeleccionado+'</td></tr>';
   renderCreditoEnDetalleCC(cliente);
   document.getElementById('detalleCC').style.display='block';
   document.getElementById('detalleCC').scrollIntoView({behavior:'smooth'});
 };
 window.exportarCCExcel=function(){
   const mapa={};
-  for(const m of allMovimientos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
+  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===ccAnioSeleccionado);
+  for(const m of movsAnio){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
   const ordenados=Object.entries(mapa).sort((a,b)=>b[1].ing-a[1].ing);
-  if(!ordenados.length){ toast('No hay datos para exportar','error'); return; }
+  if(!ordenados.length){ toast('No hay datos para exportar en '+ccAnioSeleccionado,'error'); return; }
   const header=['Cliente','Ingresos','Egresos','Saldo'];
   const rows=ordenados.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
   const totIng=ordenados.reduce((s,[,d])=>s+d.ing,0);
@@ -1961,7 +2088,31 @@ window.exportarCCExcel=function(){
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Cuenta Corriente');
-  XLSX.writeFile(wb,'CuentaCorriente_'+today().replace(/\//g,'-')+'.xlsx');
+
+  // ── Hojas separadas por concepto (Sueldos / Autónomos / Movilidad / Fines de Semana) ──
+  const costoPersonal = calcularCostoPersonalAnio(ccAnioSeleccionado);
+  const hojasConcepto = [
+    { nombre:'Sueldos', datos:costoPersonal.sueldo, colLabel:'Sueldo Neto' },
+    { nombre:'Autonomos', datos:costoPersonal.autonomo, colLabel:'Autónomo' },
+    { nombre:'Movilidad', datos:costoPersonal.movilidad, colLabel:'Movilidad' },
+    { nombre:'Fines de Semana', datos:costoPersonal.finDeSemana, colLabel:'Fin de Semana' }
+  ];
+  hojasConcepto.forEach(hc=>{
+    const filasHc=Object.entries(hc.datos.porEmpleado).sort((a,b)=>b[1]-a[1]).map(([nombre,monto])=>[nombre,dec2(monto)]);
+    const totalHc=dec2(hc.datos.total);
+    const aoaHc=[['Empleado',hc.colLabel],...filasHc,['TOTAL',totalHc]];
+    const wsHc=XLSX.utils.aoa_to_sheet(aoaHc);
+    wsHc['!cols']=[{wch:24},{wch:16}];
+    if(filasHc.length){
+      const lastRowHc=1+filasHc.length;
+      const addrTotalHc=XLSX.utils.encode_cell({r:lastRowHc,c:1});
+      wsHc[addrTotalHc]={ t:'n', v:totalHc, f:`SUBTOTAL(109,B2:B${lastRowHc})` };
+    }
+    estilizarHojaExcel(wsHc,{ numDataRows:filasHc.length, colsDecimal2:[1], colsNumericas:[1] });
+    XLSX.utils.book_append_sheet(wb,wsHc,hc.nombre);
+  });
+
+  XLSX.writeFile(wb,'CuentaCorriente_'+ccAnioSeleccionado+'_'+today().replace(/\//g,'-')+'.xlsx');
   toast('Excel generado ✓','success');
 };
 
