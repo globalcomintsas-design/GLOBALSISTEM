@@ -489,11 +489,18 @@
         <h3 style="margin:0;">⚖️ Saldo por despachante</h3>
         <div class="periodo-bar" style="margin:0;">
           <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px;">
+            Despachante:
+            <select id="saldos_filtro_despachante" onchange="renderSaldos()">
+              <option value="">Todos los despachantes</option>
+            </select>
+          </label>
+          <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px;">
             Mes:
             <select id="saldos_filtro_mes" onchange="renderSaldos()">
               <option value="">Todos los meses (histórico)</option>
             </select>
           </label>
+          <button class="btn-success" onclick="exportarSaldosExcel()">📥 Exportar movimientos (Excel)</button>
         </div>
       </div>
       <div id="saldos-periodo-nota" style="font-size:11px;color:#94a3b8;margin-bottom:10px;"></div>
