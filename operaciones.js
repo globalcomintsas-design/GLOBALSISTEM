@@ -1687,6 +1687,16 @@ function mesDeFecha(fecha){
 }
 window.mesDeFecha = mesDeFecha;
 
+// ── AÑO DE UNA FECHA (soporta ISO y formato argentino) ──
+// Se usa en la exportación de "Movimientos" de la pestaña Saldos, para filtrar tanto
+// operaciones como pagos al año que corresponda (los pagos, a diferencia de las
+// operaciones, no vienen pre-filtrados por año desde Firestore).
+function anioDeFecha(fecha){
+  const m = mesDeFecha(fecha);
+  return m ? m.slice(0,4) : '';
+}
+window.anioDeFecha = anioDeFecha;
+
 // ── COBERTURA FIFO SOBRE LO EXIGIBLE (para el saldo por mes en Saldos) ──
 // Hay dos tipos de pago en la colección 'despachantees_pagos':
 //   1) Pagos ATADOS A UNA FACTURA puntual (p.numFactura cargado) — normalmente llegan
@@ -1707,7 +1717,7 @@ function calcularCoberturaExigibleFIFO(nombre){
   const pagosGenericos  = pagosDesp.filter(p => !(p.numFactura && String(p.numFactura).trim()));
 
   const ops = operaciones.filter(o => o.despachante === nombre)
-    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(b.ts||0))
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(a.ts||0))
     .map(o => ({ ...o, exigible: montoExigible(o), cubierto: 0 }));
 
   // 1) Pagos atados a factura: se aplican directo a la(s) operación(es) con ese N° de
@@ -1818,8 +1828,22 @@ function poblarSelectorMesSaldos(){
   sel.value = v;
 }
 
+// ── Selector de despachante para la tabla de Saldos ──
+// Se puebla igual que los demás selectores de despachante del sistema (a partir de
+// 'clientes'). Al elegir uno, tanto la tabla "Saldo por despachante" como el botón de
+// exportar movimientos quedan acotados a ese despachante puntual.
+function poblarSelectorDespachanteSaldos(){
+  const sel = document.getElementById('saldos_filtro_despachante');
+  if(!sel) return;
+  const v = sel.value;
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  sel.innerHTML = '<option value="">Todos los despachantes</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = v;
+}
+
 function renderSaldos(){
-  // Select de despachantes
+  // Select de despachantes (para registrar un pago)
   const sel = document.getElementById('pago_despachante');
   if(sel){
     const v = sel.value;
@@ -1835,11 +1859,17 @@ function renderSaldos(){
   poblarSelectorMesSaldos();
   const filtMesSaldos = document.getElementById('saldos_filtro_mes')?.value || '';
 
+  // Filtro de despachante de la tabla de saldos ('' = todos)
+  poblarSelectorDespachanteSaldos();
+  const filtDespSaldos = document.getElementById('saldos_filtro_despachante')?.value || '';
+
   const notaPeriodoEl = document.getElementById('saldos-periodo-nota');
   if(notaPeriodoEl){
-    notaPeriodoEl.innerHTML = filtMesSaldos
+    const notaMes = filtMesSaldos
       ? `📅 Mostrando solo <strong>${filtMesSaldos}</strong> — "Facturado" y "Exigible" son de las operaciones de ese mes. "Pagado" es lo que le tocó cubrir a esas operaciones: primero los pagos atados a su propia factura, y el resto (pagos sin factura o sobrantes) repartido por antigüedad (FIFO). "Saldo" es lo que de ese mes queda realmente sin cubrir.`
       : `📅 Mostrando el <strong>histórico completo</strong> (todas las fechas). Elegí un mes arriba para ver la deuda real de un período puntual: los pagos con factura asignada cancelan esa operación puntual, y el resto se reparte empezando por las operaciones más antiguas.`;
+    const notaDesp = filtDespSaldos ? ` · 🔎 Filtrando solo a <strong>${filtDespSaldos}</strong>.` : '';
+    notaPeriodoEl.innerHTML = notaMes + notaDesp;
   }
 
   // Tabla de saldos por despachante
@@ -1848,12 +1878,18 @@ function renderSaldos(){
     // Si hay un mes filtrado, se listan los despachantes que tuvieron operaciones O
     // pagos en ese mes (para no perder de vista, por ejemplo, un pago suelto sin
     // operaciones ese mes). Sin filtro, se mantiene el comportamiento histórico: todos
-    // los despachantes que alguna vez tuvieron operaciones.
+    // los despachantes que alguna vez tuvieron operaciones. Si además hay un despachante
+    // puntual elegido en el filtro, la lista queda acotada solo a ese.
     let nombresConOps;
     if(filtMesSaldos){
       nombresConOps = [...new Set(operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante).filter(Boolean))].sort();
     } else {
       nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
+    }
+    if(filtDespSaldos){
+      // Siempre se muestra el despachante elegido, aunque no haya tenido movimiento
+      // en el mes filtrado (en ese caso la fila queda en $0).
+      nombresConOps = [filtDespSaldos];
     }
 
     if(!nombresConOps.length){
@@ -1918,6 +1954,161 @@ function renderSaldos(){
   }
 }
 window.renderSaldos = renderSaldos;
+
+// ── EXPORTAR MOVIMIENTOS DE UN DESPACHANTE (pestaña Saldos) ──
+// A diferencia de "Exportar Excel" del Listado (que solo exporta operaciones filtradas),
+// esta planilla arma el historial COMPLETO de un despachante puntual: cada operación
+// cargada (con su neto/IVA/bruto) intercalada cronológicamente con cada pago que se le
+// registró — incluidos los pagos que entraron SOLOS y automáticos desde Caja (quedan
+// marcados como "Automático desde Caja" en la columna Detalle). Incluye una columna de
+// SALDO ACUMULADO (ledger corrido) para poder mostrarle al despachante, de un vistazo,
+// cómo se fue formando su deuda/saldo a favor actual.
+window.exportarSaldosExcel = function(){
+  const despachante = document.getElementById('saldos_filtro_despachante')?.value || '';
+  if(!despachante){
+    toast('⚠️ Elegí un despachante en el filtro de arriba (junto al de Mes) para exportar su historial');
+    return;
+  }
+
+  // Las operaciones en memoria ya vienen acotadas al año en curso (así carga la app
+  // desde Firestore); los pagos, en cambio, se traen completos (todo el histórico).
+  const opsDesp   = operaciones.filter(o => o.despachante === despachante);
+  const pagosDesp = pagos.filter(p => p.despachante === despachante);
+
+  if(!opsDesp.length && !pagosDesp.length){
+    toast('No hay operaciones ni pagos registrados para ' + despachante);
+    return;
+  }
+
+  const fmtFechaMostrar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)){
+      const [y,m,d] = f.slice(0,10).split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return f; // ya viene en formato argentino (pagos automáticos de Caja)
+  };
+  const fechaISOparaOrdenar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0,10);
+    const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return '';
+  };
+  const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
+
+  // Filas de OPERACIÓN
+  const filasOps = opsDesp.map(o => {
+    const exigible = montoExigible(o);
+    return {
+      fechaISO: o.fecha || '',
+      tipo: 'OPERACIÓN',
+      fechaMostrar: fmtFechaMostrar(o.fecha),
+      cliente: o.cliente || '',
+      detalle: [o.destinacion, o.mic ? 'MIC:'+o.mic : ''].filter(Boolean).join(' ') || '-',
+      canal: (o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='ADICIONALES') ? '' : (o.canal||''),
+      neto: o.neto||0,
+      iva: o.iva||0,
+      bruto: o.bruto||0,
+      exigible,
+      pagado: 0,
+      numFactura: o.numFactura ? o.numFactura : 'Sin factura (exigible: Neto)',
+      obs: [o.obs, o.adicionales].filter(Boolean).join(' | ')
+    };
+  });
+
+  // Filas de PAGO (incluye los cargados a mano Y los automáticos desde Caja: estos
+  // últimos ya están en la colección 'despachantees_pagos' con origenCaja:true)
+  const filasPagos = pagosDesp.map(p => {
+    const refFactura = p.numFactura ? `Fact. ${p.numFactura}` : 'Pago genérico (se aplica por antigüedad)';
+    const origen = p.origenCaja ? ' · Automático desde Caja' : ' · Cargado manual';
+    return {
+      fechaISO: fechaISOparaOrdenar(p.fecha),
+      tipo: 'PAGO',
+      fechaMostrar: fmtFechaMostrar(p.fecha),
+      cliente: 'PAGO',
+      detalle: refFactura + origen,
+      canal: '',
+      neto: 0, iva: 0, bruto: 0,
+      exigible: 0,
+      pagado: p.monto || 0,
+      numFactura: p.numFactura || '',
+      obs: p.obs || ''
+    };
+  });
+
+  // Se combinan y ordenan cronológicamente (a igual fecha, la operación va antes que el pago)
+  const filas = [...filasOps, ...filasPagos].sort((a,b) =>
+    a.fechaISO.localeCompare(b.fechaISO) || (a.tipo==='PAGO'?1:-1) - (b.tipo==='PAGO'?1:-1));
+
+  // Saldo corrido (ledger): exigible acumulado − pagado acumulado, en orden cronológico,
+  // para que se vea cómo se fue formando el saldo actual movimiento por movimiento.
+  let acumExigible = 0, acumPagado = 0;
+  const rows = filas.map(f => {
+    acumExigible += f.exigible;
+    acumPagado   += f.pagado;
+    const saldoCorrido = acumExigible - acumPagado;
+    return [
+      f.fechaMostrar, f.tipo, f.cliente, f.detalle, f.canal,
+      f.tipo==='OPERACIÓN' ? dec2(f.neto) : '',
+      f.tipo==='OPERACIÓN' ? dec2(f.iva)  : '',
+      f.tipo==='OPERACIÓN' ? dec2(f.bruto): '',
+      f.numFactura,
+      f.tipo==='PAGO' ? dec2(f.pagado) : '',
+      dec2(saldoCorrido),
+      f.obs
+    ].map(puntoSiVacio);
+  });
+
+  const header = ['FECHA','TIPO','CLIENTE','DETALLE','CANAL','NETO $','IVA $','BRUTO $','N° FACTURA','PAGO $','SALDO ACUMULADO $','OBSERVACIONES'];
+
+  // Totales: se usa el mismo cálculo que ya se ve en la tabla "Saldo por despachante"
+  // (histórico, sin filtro de mes), para que el Excel coincida siempre con la pantalla.
+  const { facturado, pagado, saldo } = calcularSaldoDespachante(despachante);
+  const totalRow = ['TOTAL', `${opsDesp.length} operación(es) · ${pagosDesp.length} pago(s)`, '', '', '',
+    '', '', dec2(facturado), '', dec2(pagado), dec2(saldo), ''].map(puntoSiVacio);
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:11},{wch:16},{wch:26},{wch:7},
+    {wch:12},{wch:11},{wch:12},{wch:18},{wch:12},{wch:16},{wch:32}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length;
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+
+  // TOTAL con fórmulas SUBTOTAL: si se filtra en Excel, recalcula solo lo visible
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} movimiento(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" movimiento(s)"` };
+    [7,9].forEach(c => { // BRUTO $ (facturado), PAGO $
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [5,6,7,9,10],
+    colsNumericas: [5,6,7,9,10]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Movimientos');
+
+  const nombreArchivo = `movimientos_${despachante}.xlsx`.replace(/\s+/g,'_');
+  XLSX.writeFile(wb, nombreArchivo);
+  toast('📥 Excel de movimientos generado para ' + despachante);
+};
 
 // ── RENDER TABLA CLIENTES (DESPACHANTES) ──
 function renderTablaClientes(){
