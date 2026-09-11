@@ -235,7 +235,19 @@ td input[type=number]:focus{border-color:#1e3a8a;background:#fff;}
         </div>
       </div>
       <div class="field"><label>Mes de inicio</label><input type="month" id="adelInicio"></div>
-      <div class="field"><label>Observación (opcional)</label><input type="text" id="adelObs" placeholder="Ej: anticipo diciembre"></div>
+      <div class="field"><label>Cuenta de origen</label>
+        <select id="adelCuenta">
+          <option value="Caja">Caja (efectivo)</option>
+          <option value="Banco">Banco</option>
+          <option value="Mercado Pago">Mercado Pago</option>
+        </select>
+      </div>
+      <div class="field full"><label>Observación (opcional)</label><input type="text" id="adelObs" placeholder="Ej: anticipo diciembre"></div>
+      <div class="field full">
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 12px;font-size:11px;color:#92400e;">
+          💡 Al guardar, se carga automáticamente un Egreso por el monto total en la cuenta elegida (la plata sale de Caja YA). Después, el descuento mensual en la liquidación no vuelve a sacar esa plata de Caja — solo reduce lo que se le paga al empleado ese mes.
+        </div>
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="guardarAdel()">💾 Guardar</button>
@@ -334,6 +346,7 @@ let historialCargado = false;
 let liqActualDoc = null;      // doc completo de 'sueldos/{periodo}' cargado actualmente (para saber si ya se cargó a Caja)
 
 function fmt(v){ return '$ '+Math.round(v||0).toLocaleString('es-AR'); }
+function dec2(n){ return Math.round((Number(n||0) + Number.EPSILON) * 100) / 100; }
 function periodoLabel(val){
   if(!val) return '';
   const [y,m]=val.split('-');
@@ -720,7 +733,7 @@ window.renderAdelantos=function(){
       <div class="adel-avatar ${cc}">${emp.iniciales}</div>
       <div class="adel-info">
         <div class="adel-nombre">${adel.empleado} <span class="badge badge-${adel.tipo==='adelanto'?'adelanto':'prestamo'}">${adel.tipo==='adelanto'?'Adelanto':'Préstamo'}</span> <span class="badge badge-${esSaldado?'saldado':'activo'}">${esSaldado?'✓ Saldado':'Activo'}</span></div>
-        <div class="adel-detalle">${adel.tipo==='adelanto'?periodoLabel(adel.inicio):`Desde ${periodoLabel(adel.inicio)} · ${pagadas}/${total} cuotas`}${adel.obs?' · '+adel.obs:''}</div>
+        <div class="adel-detalle">${adel.tipo==='adelanto'?periodoLabel(adel.inicio):`Desde ${periodoLabel(adel.inicio)} · ${pagadas}/${total} cuotas`}${adel.obs?' · '+adel.obs:''}${adel.cuentaOrigen?' · desde '+adel.cuentaOrigen:''}</div>
       </div>
       <div class="adel-montos">
         <div class="adel-cuota">${cuota>0?'− '+fmt(cuota)+' este mes':esSaldado?'Saldado':'Sin desc. este mes'}</div>
@@ -739,6 +752,7 @@ window.abrirModalAdel=function(){
   ['adelMonto','adelCuotas','adelObs'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('adelTipo').value='adelanto';
   document.getElementById('adelInicio').value=periodoActual();
+  const selCuenta=document.getElementById('adelCuenta'); if(selCuenta) selCuenta.value='Caja';
   window.toggleCuotas();
   document.getElementById('modalAdel').classList.add('open');
 };
@@ -757,6 +771,15 @@ window.calcCuota=function(){
     document.getElementById('cuotaMeses').textContent=cuotas+(cuotas>1?' meses':' mes');
   }
 };
+
+// ── REGISTRAR ADELANTO/PRÉSTAMO ───────────────────────────────────────
+// Al guardar, además de crear el registro en 'adelantos' (usado para
+// calcular el descuento mensual en la liquidación), se carga un Egreso
+// COMPLETO en Caja por el monto total — la plata sale de la cuenta elegida
+// en el momento de otorgarlo, no cuando se descuenta del sueldo. El
+// descuento mensual posterior no vuelve a tocar Caja: solo reduce el
+// "Neto a pagar" de ese mes (ver cargarACaja()). Aplica igual para
+// Adelanto (un solo mes) y Préstamo (en cuotas).
 window.guardarAdel=async function(){
   if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
   const empleado=document.getElementById('adelEmpleado').value;
@@ -765,16 +788,61 @@ window.guardarAdel=async function(){
   const cuotas=parseInt(document.getElementById('adelCuotas').value)||1;
   const inicio=document.getElementById('adelInicio').value;
   const obs=document.getElementById('adelObs').value.trim();
+  const cuentaOrigen=document.getElementById('adelCuenta')?.value||'Caja';
   if(!empleado||monto<=0||!inicio){toast('Completá empleado, monto y mes de inicio','error');return;}
   if(tipo==='prestamo'&&(!cuotas||cuotas<1)){toast('Ingresá la cantidad de cuotas','error');return;}
-  await addDoc(collection(db,'adelantos'),{empleado,tipo,monto,cuotas:tipo==='prestamo'?cuotas:1,inicio,obs,estado:'activo',creadoPor:currentUser.nombre,creadoEn:new Date().toISOString()});
+
+  let movCajaId=null;
+  try{
+    const refMov = await addDoc(collection(db,'movimientos'),{
+      tipo:'Egreso',
+      cuenta:cuentaOrigen,
+      factura:'',
+      cliente:empleado,
+      detalle:(tipo==='prestamo'?'Préstamo a ':'Adelanto a ')+empleado+(obs?(' — '+obs):''),
+      importe:dec2(monto),
+      observaciones:obs,
+      fecha:new Date().toLocaleDateString('es-AR'),
+      periodo:inicio,
+      ts:Date.now(),
+      creadoPor:currentUser.nombre,
+      origenAdelanto:true,
+      tipoAdelanto:tipo,
+      conceptoSueldos:'sueldos'
+    });
+    movCajaId=refMov.id;
+  }catch(e){
+    toast('Error al cargar el egreso en Caja: '+e.message,'error');
+    return;
+  }
+
+  try{
+    await addDoc(collection(db,'adelantos'),{empleado,tipo,monto,cuotas:tipo==='prestamo'?cuotas:1,inicio,obs,estado:'activo',cuentaOrigen,movCajaId,creadoPor:currentUser.nombre,creadoEn:new Date().toISOString()});
+  }catch(e){
+    toast('Se cargó el egreso en Caja pero falló el registro del adelanto: '+e.message,'error');
+    return;
+  }
+
   window.cerrarModalAdel();
-  toast('Registrado ✓','success');
+  toast('Registrado ✓ · Egreso de '+fmt(monto)+' cargado a '+cuentaOrigen,'success');
   const body=document.getElementById('adelBody');
   if(!body.classList.contains('open')){body.classList.add('open');document.getElementById('adelToggle').classList.add('open');}
 };
 window.marcarSaldado=async function(id){await updateDoc(doc(db,'adelantos',id),{estado:'saldado'});toast('Marcado como saldado ✓','success');};
-window.eliminarAdel=async function(id){if(!confirm('¿Eliminar este adelanto/préstamo?'))return;await deleteDoc(doc(db,'adelantos',id));toast('Eliminado','error');};
+
+// Al eliminar un adelanto/préstamo, también se borra el Egreso que se había
+// cargado en Caja al otorgarlo (si existe — los que se crearon antes de
+// este cambio no tienen movCajaId, y simplemente no se toca nada en Caja).
+window.eliminarAdel=async function(id){
+  if(!confirm('¿Eliminar este adelanto/préstamo? También se va a eliminar el egreso que se cargó en Caja al otorgarlo (si lo tiene vinculado).'))return;
+  const adel=allAdelanto.find(a=>a.id===id);
+  if(adel?.movCajaId){
+    try{ await deleteDoc(doc(db,'movimientos',adel.movCajaId)); }
+    catch(e){ console.warn('No se pudo eliminar el egreso vinculado en Caja:',e); }
+  }
+  await deleteDoc(doc(db,'adelantos',id));
+  toast('Eliminado','error');
+};
 
 // Construye el objeto "empleados" a partir de los valores ACTUALES en pantalla
 // (mismos inputs que ve el usuario en este momento). Se usa tanto para
@@ -875,6 +943,10 @@ window.eliminarExEmpleadoPeriodo=async function(nombre){
 // usa caja.html. Es re-ejecutable (por si hay que corregir un importe y
 // recargar), pero SIEMPRE pide confirmación explícita si ya se había cargado
 // antes, para evitar duplicar egresos en Caja sin querer.
+// Cada Egreso también lleva el desglose por concepto (Sueldo Neto = Bruto -
+// Descuentos, Autónomo, Movilidad, Fin de Semana) para que Caja pueda armar
+// el resumen de "Costo de Personal" en Cuenta Corriente sin tener que
+// adivinar de dónde sale cada peso.
 window.cargarACaja=async function(){
   if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
   const periodo=periodoActual();
@@ -925,6 +997,10 @@ window.cargarACaja=async function(){
         cliente:nombre,
         detalle:'Sueldo '+periodoLabel(periodo),
         importe:d.neto||0,
+        conceptoSueldoNeto: dec2((d.bruto||0)-(d.descuentos||0)),
+        conceptoAutonomo: dec2(d.autonomo||0),
+        conceptoMovilidad: dec2(d.movilidad||0),
+        conceptoFinDeSemana: dec2(d.finesdesemana||0),
         observaciones:'Cargado automáticamente desde Sueldos',
         fecha:fechaAR,
         periodo:periodoMovimiento,
