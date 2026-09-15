@@ -1956,12 +1956,42 @@ window.verDetalleCheque=function(id){
 window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque').classList.remove('open');};
 window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');resetPaginaCheques();};
 
+// ── FECHAS PARA EXCEL ──────────────────────────────────────────────────
+// Convierte "dd/mm/aaaa" (o "aaaa-mm-dd") al número de serie de fecha de Excel.
+// Guardando la celda como FECHA real (y no como texto), el filtro del encabezado
+// en Excel se abre agrupado por Año › Mes › Día, y se puede tildar un mes entero
+// o días sueltos de ese mes.
+function fechaSerialExcel(fecha){
+  if(!fecha) return null;
+  const s = String(fecha).trim();
+  let d, m, a;
+  if(s.includes('/')){
+    const p = s.split('/'); if(p.length!==3) return null;
+    d = Number(p[0]); m = Number(p[1]); a = Number(p[2]);
+  } else if(s.includes('-')){
+    const p = s.split('-'); if(p.length!==3) return null;
+    a = Number(p[0]); m = Number(p[1]); d = Number(p[2]);
+  } else return null;
+  if(!a || !m || !d || isNaN(a) || isNaN(m) || isNaN(d)) return null;
+  if(a < 100) a += 2000;
+  const ms = Date.UTC(a, m-1, d) - Date.UTC(1899, 11, 30);
+  const serial = Math.round(ms / 86400000);
+  return serial > 0 ? serial : null;
+}
+// Devuelve el serial si se pudo interpretar; si no, deja el texto original (o vacío)
+function celdaFechaExcel(fecha){
+  const s = fechaSerialExcel(fecha);
+  return s === null ? (fecha || '') : s;
+}
+window.fechaSerialExcel = fechaSerialExcel;
+
 // ── EXPORTAR EXCEL: estilo unificado (Arial 7) — mismo criterio que usa operaciones.js ──
 function estilizarHojaExcel(ws, opts){
-  const { numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
+  const { numDataRows, colsDecimal2 = [], colsNumericas = [], colsFecha = [] } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const formatoDecimal = '#,##0.00';
+  const formatoFecha = 'dd/mm/yyyy';
   const totalRowIdx = 1 + numDataRows;
 
   const range = XLSX.utils.decode_range(ws['!ref']);
@@ -1973,6 +2003,15 @@ function estilizarHojaExcel(ws, opts){
       if(R > 0 && R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].z = formatoDecimal;
       }
+
+      // Columnas de fecha: quedan como fecha real, así el filtro se agrupa por mes y día
+      if(R > 0 && R !== totalRowIdx && colsFecha.includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].t = 'n';
+        ws[addr].z = formatoFecha;
+      }
+
+      const alineacion = colsFecha.includes(C) ? 'center' : (colsNumericas.includes(C) ? 'right' : 'left');
+      const formatoCol = colsDecimal2.includes(C) ? formatoDecimal : (colsFecha.includes(C) ? formatoFecha : undefined);
 
       if(R === 0){
         ws[addr].s = {
@@ -1993,8 +2032,8 @@ function estilizarHojaExcel(ws, opts){
         ws[addr].s = {
           font: { sz: 7, name: 'Arial' },
           border: bordeTodo,
-          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
-          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+          alignment: { horizontal: alineacion },
+          numFmt: formatoCol
         };
       }
     }
@@ -2006,7 +2045,7 @@ window.exportarChequesExcel=function(){
   const filas=allMovimientos.filter(m=>m.cuenta==='Cheque'&&m.numeroCheque).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   if(!filas.length){ toast('No hay cheques para exportar','error'); return; }
   const header=['N° Cheque','Cliente','Banco','Vencimiento','Importe','Estado','Endosado a','Quién pagó','Fecha carga','Observaciones'];
-  const rows=filas.map(m=>[m.numeroCheque||'',m.cliente,m.bancoCheque||'',m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'',dec2(m.importe),m.estadoCheque||'En cartera',m.estadoCheque==='Endosado'?(m.endosadoA||''):'',m.pagadorCheque||'',m.fecha||'',m.observaciones||'']);
+  const rows=filas.map(m=>[m.numeroCheque||'',m.cliente,m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),dec2(m.importe),m.estadoCheque||'En cartera',m.estadoCheque==='Endosado'?(m.endosadoA||''):'',m.pagadorCheque||'',celdaFechaExcel(m.fecha),m.observaciones||'']);
   const totImporte=filas.reduce((s,m)=>s+Number(m.importe||0),0);
   const totalRow=['TOTAL',`${filas.length} cheque(s)`,'','',dec2(totImporte),'','','','',''];
   const aoa=[header,...rows,totalRow];
@@ -2022,7 +2061,7 @@ window.exportarChequesExcel=function(){
   const addrImp=XLSX.utils.encode_cell({r:totalRowNum-1,c:4});
   ws[addrImp]={ t:'n', v:dec2(totImporte), f:`SUBTOTAL(109,E${firstDataRow}:E${lastDataRow})` };
 
-  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[4], colsNumericas:[4] });
+  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[4], colsNumericas:[4], colsFecha:[3,8] });
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Cheques');
@@ -2288,7 +2327,7 @@ window.exportarReporteExcel=function(){
   const wb=XLSX.utils.book_new();
 
   const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por'];
-  const rows=movs.map(m=>[m.fecha,m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.bancoCheque||'',m.fechaVencCheque||'',m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
+  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
   const totImporte=movs.reduce((s,m)=>s+Number(m.importe||0),0);
   const totalRow=['TOTAL',`${movs.length} mov.`,'','','','',dec2(totImporte),'','','','','','',''];
   const aoa=[header,...rows,totalRow];
@@ -2301,7 +2340,7 @@ window.exportarReporteExcel=function(){
   ws1[addrCant]={ t:'str', v:`${rows.length} mov.`, f:`SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mov."` };
   const addrImp=XLSX.utils.encode_cell({r:totalRowNum-1,c:6});
   ws1[addrImp]={ t:'n', v:dec2(totImporte), f:`SUBTOTAL(109,G${firstDataRow}:G${lastDataRow})` };
-  estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6] });
+  estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6], colsFecha:[0,9] });
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
 
   if(tipo==='todos'||tipo==='porCuenta'){
@@ -2657,7 +2696,7 @@ window.exportarBoletasExcel = function(){
   if(!allBoletas.length){ toast('No hay boletas para exportar en este período','error'); return; }
   const filas = [...allBoletas].sort((a,b)=>(a.ts||0)-(b.ts||0));
   const header=['Fecha','Socio','Tipo Factura','Rubro','N° Boleta','Importe','% IVA','IVA $','Neto','Observaciones'];
-  const rows = filas.map(b=>[b.fecha||'',b.socio,'Factura '+b.tipoFactura,b.rubro||'',b.numeroBoleta||'',dec2(b.importe),b.tipoFactura==='A'?b.ivaPct:'',dec2(b.ivaMonto||0),dec2(b.neto||b.importe),b.observaciones||'']);
+  const rows = filas.map(b=>[celdaFechaExcel(b.fecha),b.socio,'Factura '+b.tipoFactura,b.rubro||'',b.numeroBoleta||'',dec2(b.importe),b.tipoFactura==='A'?b.ivaPct:'',dec2(b.ivaMonto||0),dec2(b.neto||b.importe),b.observaciones||'']);
   const totImporte = filas.reduce((s,b)=>s+Number(b.importe||0),0);
   const totIva = filas.filter(b=>b.tipoFactura==='A').reduce((s,b)=>s+Number(b.ivaMonto||0),0);
   const totNeto = filas.reduce((s,b)=>s+Number(b.neto||b.importe||0),0);
@@ -2678,7 +2717,7 @@ window.exportarBoletasExcel = function(){
   const addrNeto=XLSX.utils.encode_cell({r:totalRowNum-1,c:8});
   ws[addrNeto]={ t:'n', v:dec2(totNeto), f:`SUBTOTAL(109,I${firstDataRow}:I${lastDataRow})` };
 
-  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[5,7,8], colsNumericas:[5,6,7,8] });
+  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[5,7,8], colsNumericas:[5,6,7,8], colsFecha:[0] });
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Boletas '+boletasPeriodoActual);
