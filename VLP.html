@@ -987,6 +987,68 @@ function calcularArchivada(estadoSim, pagada) {
   return false;
 }
 
+// ---- ARCHIVADO AUTOMÁTICO DE CONCILIADAS ANTIGUAS (+180 DÍAS) ----
+// Se ejecuta al final de cada cargarOperaciones(), usando allOps ya en
+// memoria (sin lecturas extra a Firestore). Archiva SOLO operaciones que
+// cumplen las tres condiciones a la vez:
+//   1) pagada === true
+//   2) origen === 'COMPLETO' (hubo cruce real DUX↔VLP, es decir, lo
+//      realizado y lo pagado ya se conciliaron)
+//   3) fecha_pago con más de 180 días de antigüedad respecto a hoy
+// Las pendientes NUNCA entran acá (no están pagada:true). Las SOLO_VLP
+// pagadas tampoco se tocan, porque todavía no tienen el cruce con DUX
+// confirmado; si se archivaran antes de tiempo, se podría perder de vista
+// una reconciliación pendiente. El archivado es reversible: solo cambia
+// archivada a true, no borra el documento ni su historial en el log.
+async function archivarConciliadasAntiguas() {
+  const hoy = hoyLocal();
+  const candidatas = allOps.filter(o =>
+    o.pagada &&
+    o.origen === 'COMPLETO' &&
+    !o.archivada &&
+    o.fecha_pago &&
+    (() => {
+      const fp = aFechaLocal(o.fecha_pago);
+      const dias = fp ? diasEntreFechas(fp, hoy) : null;
+      return dias !== null && dias > 180;
+    })()
+  );
+  if(!candidatas.length) return;
+
+  const ahora = ahoraLocal();
+  const BATCH_SIZE = 490;
+
+  for(let i=0;i<candidatas.length;i+=BATCH_SIZE) {
+    const batch = writeBatch(db);
+    candidatas.slice(i,i+BATCH_SIZE).forEach(o=>{
+      batch.update(doc(db,'operaciones_vlp',o.id),{archivada:true, ts_actualizacion:ahora});
+    });
+    await batch.commit();
+  }
+
+  for(let i=0;i<candidatas.length;i+=BATCH_SIZE) {
+    const batch = writeBatch(db);
+    candidatas.slice(i,i+BATCH_SIZE).forEach(o=>{
+      const fp = aFechaLocal(o.fecha_pago);
+      batch.set(doc(collection(db,'log_conciliaciones')),{
+        tipo_evento:'OPERACION_ARCHIVADA',
+        operacion:o.operacion,
+        descripcion:`Archivada automáticamente: pagada, conciliada (COMPLETO) y con más de 180 días desde el pago (${formatFecha(fp)})`,
+        vlp_archivo:'',dux_archivo:'',
+        fecha_evento:ahora, usuario: currentUser ? currentUser.nombre : 'Sistema',
+        datos_antes:{archivada:false}, datos_despues:{archivada:true}
+      });
+    });
+    await batch.commit();
+  }
+
+  // Reflejar el cambio en memoria para que los render* subsiguientes ya
+  // no muestren estas operaciones sin necesidad de otro round-trip.
+  candidatas.forEach(o=>{ o.archivada = true; });
+
+  toast(`${candidatas.length} operación(es) conciliadas y con +180 días archivadas automáticamente`,'success');
+}
+
 // ---- RUEDA DE CARGA GLOBAL ----
 let _loadingCount=0;
 function mostrarCarga(){ _loadingCount++; document.getElementById('loaderOverlay').classList.add('show'); }
@@ -1038,6 +1100,10 @@ async function cargarOperaciones() {
   snapPendientes.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
   snapPagadas.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
   allOps = Object.values(mapaOps);
+
+  // Archivado automático de conciliadas (pagada + COMPLETO) con +180 días
+  // desde el pago. Corre sobre allOps ya en memoria, sin lecturas extra.
+  await archivarConciliadasAntiguas();
 
   poblarMesesPend();
   poblarMesesPag();
