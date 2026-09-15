@@ -158,6 +158,7 @@ tr:hover td{background:#fafbff;}
 .cc-anio-tabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;}
 .cc-anio-tab{padding:7px 16px;border-radius:20px;background:#eff6ff;color:#1e3a8a;font-size:12px;font-weight:700;cursor:pointer;border:1.5px solid #bfdbfe;user-select:none;}
 .cc-anio-tab.active{background:#1e3a8a;color:#fff;border-color:#1e3a8a;}
+.estado-manual-tag{font-size:10px;color:#92400e;background:#fef3c7;border-radius:20px;padding:1px 6px;font-weight:600;white-space:nowrap;}
 @media(max-width:500px){
   .form-grid{grid-template-columns:1fr;}
   .cards{grid-template-columns:1fr 1fr;}
@@ -737,6 +738,7 @@ tr:hover td{background:#fafbff;}
               <option value="Endosado">Endosado</option>
               <option value="Rechazado">Rechazado</option>
             </select>
+            <div class="hint" id="eEstadoChequeHint"></div>
           </div>
           <div class="field" id="eEndosadoAWrap" style="display:none"><label>Endosado a</label><input type="text" id="eEndosadoA" placeholder="A quién se le endosó..." /></div>
         </div>
@@ -1125,10 +1127,15 @@ function initFirestore() {
 }
 
 // CHEQUES VENCIMIENTOS
+// Acredita solo, por vencimiento, los cheques cuyo estado NO fue tocado a mano.
+// Si alguien cambió el estado manualmente (por ej. para volver a ponerlo "En cartera"
+// y poder endosarlo), queda marcado con estadoChequeManual:true y este proceso
+// automático NO lo vuelve a pisar.
 async function procesarVencimientosCheques() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   for (const m of allMovimientos) {
     if (m.cuenta !== 'Cheque' || !m.fechaVencCheque) continue;
+    if (m.estadoChequeManual) continue; // estado puesto a mano: manda el usuario
     if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado' || m.estadoCheque === 'Endosado') continue;
     const fv = new Date(m.fechaVencCheque+'T00:00:00');
     if (fv <= hoy) {
@@ -1284,6 +1291,18 @@ window.toggleEndosoFields = function(){
 window.toggleEndosoFieldsModal = function(){
   const wrap = document.getElementById('eEndosadoAWrap');
   if(wrap) wrap.style.display = document.getElementById('eEstadoCheque').value==='Endosado' ? '' : 'none';
+  const hint = document.getElementById('eEstadoChequeHint');
+  const mov = allMovimientos.find(x=>x.id===editandoId);
+  if(hint && mov){
+    const cambio = (mov.estadoCheque||'En cartera') !== document.getElementById('eEstadoCheque').value;
+    if(cambio){
+      hint.textContent = '🔒 Al guardar, este estado queda fijado a mano y el vencimiento automático no lo va a pisar.';
+      hint.style.color = '#92400e';
+    } else {
+      hint.textContent = mov.estadoChequeManual ? '🔒 Estado fijado a mano (el automático no lo toca).' : '';
+      hint.style.color = '#92400e';
+    }
+  }
 };
 
 window.limpiarForm = function() {
@@ -1419,7 +1438,16 @@ window.abrirEditar=function(id){
   document.getElementById('eObservaciones').value=m.observaciones||'';
   cerrarACCaja('ac_eCliente');
   const wrap=document.getElementById('eChequeFieldsWrap');
-  if(m.cuenta==='Cheque'){wrap.style.display='';document.getElementById('eNumeroCheque').value=m.numeroCheque||'';document.getElementById('eBancoCheque').value=m.bancoCheque||'';document.getElementById('eFechaVencCheque').value=m.fechaVencCheque||'';document.getElementById('ePagadorCheque').value=m.pagadorCheque||'';document.getElementById('eEstadoCheque').value=m.estadoCheque||'En cartera';}
+  if(m.cuenta==='Cheque'){
+    wrap.style.display='';
+    document.getElementById('eNumeroCheque').value=m.numeroCheque||'';
+    document.getElementById('eBancoCheque').value=m.bancoCheque||'';
+    document.getElementById('eFechaVencCheque').value=m.fechaVencCheque||'';
+    document.getElementById('ePagadorCheque').value=m.pagadorCheque||'';
+    document.getElementById('eEstadoCheque').value=m.estadoCheque||'En cartera';
+    document.getElementById('eEndosadoA').value=m.endosadoA||'';
+    toggleEndosoFieldsModal();
+  }
   else wrap.style.display='none';
   document.getElementById('modalEditar').classList.add('open');
 };
@@ -1431,13 +1459,39 @@ window.guardarEdicion=async function(){
   if(isNaN(importeEditado) || importeEditado<=0){ toast('Importe inválido','error'); return; }
   const clienteEditado = document.getElementById('eCliente').value;
   const data={tipo:document.getElementById('eTipo').value,cuenta,factura:document.getElementById('eFactura').value,cliente:clienteEditado,detalle:document.getElementById('eDetalle').value,importe:importeEditado,observaciones:document.getElementById('eObservaciones').value,editadoPor:currentUser.nombre,editadoTs:Date.now()};
-  if(cuenta==='Cheque'){data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();data.bancoCheque=document.getElementById('eBancoCheque').value.trim();data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();data.estadoCheque=document.getElementById('eEstadoCheque').value;data.endosadoA=document.getElementById('eEndosadoA').value.trim();}
+  if(cuenta==='Cheque'){
+    data.numeroCheque=document.getElementById('eNumeroCheque').value.trim();
+    data.bancoCheque=document.getElementById('eBancoCheque').value.trim();
+    data.fechaVencCheque=document.getElementById('eFechaVencCheque').value;
+    data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();
+    data.estadoCheque=document.getElementById('eEstadoCheque').value;
+    data.endosadoA=document.getElementById('eEndosadoA').value.trim();
+    // Si el estado lo cambiaste vos a mano, queda fijado: el proceso automático
+    // de vencimientos ya no lo vuelve a poner en "Acreditado".
+    const movOriginal = allMovimientos.find(x=>x.id===editandoId);
+    if(movOriginal && (movOriginal.estadoCheque||'En cartera') !== data.estadoCheque){
+      data.estadoChequeManual = true;
+      data.estadoChequeManualPor = currentUser.nombre;
+      data.estadoChequeManualTs = Date.now();
+    }
+  }
   await updateDoc(doc(db,'movimientos',editandoId),data);
 
   try { await guardarProveedorSiEsNuevo(clienteEditado); }
   catch(e){ console.warn('No se pudo guardar el proveedor nuevo:', e); }
 
   cerrarModal();toast('Actualizado ✓ (' + fmtMoney(importeEditado) + ')','success');
+};
+
+// Libera el estado fijado a mano de un cheque: vuelve a quedar bajo el
+// automático por vencimiento (botón 🔓 en la tabla de Cheques).
+window.liberarEstadoManualCheque = async function(id){
+  if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
+  if(!confirm('¿Volver a dejar este cheque bajo el acreditado automático por vencimiento?')) return;
+  try{
+    await updateDoc(doc(db,'movimientos',id), { estadoChequeManual:false });
+    toast('Estado liberado ✓ (vuelve al automático)','success');
+  }catch(e){ toast('Error: '+e.message,'error'); }
 };
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1513,7 +1567,8 @@ window.usarCreditoManual = async function(proveedor){
       por defecto), ese crédito se descuenta primero del total a cubrir.
    2) Cada cheque tildado se actualiza: estadoCheque='Endosado' (queda
       excluido de los saldos: esa plata nunca estuvo disponible en caja,
-      se usó directamente para endosar).
+      se usó directamente para endosar) y estadoChequeManual=true, para
+      que el proceso de vencimientos no lo vuelva a tocar nunca.
    3) Si se usan cheques, se crea UN Egreso en 'movimientos' con cuenta
       'Cheque', marcado con excluirDeSaldos:true.
    4) Si se agrega un complemento en efectivo/transferencia, se crea
@@ -1596,7 +1651,7 @@ function renderListaChequesEndosoCheque(preseleccionarId){
     .filter(m=>m.cuenta==='Cheque' && m.numeroCheque && (m.estadoCheque==='En cartera' || m.estadoCheque==='Depositado'))
     .sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   if(!candidatos.length){
-    wrap.innerHTML = '<div style="padding:10px;color:#888;font-size:12px;">No hay cheques disponibles en cartera.</div>';
+    wrap.innerHTML = '<div style="padding:10px;color:#888;font-size:12px;">No hay cheques disponibles en cartera. Si el cheque que querés endosar figura "Acreditado", editalo (✏️) y ponelo en "En cartera": queda fijado a mano y aparece acá.</div>';
     return;
   }
   // conserva los que ya estaban tildados al re-renderizar (por ej. cuando llega un snapshot nuevo)
@@ -1684,6 +1739,7 @@ async function guardarEndosoCheque(){
     for(const m of chequesMovs){
       await updateDoc(doc(db,'movimientos', m.id), {
         estadoCheque: 'Endosado',
+        estadoChequeManual: true,
         endosadoA: destino,
         facturasEndosadas: filas,
         chequesAsociados: numerosCheques.filter(n=>n!==m.numeroCheque),
@@ -1856,9 +1912,11 @@ window.renderCheques=function(){
   document.getElementById('tablaCheques').innerHTML=filPagina.map(m=>{
     const e=m.estadoCheque||'En cartera';const bc='badge-'+e.toLowerCase().replace(' ','-');
     let di='';if(m.fechaVencCheque){const fv=new Date(m.fechaVencCheque+'T00:00:00');const d=Math.round((fv-hoy)/(1000*60*60*24));di=d>=0?`<br><span style="font-size:10px;color:#888">Vence en ${d} días</span>`:`<br><span style="font-size:10px;color:#dc2626">Venció hace ${Math.abs(d)} días</span>`;}
-    const estadoHtml=`<span class="badge ${bc}">${e}</span>`+(e==='Endosado'&&m.endosadoA?`<br><span style="font-size:10px;color:#3730a3">A: ${m.endosadoA}</span>`:'');
+    let estadoHtml=`<span class="badge ${bc}">${e}</span>`+(e==='Endosado'&&m.endosadoA?`<br><span style="font-size:10px;color:#3730a3">A: ${m.endosadoA}</span>`:'');
+    if(m.estadoChequeManual && e!=='Endosado') estadoHtml+=`<br><span class="estado-manual-tag">🔒 fijado a mano</span>`;
     const puedeEndosar = !esViewer && (e==='En cartera' || e==='Depositado');
-    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td>${estadoHtml}</td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${puedeEndosar?` <button class="btn btn-warning btn-sm" onclick="irAEndosarCheque('${m.id}')">🔀 Endosar</button>`:''}${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
+    const puedeLiberar = !esViewer && m.estadoChequeManual && e!=='Endosado';
+    return `<tr><td><strong>${m.numeroCheque||'-'}</strong></td><td>${m.cliente}</td><td>${m.bancoCheque||'-'}</td><td>${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}${di}</td><td><strong>${fmtMoney(m.importe)}</strong></td><td>${estadoHtml}</td><td>${m.pagadorCheque||'-'}</td><td>${m.fecha||'-'}</td><td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.observaciones||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCheque('${m.id}')">👁</button>${puedeEndosar?` <button class="btn btn-warning btn-sm" onclick="irAEndosarCheque('${m.id}')">🔀 Endosar</button>`:''}${puedeLiberar?` <button class="btn btn-outline btn-sm" title="Volver al acreditado automático" onclick="liberarEstadoManualCheque('${m.id}')">🔓</button>`:''}${esAdmin?` <button class="btn btn-outline btn-sm" onclick="abrirEditar('${m.id}')">✏️</button> <button class="btn btn-danger btn-sm" onclick="eliminar('${m.id}')">🗑</button>`:''}</td></tr>`;
   }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">Sin cheques</td></tr>';
 
   document.getElementById('cheques-paginacion').innerHTML = totalPaginasCh>1 ? `
@@ -1891,7 +1949,8 @@ window.verDetalleCheque=function(id){
       filaEndoso+=`<div class="row"><span class="lbl">+ Complemento:</span><span class="val">${fmtMoney(m.complementoMonto)} (${m.complementoCuenta||''})</span></div>`;
     }
   }
-  document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div>${filaEndoso}<div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;
+  const filaManual = m.estadoChequeManual ? `<div class="row"><span class="lbl">Estado:</span><span class="val" style="color:#92400e">🔒 Fijado a mano${m.estadoChequeManualPor?(' por '+m.estadoChequeManualPor):''} — el vencimiento automático no lo modifica</span></div>` : '';
+  document.getElementById('detalleChequeContenido').innerHTML=`<div class="cheque-detalle-box"><div class="row"><span class="lbl">N° Cheque:</span><span class="val">${m.numeroCheque||'-'}</span></div><div class="row"><span class="lbl">Cliente:</span><span class="val">${m.cliente}</span></div><div class="row"><span class="lbl">Banco Emisor:</span><span class="val">${m.bancoCheque||'-'}</span></div><div class="row"><span class="lbl">Vencimiento:</span><span class="val">${m.fechaVencCheque?m.fechaVencCheque.split('-').reverse().join('/'):'-'}</span></div><div class="row"><span class="lbl">Importe:</span><span class="val">${fmtMoney(m.importe)}</span></div><div class="row"><span class="lbl">Estado:</span><span class="val"><span class="badge ${bc}">${e}</span></span></div>${filaManual}${filaEndoso}<div class="row"><span class="lbl">Quién pagó:</span><span class="val">${m.pagadorCheque||'-'}</span></div><div class="row"><span class="lbl">Fecha de carga:</span><span class="val">${m.fecha||'-'}</span></div><div class="row"><span class="lbl">Observaciones:</span><span class="val">${m.observaciones||'-'}</span></div></div>`;
   document.getElementById('modalDetalleCheque').classList.add('open');
 };
 window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque').classList.remove('open');};
