@@ -1664,9 +1664,14 @@ window.renderPendientes=function() {
 
   const baseDenom=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
   document.getElementById('pTotal').textContent=baseDenom.length;
-  document.getElementById('pExpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='EXPORTACION').length;
-  document.getElementById('pImpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='IMPORTACION').length;
-  document.getElementById('pZF').textContent=baseDenom.filter(o=>o.tipo_operacion==='ZONA_FRANCA').length;
+  // Expo/Impo/ZF pendientes: se excluyen las ANUL (estado_sim==='ANUL'),
+  // porque esas ya se cuentan aparte en la card "ANUL pendientes". Así
+  // Expo + Impo + ZF + ANUL = Total pendientes, sin doble conteo (una
+  // operación ANUL con tipo EXPORTACION antes se contaba en Expo Y en ANUL
+  // al mismo tiempo).
+  document.getElementById('pExpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='EXPORTACION'&&o.estado_sim!=='ANUL').length;
+  document.getElementById('pImpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='IMPORTACION'&&o.estado_sim!=='ANUL').length;
+  document.getElementById('pZF').textContent=baseDenom.filter(o=>o.tipo_operacion==='ZONA_FRANCA'&&o.estado_sim!=='ANUL').length;
   // Card ANUL pendientes: mismo array ya cargado en memoria (allOps), sin
   // lecturas extra a Firestore — misma lógica de "pocas lecturas" que el
   // resto del sistema.
