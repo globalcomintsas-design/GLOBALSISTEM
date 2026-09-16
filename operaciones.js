@@ -1283,6 +1283,13 @@ function renderTabla(){
     calcularCoberturaFIFO(desp).forEach(o => coberturaPorId[o.id] = o.pendiente);
   });
 
+  // ── Pendiente EXIGIBLE por operación (misma cobertura que usa Saldos / el filtro
+  // "Solo pendientes de pago"): a diferencia de coberturaPorId de arriba (que compara
+  // contra o.bruto y solo tiene sentido para operaciones SIN factura), esta sí sirve
+  // para saber si una operación YA FACTURADA está cubierta o no. Se usa exclusivamente
+  // para pintar el tag "Por factura" de abajo con su estado real.
+  const pendienteExigiblePorId = mapaPendientePorOperacion();
+
   const totalPaginas = Math.max(1, Math.ceil(ops.length / LISTADO_PAGE_SIZE));
   if(listadoPage > totalPaginas) listadoPage = totalPaginas;
   if(listadoPage < 1) listadoPage = 1;
@@ -1293,7 +1300,14 @@ function renderTabla(){
     const pendiente = coberturaPorId[o.id];
     let coberturaHtml;
     if(o.numFactura){
-      coberturaHtml = '<span class="tag" style="background:#dbeafe;color:#1e40af;">Por factura</span>';
+      // Antes acá se ponía siempre "Por factura" sin importar si ya se había cobrado
+      // o no. Ahora se usa la cobertura exigible (Neto/Bruto real, pagos por factura +
+      // FIFO) para mostrar si esa factura puntual ya está cubierta o todavía tiene
+      // saldo pendiente — así no hace falta ir a la pestaña Saldos para saberlo.
+      const pendExigible = pendienteExigiblePorId[o.id] || 0;
+      coberturaHtml = pendExigible > 0.5
+        ? `<span class="tag" style="background:#fee2e2;color:#991b1b;" title="Factura ${o.numFactura}">🧾 ${o.numFactura} · $${fmt2(pendExigible)} pend.</span>`
+        : `<span class="tag" style="background:#dbeafe;color:#1e40af;" title="Factura ${o.numFactura}">🧾 ${o.numFactura} ✅ cubierta</span>`;
     } else if(pendiente > 0.5){
       coberturaHtml = `<span class="tag" style="background:#fee2e2;color:#991b1b;">$${fmt2(pendiente)} pend.</span>`;
     } else {
