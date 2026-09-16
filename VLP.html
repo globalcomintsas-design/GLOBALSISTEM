@@ -1200,8 +1200,12 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     //       repuesto provisorio (fecha_operativa_provisional=true), entra
     //       a Fechas Faltantes con aviso, y en el próximo reimport con el
     //       dato real cargado, ese dato siempre pisa al provisorio.
-    //    c) Si no tiene ninguno de los dos -> sin fecha, entra a Fechas
-    //       Faltantes (comportamiento ya existente).
+    //    c) Si no tiene ninguno de los dos -> sin fecha. Esta operación
+    //       queda SIN fecha_operativa (no puede pasar a Pendientes) y NO
+    //       entra al reporte de Fechas Faltantes: todavía no se realizó
+    //       (no hay ni Retiro AFIP ni Bordo/Plaza), así que no corresponde
+    //       que aparezca en ningún listado ni alerta hasta que DUX traiga
+    //       al menos uno de esos dos datos.
     // ============================================================
     let fechaOp=null;
     let fechaVinoDeDux=false;
@@ -1568,7 +1572,6 @@ function renderDashboard() {
   const hoy=hoyLocal();
   const pend=ops.filter(o=>!o.pagada&&o.fecha_operativa);
   const grupos={a0_30:0,a31_60:0,a61_90:0,a90mas:0};
-  const sinFecha=ops.filter(o=>!o.pagada&&!o.fecha_operativa).length;
   pend.forEach(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const dias=diasEntreFechas(fo,hoy);
@@ -1582,8 +1585,7 @@ function renderDashboard() {
     ${renderBarAnt('0-30 días',grupos.a0_30,maxG,'#16a34a')}
     ${renderBarAnt('31-60 días',grupos.a31_60,maxG,'#d97706')}
     ${renderBarAnt('61-90 días',grupos.a61_90,maxG,'#dc2626')}
-    ${renderBarAnt('+90 días',grupos.a90mas,maxG,'#7c3aed')}
-    ${sinFecha>0?`<div style="font-size:11px;color:#888;margin-top:4px">Sin fecha operativa: ${sinFecha}</div>`:''}`;
+    ${renderBarAnt('+90 días',grupos.a90mas,maxG,'#7c3aed')}`;
 
   const tipos={EXPORTACION:0,IMPORTACION:0,ZONA_FRANCA:0,REVISAR:0};
   ops.filter(o=>!o.pagada).forEach(o=>{if(tipos[o.tipo_operacion]!==undefined)tipos[o.tipo_operacion]++;else tipos.REVISAR++;});
@@ -1592,13 +1594,10 @@ function renderDashboard() {
       <span>${badgeTipo(t)} ${t}</span><span style="font-weight:700">${n}</span>
     </div>`).join('');
 
-  const sinFechaOperativa=ops.filter(o=>o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&!o.reporte_fecha_descartado&&o.estado_sim!=='ANUL'&&o.estado_sim!=='OFIC').length;
-
   let alertas=[];
   if(revisar>0)alertas.push(`⚠️ ${revisar} operaciones con régimen REVISAR — requieren atención manual`);
   if(soloVlp>0)alertas.push(`📋 ${soloVlp} operaciones en VLP sin archivo DUX importado aún`);
   if(grupos.a90mas>0)alertas.push(`🔴 ${grupos.a90mas} operaciones pendientes hace más de 90 días`);
-  if(sinFechaOperativa>0)alertas.push(`📅 ${sinFechaOperativa} operaciones sin fecha operativa — no se pueden cobrar hasta corregir en DUX (ver pestaña Fechas Faltantes)`);
   document.getElementById('alertas').innerHTML=alertas.length?alertas.map(a=>`<div style="padding:6px 0;border-bottom:1px solid #f0f4f8;color:#dc2626;">${a}</div>`).join(''):'<span style="color:#16a34a">✓ Sin alertas críticas</span>';
 }
 
@@ -2015,17 +2014,19 @@ window.renderFechasFaltantes=function() {
   const filtTipo=mselGetValues('mselTipoFF');
   const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
 
-  // Entran al reporte las operaciones no-OFIC y no-ANUL que:
-  //   - no tienen fecha_operativa en absoluto, o
-  //   - tienen fecha_operativa PERO es provisoria (vino de Retiro AFIP
-  //     como repuesto, todavía falta el dato real de Mercadería a bordo /
-  //     Plaza-Cumplido).
+  // Entran al reporte SOLO las operaciones no-OFIC y no-ANUL que tienen
+  // fecha_operativa_provisional=true: o sea, tienen Retiro de Legajo AFIP
+  // cargado pero todavía les falta el dato real (Mercadería a bordo para
+  // EXPO, Plaza/Cumplido para el resto). Las que no tienen NINGÚN dato
+  // (ni AFIP ni bordo/plaza) no entran acá — no se consideran realizadas
+  // todavía, así que no aparecen en ningún reporte hasta que DUX traiga
+  // al menos uno de esos datos.
   // Las OFIC se descartan siempre (todavía no les toca el turno) y las
   // ANUL tienen su propio circuito aparte (no entran nunca a este reporte,
   // tengan o no Retiro AFIP cargado).
   const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'
     &&o.estado_sim!=='OFIC'&&o.estado_sim!=='ANUL'
-    &&(!o.fecha_operativa||o.fecha_operativa_provisional));
+    &&o.fecha_operativa_provisional);
 
   document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
   document.getElementById('ffExpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='EXPORTACION').length;
