@@ -195,13 +195,17 @@ function estadoCobro(m){
     cobrado = (m && m.cobrado) ? bruto : 0;
   }
   const saldo = bruto - cobrado;
+  // El pago a Ramiro se habilita apenas se cobró el 50% o más del bruto (no hace falta
+  // esperar al cobro completo). Si el bruto es $0 (ej. mudanza sin honorarios cargados
+  // todavía) se considera habilitado para no bloquear por falta de datos.
+  const ramiroHabilitado = bruto <= 0.005 ? true : (cobrado >= (bruto * 0.5) - 0.005);
   if(cobrado <= 0.005){
-    return { estado:'no', label:'❌ Sin cobrar', bg:'#fee2e2', color:'#991b1b', cobrado, saldo };
+    return { estado:'no', label:'❌ Sin cobrar', bg:'#fee2e2', color:'#991b1b', cobrado, saldo, ramiroHabilitado };
   }
   if(saldo > 0.5){
-    return { estado:'parcial', label:`🟡 Parcial: $${fmt(cobrado)} de $${fmt(bruto)} (falta $${fmt(saldo)})`, bg:'#fef9c3', color:'#854d0e', cobrado, saldo };
+    return { estado:'parcial', label:`🟡 Parcial: $${fmt(cobrado)} de $${fmt(bruto)} (falta $${fmt(saldo)})`, bg:'#fef9c3', color:'#854d0e', cobrado, saldo, ramiroHabilitado };
   }
-  return { estado:'si', label:'✅ Cobrado', bg:'#dcfce7', color:'#166534', cobrado, saldo };
+  return { estado:'si', label:'✅ Cobrado', bg:'#dcfce7', color:'#166534', cobrado, saldo, ramiroHabilitado };
 }
 window.estadoCobro = estadoCobro;
 
@@ -2977,9 +2981,9 @@ window.renderRamiro = function(){
   });
 
   mudanzas.forEach(m => {
-    // El pago a Ramiro por una mudanza solo se habilita cuando esa mudanza está
-    // COBRADA POR COMPLETO (ver estadoCobro) — con un cobro parcial todavía no se
-    // considera "cobrada" a estos efectos, igual que antes con el booleano `cobrado`.
+    // El pago a Ramiro por una mudanza se habilita apenas se cobró el 50% o más del
+    // bruto (ver ramiroHabilitado en estadoCobro) — no hace falta esperar a que esté
+    // cobrada al 100%.
     itemsTodos.push({
       tipo: 'Mudanza',
       fecha: m.fecha,
@@ -2988,7 +2992,7 @@ window.renderRamiro = function(){
       ramiroUsd: m.ramiroUsd || 190,
       pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
       estado: m.ramiroPagado || 'no',
-      cobrado: estadoCobro(m).estado === 'si',
+      cobrado: estadoCobro(m).ramiroHabilitado,
       id: m.id,
       col: 'mudanzas'
     });
@@ -3070,7 +3074,7 @@ window.renderRamiro = function(){
         <td style="display:flex;gap:6px;flex-wrap:wrap;">
           ${i.estado === 'no'
             ? (i.col === 'mudanzas' && !i.cobrado
-                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Sin cobrar / cobro parcial</span>'
+                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Falta cobrar el 50%</span>'
                 : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
             : `<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="editarRamiroItem('${i.id}','${i.col}')">✏️ Editar</button>`}
           <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
@@ -3111,10 +3115,10 @@ window.pagarRamiroItem = async function(id, col){
 };
 
 window.marcarTodoPagadoRamiro = async function(){
-  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas ya cobradas por completo)')) return;
+  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas con 50% o más ya cobrado)')) return;
   const pending = [
     ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
-    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && estadoCobro(m).estado === 'si').map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
+    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && estadoCobro(m).ramiroHabilitado).map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
   ];
   for(const p of pending){
     await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
