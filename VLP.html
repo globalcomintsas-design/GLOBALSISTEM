@@ -82,6 +82,7 @@ tr:hover td{background:#fafbff;}
 .badge-pres{background:#f3e8ff;color:#6b21a8;}
 .badge-anul{background:#fee2e2;color:#991b1b;}
 .badge-factura{background:#fef3c7;color:#92400e;}
+.badge-provisoria{background:#fef3c7;color:#92400e;}
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:flex-start;padding:20px;overflow-y:auto;}
 .modal-bg.open{display:flex;}
 .modal{background:#fff;border-radius:16px;padding:22px;width:90%;max-width:700px;margin:0 auto;}
@@ -441,6 +442,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Sin fecha operativa</div><div class="card-value red" id="ffTotal">0</div></div>
         <div class="card"><div class="card-label">Expo sin fecha</div><div class="card-value blue" id="ffExpo">0</div></div>
         <div class="card"><div class="card-label">Impo sin fecha</div><div class="card-value purple" id="ffImpo">0</div></div>
+        <div class="card"><div class="card-label">Fecha provisoria</div><div class="card-value orange" id="ffProvisorias">0</div></div>
         <div class="card"><div class="card-label">Descartadas del reporte</div><div class="card-value" style="color:#888" id="ffDescartadas">0</div></div>
       </div>
       <div class="section">
@@ -448,9 +450,11 @@ tr:hover td{background:#fafbff;}
           📅 Operaciones sin Fecha Operativa
         </div>
         <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">
-          Estas operaciones no tienen fecha operativa porque en DUX no vino cargada la columna correspondiente
-          (Mercadería a bordo para EXPO, Plaza/Cumplido para el resto). Corregilas en DUX y volvé a importar,
-          o editá la fecha manualmente acá mismo. Si una operación no aplica, quitala del reporte.
+          Estas operaciones no tienen fecha operativa definitiva porque en DUX no vino cargada la columna
+          correspondiente (Mercadería a bordo para EXPO, Plaza/Cumplido para el resto). Las marcadas
+          "📅 Provisoria" ya cuentan como pendientes de cobro (tienen Retiro de Legajo AFIP cargado), pero el
+          mes/día operativo es estimado y puede cambiar al completarse el dato real. Corregilas en DUX y volvé
+          a importar, o editá la fecha manualmente acá mismo. Si una operación no aplica, quitala del reporte.
         </div>
         <div class="search-bar"><input type="text" id="buscarFF" placeholder="Buscar operación, cliente..." oninput="renderFechasFaltantes()" /></div>
         <div class="filtros">
@@ -477,7 +481,7 @@ tr:hover td{background:#fafbff;}
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Origen</th><th>Acciones</th></tr></thead>
+            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Origen</th><th>Fecha</th><th>Acciones</th></tr></thead>
             <tbody id="tablaFF"></tbody>
           </table>
         </div>
@@ -515,7 +519,7 @@ tr:hover td{background:#fafbff;}
         <div class="section-title">Log de Conciliaciones</div>
         <div class="filtros">
           <div><label>Operación</label><input type="text" id="filtroLogOp" placeholder="Número..." oninput="renderLog()" /></div>
-          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>REPORTE_FECHA_DESCARTADO</option><option>OPERACION_ARCHIVADA</option></select></div>
+          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>FECHA_OPERATIVA_CONFIRMADA</option><option>REPORTE_FECHA_DESCARTADO</option><option>OPERACION_ARCHIVADA</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosLog()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div id="logContainer" style="max-height:500px;overflow-y:auto;"></div>
@@ -586,6 +590,11 @@ tr:hover td{background:#fafbff;}
       <button class="modal-close" onclick="cerrarFicha()">✕</button>
     </div>
     <div class="ficha-grid" id="fichaGrid"></div>
+    <div id="fichaAvisoProvisoria" style="display:none;background:#fef3c7;border:1px solid #fde68a;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#92400e;">
+      📅 Esta fecha operativa es <strong>provisoria</strong>: se tomó del Retiro de Legajo AFIP porque todavía
+      no está cargada la Mercadería a bordo / Plaza-Cumplido en DUX. Puede corregirse sola en el próximo
+      reimport, o cargar la fecha real acá abajo.
+    </div>
     <div id="fichaFechaOpSection" style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:14px">
       <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">📅 Corrección manual de Fecha Operativa</div>
       <div class="form-grid" style="margin-bottom:4px">
@@ -748,10 +757,6 @@ window.mselUpdateLabel=function(id) {
 };
 
 // ---- POBLADO DINÁMICO DE MESES DISPONIBLES (Pendientes / Pagadas / CEPAS) ----
-// Cada pestaña arma su propio multiselect de "Mes operativo" con los meses que
-// realmente existen dentro del subconjunto de operaciones que esa pestaña
-// muestra (pendientes sin pagar, pagadas, o CEPAS), ordenados de más reciente
-// a más antiguo. Se llama después de cada cargarOperaciones().
 function poblarMesesPend() {
   const panel = document.getElementById('panel-mselMesPend');
   if(!panel) return;
@@ -793,56 +798,28 @@ function poblarMesesCepas() {
 
 // ============================================================================
 // ÚNICA FUENTE DE VERDAD PARA FECHAS — TODO EL SISTEMA TRABAJA EN HORA LOCAL
-// ----------------------------------------------------------------------------
-// Todas las fechas de negocio (fecha operativa, fecha de pago, oficialización,
-// mercadería a bordo, plaza/cumplido, retiro, liquidación, viaje, etc.) se
-// manejan EXCLUSIVAMENTE en hora LOCAL (Argentina). NINGÚN otro punto del
-// código debe usar toISOString(), toUTCString(), Date.parse(), ni los getters
-// UTC (getUTCFullYear/getUTCMonth/getUTCDate/getUTCHours) sobre una fecha de
-// negocio: esos métodos operan en UTC, y como Argentina está en UTC-3, la
-// medianoche UTC de un día cae en el día ANTERIOR al leerla con los getters
-// locales (getFullYear/getMonth/getDate) o con toLocaleDateString(). Esa es
-// la causa raíz del corrimiento de un día que tenía el sistema.
-// La ÚNICA excepción autorizada a este criterio es parseExcelDate(), donde
-// los getters UTC se usan a propósito para "desempaquetar" el valor que
-// entrega SheetJS (que codifica la fecha de la celda en UTC internamente).
-// Ningún módulo (Dashboard, Pendientes, Pagadas, CEPAS, Viajes, Historial,
-// Log, Ficha, exportaciones Excel, importación DUX/VLP) debe tener lógica
-// propia de fechas: todo pasa por las funciones de este bloque.
 // ============================================================================
 
-// Construye una fecha "pura" (sin hora relevante) en hora LOCAL. Se fija al
-// mediodía (12:00) para blindarla contra cualquier ajuste de huso horario.
 function fechaLocal(anio, mes, dia, horas=12, minutos=0) {
   return new Date(anio, mes - 1, dia, horas, minutos, 0, 0);
 }
 
-// Fecha/hora actual, en hora local del navegador (Date nativo).
 function ahoraLocal() { return new Date(); }
 
-// "Hoy" normalizado a mediodía LOCAL (sin hora relevante), para comparar
-// antigüedad/vencimientos por día calendario.
 function hoyLocal() {
   const n = new Date();
   return fechaLocal(n.getFullYear(), n.getMonth()+1, n.getDate());
 }
 
-// Convierte CUALQUIER valor (Timestamp de Firestore, Date, string
-// "yyyy-mm-dd", etc.) a un Date de JS en hora LOCAL. Es la ÚNICA función que
-// debe usarse para "desempaquetar" una fecha que viene de Firestore o de un
-// <input type="date">. Reemplaza todo patrón suelto de
-// "x.toDate ? x.toDate() : new Date(x)" repetido por el sistema.
 function aFechaLocal(valor) {
   if(valor===null||valor===undefined||valor==='') return null;
-  if(valor.toDate) { // Timestamp de Firestore
+  if(valor.toDate) {
     const d = valor.toDate();
     return isNaN(d) ? null : d;
   }
   if(valor instanceof Date) return isNaN(valor) ? null : valor;
   if(typeof valor === 'string') {
     const s = valor.trim();
-    // yyyy-mm-dd — se parsea a mano para NO usar new Date('yyyy-mm-dd'),
-    // que JS interpreta como UTC y corre el día en Argentina.
     const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if(m) return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
     const d = new Date(s);
@@ -852,10 +829,6 @@ function aFechaLocal(valor) {
   return isNaN(d) ? null : d;
 }
 
-// 'YYYY-MM-DD' en hora LOCAL. USAR SIEMPRE esta función en vez de
-// toISOString() para fechas de negocio, nombres de archivo, valores de
-// <input type="date">, etc. toISOString() usa UTC y puede correr el día
-// (incluso el "hoy" del sistema, cerca de la medianoche argentina).
 function fechaISOLocal(valor) {
   const d = valor instanceof Date ? valor : aFechaLocal(valor);
   if(!d || isNaN(d)) return null;
@@ -865,9 +838,6 @@ function fechaISOLocal(valor) {
   return `${anio}-${mes}-${dia}`;
 }
 
-// Formatea una fecha para mostrar al usuario (dd/mm/aaaa), en hora LOCAL.
-// Acepta Timestamp de Firestore, Date o string — no hace falta convertir
-// antes de llamarla.
 function formatFecha(valor) {
   const d = valor instanceof Date ? valor : aFechaLocal(valor);
   if(!d || isNaN(d)) return '-';
@@ -877,7 +847,6 @@ function formatFecha(valor) {
   return `${dia}/${mes}/${anio}`;
 }
 
-// Formatea fecha + hora (dd/mm/aaaa hh:mm), en hora LOCAL. Usado en el Log.
 function formatFechaHora(valor) {
   const d = valor instanceof Date ? valor : aFechaLocal(valor);
   if(!d || isNaN(d)) return '-';
@@ -886,16 +855,12 @@ function formatFechaHora(valor) {
   return `${formatFecha(d)} ${horas}:${mins}`;
 }
 
-// Mes operativo 'YYYY-MM', SIEMPRE calculado con componentes LOCALES.
 function calcMesOperativo(valor) {
   const d = valor instanceof Date ? valor : aFechaLocal(valor);
   if(!d || isNaN(d)) return null;
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 
-// Diferencia en días CALENDARIO completos entre dos fechas. Normaliza ambas
-// a mediodía LOCAL antes de restar, así el resultado no se ve afectado por
-// la hora que traiga cada Timestamp.
 function diasEntreFechas(valor1, valor2) {
   const d1 = valor1 instanceof Date ? valor1 : aFechaLocal(valor1);
   const d2 = valor2 instanceof Date ? valor2 : aFechaLocal(valor2);
@@ -905,10 +870,6 @@ function diasEntreFechas(valor1, valor2) {
   return Math.round((b - a) / (1000*60*60*24));
 }
 
-// Construye una fecha LOCAL a partir del valor de un <input type="date">
-// (string 'yyyy-mm-dd'), fijando la hora indicada (default: mediodía).
-// NUNCA usar new Date(valorInput) directo: JS interpreta 'yyyy-mm-dd' como
-// UTC y corre el día en Argentina.
 function fechaDesdeInputDate(valorInput, horas=12, minutos=0) {
   if(!valorInput) return null;
   const m = String(valorInput).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -916,9 +877,6 @@ function fechaDesdeInputDate(valorInput, horas=12, minutos=0) {
   return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10), horas, minutos);
 }
 
-// Valida que una fecha sea razonable para guardar en Firestore (evita
-// FirebaseError: Timestamp seconds out of range cuando el Excel trae un
-// valor de fecha corrupto/fuera de rango).
 function fechaValidaODefault(fecha, fallback) {
   if(!(fecha instanceof Date) || isNaN(fecha)) return fallback;
   const anio = fecha.getFullYear();
@@ -926,14 +884,6 @@ function fechaValidaODefault(fecha, fallback) {
   return fecha;
 }
 
-// Convierte un valor de celda de Excel/SheetJS (serial numérico, Date, o
-// texto) a un Date en hora LOCAL, SIN corrimiento de día.
-// Los seriales de Excel (y los Date que entrega SheetJS con cellDates:true)
-// codifican la fecha calendario "pura" a medianoche UTC de ese día. Por eso
-// — y SOLO aquí — se leen sus componentes con los getters UTC, y se
-// reconstruyen como fecha LOCAL con fechaLocal(). Si se leyeran con getters
-// locales directamente, en Argentina (UTC-3) la medianoche UTC cae en el
-// día anterior (ej: DUX trae 16/07/2026 y el sistema mostraba 15/07/2026).
 function parseExcelDate(v) {
   if(v===null||v===undefined||v==='') return null;
   if(v instanceof Date) {
@@ -941,8 +891,6 @@ function parseExcelDate(v) {
     return fechaLocal(v.getUTCFullYear(), v.getUTCMonth()+1, v.getUTCDate());
   }
   if(typeof v === 'number') {
-    // Serial Excel: días desde 1899-12-30 (con el bug del año bisiesto 1900).
-    // 25569 = días entre esa fecha y el epoch Unix (1970-01-01).
     const ms = Math.round((v - 25569) * 86400 * 1000);
     const utc = new Date(ms);
     if(isNaN(utc)) return null;
@@ -950,15 +898,10 @@ function parseExcelDate(v) {
   }
   if(typeof v === 'string') {
     const s = v.trim();
-    // dd/mm/yyyy o dd-mm-yyyy (formato argentino) — NUNCA usar new Date()
-    // directo acá porque JS lo interpreta como MM/DD/YYYY y con día>12 rompe
-    // silenciosamente.
     let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if(m) return fechaLocal(parseInt(m[3],10), parseInt(m[2],10), parseInt(m[1],10));
-    // yyyy-mm-dd (ISO, como llega VLP con dateNF:'yyyy-mm-dd')
     m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if(m) return fechaLocal(parseInt(m[1],10), parseInt(m[2],10), parseInt(m[3],10));
-    // último recurso: parseo nativo, normalizado a componentes LOCALES
     const d = new Date(s);
     if(isNaN(d)) return null;
     return fechaLocal(d.getFullYear(), d.getMonth()+1, d.getDate());
@@ -966,40 +909,14 @@ function parseExcelDate(v) {
   return null;
 }
 
-// Alias retro-compatibles (mantener el nombre "now"/"todayISO" que ya usaba
-// el resto del código, pero apoyados 100% en las funciones locales de arriba).
 function now() { return ahoraLocal(); }
 function todayISO() { return fechaISOLocal(ahoraLocal()); }
 
 // ---- ARCHIVADO AUTOMÁTICO DE ANULADAS SIN PAGAR ----
-// (ver nota histórica más abajo, en calcularArchivada) — este bloque queda
-// documentado para trazabilidad de la decisión anterior.
 function calcularArchivada(estadoSim, pagada) {
-  // NOTA (cambio 2026-08-21): antes esta función archivaba (ocultaba de todo
-  // reporte) cualquier ANUL sin pagar, asumiendo que una ANUL nunca genera
-  // trabajo facturable. Eso ocultaba casos reales: operaciones que se
-  // anularon pero donde igual se armó y retiró el legajo de AFIP (trabajo
-  // hecho = corresponde cobrarlo). Ahora las ANUL NO se archivan más: quedan
-  // visibles como pendientes (con fecha_operativa = "Retiro legajo de AFIP",
-  // ver procesarDatosExcelDUX) hasta que aparezcan conciliadas en un VLP. Se
-  // deja la función (en vez de borrar sus llamadas) para no tocar el resto
-  // del flujo de import/pago; hoy siempre devuelve false.
   return false;
 }
 
-// ---- ARCHIVADO AUTOMÁTICO DE CONCILIADAS ANTIGUAS (+180 DÍAS) ----
-// Se ejecuta al final de cada cargarOperaciones(), usando allOps ya en
-// memoria (sin lecturas extra a Firestore). Archiva SOLO operaciones que
-// cumplen las tres condiciones a la vez:
-//   1) pagada === true
-//   2) origen === 'COMPLETO' (hubo cruce real DUX↔VLP, es decir, lo
-//      realizado y lo pagado ya se conciliaron)
-//   3) fecha_pago con más de 180 días de antigüedad respecto a hoy
-// Las pendientes NUNCA entran acá (no están pagada:true). Las SOLO_VLP
-// pagadas tampoco se tocan, porque todavía no tienen el cruce con DUX
-// confirmado; si se archivaran antes de tiempo, se podría perder de vista
-// una reconciliación pendiente. El archivado es reversible: solo cambia
-// archivada a true, no borra el documento ni su historial en el log.
 async function archivarConciliadasAntiguas() {
   const hoy = hoyLocal();
   const candidatas = allOps.filter(o =>
@@ -1042,8 +959,6 @@ async function archivarConciliadasAntiguas() {
     await batch.commit();
   }
 
-  // Reflejar el cambio en memoria para que los render* subsiguientes ya
-  // no muestren estas operaciones sin necesidad de otro round-trip.
   candidatas.forEach(o=>{ o.archivada = true; });
 
   toast(`${candidatas.length} operación(es) conciliadas y con +180 días archivadas automáticamente`,'success');
@@ -1081,13 +996,10 @@ window.showTab=function(name,el) {
   if(name==='log')renderLog();
 };
 
-// ---- CARGA FIRESTORE (sin onSnapshot — evita lecturas masivas en tiempo real) ----
+// ---- CARGA FIRESTORE ----
 async function cargarOperaciones() {
   mostrarCarga();
   try {
-  // Estrategia de carga optimizada:
-  // - Pendientes (pagada==false): TODAS, sin importar año (ej: Peñaflor atrasado)
-  // - Pagadas: solo año en curso
   const anioActual = ahoraLocal().getFullYear();
   const primerDiaAnio = fechaLocal(anioActual, 1, 1, 0, 0);
 
@@ -1101,8 +1013,6 @@ async function cargarOperaciones() {
   snapPagadas.docs.forEach(d => { mapaOps[d.id] = {id:d.id,...d.data()}; });
   allOps = Object.values(mapaOps);
 
-  // Archivado automático de conciliadas (pagada + COMPLETO) con +180 días
-  // desde el pago. Corre sobre allOps ya en memoria, sin lecturas extra.
   await archivarConciliadasAntiguas();
 
   poblarMesesPend();
@@ -1150,7 +1060,6 @@ async function cargarViajes() {
   } finally { ocultarCarga(); }
 }
 
-// Recarga completa manual (botón Actualizar)
 window.recargarTodo = async function() {
   toast('Actualizando datos...','');
   await Promise.all([cargarOperaciones(), cargarHistorial(), cargarLog(), cargarViajes()]);
@@ -1158,7 +1067,6 @@ window.recargarTodo = async function() {
 };
 
 function initListeners() {
-  // Carga inicial de todos los módulos
   cargarOperaciones();
   cargarHistorial();
   cargarLog();
@@ -1192,11 +1100,9 @@ function leerArchivoExcel(file,tipo) {
   const reader=new FileReader();
   reader.onload=function(e) {
     if(tipo==='DUX') {
-      // raw:true es mucho más rápido — XLSX no convierte fechas, las convertimos nosotros
       const wb=XLSX.read(e.target.result,{type:'array',dense:true,sheetStubs:false});
       const ws=wb.Sheets[wb.SheetNames[0]];
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
-      // setTimeout libera el hilo antes de procesar
       setTimeout(()=>procesarDatosExcelDUX(raw,file.name,ws['!ref']),50);
     } else {
       const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
@@ -1255,7 +1161,6 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
 
   setBar(10,`Total filas: ${datos.length} · Aduana 038: ${total038.length}`);
 
-  // 1. USAR allOps EN MEMORIA (evita lectura masiva a Firestore)
   setBar(15,'Preparando datos...');
   const existentes={};
   allOps.forEach(o=>{existentes[o.id]=o;});
@@ -1274,49 +1179,71 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     const codigoReg=dest.length>=9?dest.substring(5,9):'';
     const tipoOp=REGIMENES[codigoReg]||'REVISAR';
     const estadoSim=String(r[COL_SIM]||'');
-    // Fecha operativa:
-    // - Si la operación está ANUL: la mercadería nunca llega a "a bordo" ni a
-    //   "Plaza/Cumplido" (se anuló antes). La evidencia de que igual hicimos
-    //   el trabajo (armar y retirar el legajo de AFIP) es la fecha de
-    //   "Retiro legajo de AFIP": esa pasa a ser la fecha operativa, para que
-    //   la operación aparezca como pendiente de cobro hasta que se concilie
-    //   con un VLP. Si no tiene esa fecha cargada, no laburamos nada y queda
-    //   sin fecha operativa (no entra a ningún reporte).
-    // - Para el resto: EXPO sale primero de "Fecha de mercadería a bordo"; si
-    //   no está cargada, usa "Plaza / Cumplido" como respaldo. El resto
-    //   (IMPO, ZF, etc.) sale únicamente de "Plaza / Cumplido".
-    // Todas las fechas que llegan del Excel DUX pasan por parseExcelDate(),
-    // que las devuelve en hora LOCAL sin corrimiento de día (ver módulo de
-    // fechas más arriba).
+
+    // ============================================================
+    // CÁLCULO DE fecha_operativa — REGLA VIGENTE (ver diseño acordado)
+    // ------------------------------------------------------------
+    // 1) Estado SIM === 'OFIC'  -> se descarta por completo. Mientras la
+    //    operación esté en OFIC, GLOBALCOMINT todavía no la armó (no
+    //    importa si ya hay Bordo/Plaza/Retiro AFIP cargados en DUX).
+    //    fecha_operativa = null, NO entra a Fechas Faltantes.
+    // 2) Estado SIM === 'ANUL'  -> fecha_operativa = Retiro AFIP (si está).
+    //    Si no está, fecha_operativa = null y NO entra a Fechas Faltantes
+    //    (son las que anula directamente la oficina de aduana, sin
+    //    trabajo nuestro de por medio). SIN CAMBIOS respecto a antes.
+    // 3) Cualquier otro estado (AUTO/CANC/SALI/PRES):
+    //    a) Si tiene el campo que corresponde según tipo — Mercadería a
+    //       bordo para EXPO, Plaza/Cumplido para el resto — SIN fallback
+    //       cruzado entre ambos (una EXPO sin Bordo NUNCA toma Plaza) ->
+    //       fecha_operativa = ese valor, fecha_operativa_provisional=false.
+    //    b) Si NO tiene ese campo pero SÍ tiene Retiro AFIP -> se usa como
+    //       repuesto provisorio (fecha_operativa_provisional=true), entra
+    //       a Fechas Faltantes con aviso, y en el próximo reimport con el
+    //       dato real cargado, ese dato siempre pisa al provisorio.
+    //    c) Si no tiene ninguno de los dos -> sin fecha, entra a Fechas
+    //       Faltantes (comportamiento ya existente).
+    // ============================================================
     let fechaOp=null;
     let fechaVinoDeDux=false;
-    if(estadoSim==='ANUL') {
+    let esProvisoria=false;
+
+    if(estadoSim==='OFIC') {
+      // Caso 1: descartada por completo.
+      fechaOp=null;
+    } else if(estadoSim==='ANUL') {
+      // Caso 2: sin cambios.
       if(r[COL_RETIRO_AFIP]) { fechaOp=parseExcelDate(r[COL_RETIRO_AFIP]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
-    } else if(tipoOp==='EXPORTACION') {
-      if(r[COL_BORDO]) { fechaOp=parseExcelDate(r[COL_BORDO]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
-      if(!fechaVinoDeDux && r[COL_PLAZA]) { fechaOp=parseExcelDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
     } else {
-      if(r[COL_PLAZA]) { fechaOp=parseExcelDate(r[COL_PLAZA]); if(fechaOp&&!isNaN(fechaOp)) fechaVinoDeDux=true; else fechaOp=null; }
+      // Caso 3: AUTO / CANC / SALI / PRES
+      const campoReal = (tipoOp==='EXPORTACION') ? r[COL_BORDO] : r[COL_PLAZA];
+      if(campoReal) {
+        const f=parseExcelDate(campoReal);
+        if(f&&!isNaN(f)) { fechaOp=f; fechaVinoDeDux=true; esProvisoria=false; }
+      }
+      if(!fechaVinoDeDux && r[COL_RETIRO_AFIP]) {
+        const f=parseExcelDate(r[COL_RETIRO_AFIP]);
+        if(f&&!isNaN(f)) { fechaOp=f; fechaVinoDeDux=true; esProvisoria=true; }
+      }
     }
+
     let fechaOfic=parseExcelDate(r[COL_OFIC]);if(fechaOfic&&isNaN(fechaOfic))fechaOfic=null;
     let fechaBordo=parseExcelDate(r[COL_BORDO]);if(fechaBordo&&isNaN(fechaBordo))fechaBordo=null;
     let fechaPlaza=parseExcelDate(r[COL_PLAZA]);if(fechaPlaza&&isNaN(fechaPlaza))fechaPlaza=null;
     let fechaRetiroAfip=parseExcelDate(r[COL_RETIRO_AFIP]);if(fechaRetiroAfip&&isNaN(fechaRetiroAfip))fechaRetiroAfip=null;
-    // Validación de rango: evita FirebaseError "Timestamp seconds out of range"
     fechaOp=fechaValidaODefault(fechaOp,null);
     fechaOfic=fechaValidaODefault(fechaOfic,null);
     fechaBordo=fechaValidaODefault(fechaBordo,null);
     fechaPlaza=fechaValidaODefault(fechaPlaza,null);
     fechaRetiroAfip=fechaValidaODefault(fechaRetiroAfip,null);
 
-    // Si DUX no trajo fecha pero la operación ya tenía una cargada a mano
-    // (fecha_operativa_manual), la conservamos para no perder la corrección
-    // manual en el próximo reimport.
+    // Si DUX no trajo fecha "real" pero la operación ya tenía una cargada
+    // a mano (fecha_operativa_manual), la conservamos — la manual siempre
+    // pisa a cualquier cálculo automático, incluida la provisoria.
     const existentePrevio=existentes[opNorm];
     let esManual=false;
     if(!fechaVinoDeDux && existentePrevio && existentePrevio.fecha_operativa_manual && existentePrevio.fecha_operativa) {
       const fPrev=aFechaLocal(existentePrevio.fecha_operativa);
-      if(fPrev && !isNaN(fPrev)) { fechaOp=fPrev; esManual=true; }
+      if(fPrev && !isNaN(fPrev)) { fechaOp=fPrev; esManual=true; esProvisoria=false; }
     }
 
     const nuevosDatos={
@@ -1329,17 +1256,13 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
       fecha_retiro_afip:fechaRetiroAfip,
       fecha_operativa:fechaOp,mes_operativo:fechaOp?calcMesOperativo(fechaOp):null,
       fecha_operativa_manual:esManual,
+      fecha_operativa_provisional: esManual ? false : esProvisoria,
       observaciones_dux:String(r[COL_OBS]||''),ts_actualizacion:ahora,
       importado_por:currentUser.nombre,dux_archivo:nombreArchivo
     };
-    operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim});
+    operaciones.push({opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim,existentePrevio,esProvisoria});
   }
 
-  // 1.5 VERIFICACIÓN PUNTUAL — las que no están en memoria (allOps solo trae
-  // pendientes + pagadas del año en curso) podrían existir igual en Firestore
-  // (ej: pagadas en un mes anterior a este año). Si las tratáramos como
-  // "nuevas" les pisaríamos pagada/fecha_pago/vlp_pago con set(). Por eso
-  // se verifica puntualmente contra Firestore antes de decidir.
   setBar(30,'Verificando operaciones ya existentes...');
   const idsDesconocidos=[...new Set(operaciones.filter(o=>!existentes[o.opNorm]).map(o=>o.opNorm))];
   for(let i=0;i<idsDesconocidos.length;i+=30) {
@@ -1348,17 +1271,15 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     snapCheck.docs.forEach(d=>{existentes[d.id]={id:d.id,...d.data()};});
   }
 
-  // 2. ESCRIBIR EN BATCHES DE 490
   setBar(35,'Escribiendo en Firestore...');
   const BATCH_SIZE=490;
   for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
     const chunk=operaciones.slice(i,i+BATCH_SIZE);
     const batch=writeBatch(db);
-    for(const {opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim} of chunk) {
+    for(const {opNorm,nuevosDatos,codigoReg,tipoOp,estadoSim,existentePrevio,esProvisoria} of chunk) {
       const ref=doc(db,'operaciones_vlp',opNorm);
       const existente=existentes[opNorm];
       if(!existente) {
-        // Las ANUL ya NO se archivan automáticamente (ver calcularArchivada).
         const archivadaCalc=calcularArchivada(estadoSim,false);
         batch.set(ref,{...nuevosDatos,pagada:false,fecha_pago:null,vlp_pago:null,
           numero_doc_vlp:null,razon_social_vlp:null,importe_vlp:null,origen:'SOLO_DUX',
@@ -1369,17 +1290,20 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
         logItems.push({tipo:'DUX_IMPORTADO_NUEVO',op:opNorm,desc:`Nueva op desde DUX. Régimen: ${codigoReg} (${tipoOp})`,despues:{tipo_operacion:tipoOp}});
         nuevas++;
       } else if(existente.origen==='SOLO_VLP') {
-        // Ya tiene VLP (pagada=true en ese caso) → nunca se archiva por ANUL.
         const archivadaCalc=calcularArchivada(estadoSim,existente.pagada);
         batch.update(ref,{...nuevosDatos,origen:'COMPLETO',archivada:archivadaCalc});
         logItems.push({tipo:'RECONCILIACION_AUTO',op:opNorm,desc:`Reconciliada auto. VLP previo: ${existente.vlp_pago}`,vlp:existente.vlp_pago||''});
         reconciliadas++;
       } else {
-        // Respeta el estado de pago actual: si ya estaba pagada, nunca se archiva
-        // aunque el régimen figure como ANUL en DUX.
         const archivadaCalc=calcularArchivada(estadoSim,existente.pagada);
         batch.update(ref,{...nuevosDatos,archivada:archivadaCalc});
-        logItems.push({tipo:'DUX_ACTUALIZADO',op:opNorm,desc:'Operación actualizada desde DUX'});
+        // Log especial: la fecha pasó de provisoria a confirmada con dato real
+        if(existente.fecha_operativa_provisional && !esProvisoria && nuevosDatos.fecha_operativa) {
+          logItems.push({tipo:'FECHA_OPERATIVA_CONFIRMADA',op:opNorm,
+            desc:`Fecha operativa confirmada con dato real (antes provisoria por Retiro AFIP: ${formatFecha(aFechaLocal(existente.fecha_operativa))}, ahora: ${formatFecha(nuevosDatos.fecha_operativa)})`});
+        } else {
+          logItems.push({tipo:'DUX_ACTUALIZADO',op:opNorm,desc:'Operación actualizada desde DUX'});
+        }
         actualizadas++;
       }
     }
@@ -1395,7 +1319,6 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
     setBar(35+Math.round(((i+chunk.length)/operaciones.length)*45),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
   }
 
-  // 3. LOG EN BATCH
   setBar(85,'Guardando log...');
   for(let i=0;i<logItems.length;i+=BATCH_SIZE) {
     const batch=writeBatch(db);
@@ -1462,7 +1385,6 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   const datos=raw.slice(3).filter(r=>r&&r[COL_OP]&&String(r[COL_OP]).trim()!=='');
   setBar(10,`${datos.length} registros encontrados`);
 
-  // 1. USAR allOps EN MEMORIA (evita lectura masiva a Firestore)
   setBar(15,'Preparando datos...');
   const existentes={};
   allOps.forEach(o=>{existentes[o.id]=o;});
@@ -1477,13 +1399,7 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   for(const r of datos) {
     const opNorm=normOp(r[COL_OP]);
     if(!opNorm)continue;
-    // r[COL_FECHA] llega como texto 'yyyy-mm-dd' (por dateNF al leer el
-    // Excel). Se parsea con parseExcelDate() — NUNCA con new Date(string),
-    // que JS interpreta como UTC y corre el día en Argentina.
     let fechaPago=r[COL_FECHA]?parseExcelDate(r[COL_FECHA]):ahora;
-    // Validación de rango: si la fecha viene corrupta o disparatada
-    // (ej: columna corrida o serial mal interpretado), usamos "ahora"
-    // en vez de dejar pasar un Timestamp inválido que traba el batch.
     fechaPago=fechaValidaODefault(fechaPago,ahora);
     const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
       numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
@@ -1491,7 +1407,6 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     operaciones.push({opNorm,vlpData,imp:r[COL_IMP]});
   }
 
-  // 2. ESCRIBIR EN BATCHES
   setBar(35,'Escribiendo en Firestore...');
   for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
     const chunk=operaciones.slice(i,i+BATCH_SIZE);
@@ -1500,9 +1415,6 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
       const ref=doc(db,'operaciones_vlp',opNorm);
       const existente=existentes[opNorm];
       if(existente) {
-        // Se cobró (aunque el régimen figure como ANUL en DUX): la palabra
-        // ANUL sigue siendo válida para conciliar el pago, y la operación
-        // se desarchiva si es que estaba archivada por ANUL sin pagar.
         batch.update(ref,{...vlpData,origen:existente.origen==='SOLO_DUX'?'COMPLETO':existente.origen,archivada:false});
         logItems.push({tipo:'VLP_PAGADO',op:opNorm,desc:`Marcada PAGADA. VLP: ${nombreVLP}. Importe: $${imp||0}`,vlp:nombreVLP});
         conciliadas++;
@@ -1510,7 +1422,8 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
         batch.set(ref,{operacion:opNorm,operacion_raw:opNorm,cliente:'',destinacion:'',
           aduana:'038',codigo_regimen:'',tipo_operacion:'',mercaderia:'',estado_sim:'',
           situacion:'',estado:'',fecha_oficializacion:null,fecha_mer_a_bordo:null,
-          cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,fecha_operativa_manual:false,...vlpData,
+          cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,fecha_operativa_manual:false,
+          fecha_operativa_provisional:false,...vlpData,
           origen:'SOLO_VLP',cepas_ad_camion:'',cepas_patente:'',cepas_transportista:'',
           cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
           cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
@@ -1531,7 +1444,6 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     setBar(35+Math.round(((i+chunk.length)/operaciones.length)*50),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
   }
 
-  // 3. LOG EN BATCH
   setBar(88,'Guardando log...');
   for(let i=0;i<logItems.length;i+=BATCH_SIZE) {
     const batch=writeBatch(db);
@@ -1630,7 +1542,6 @@ function renderDashboard() {
   const ops=allOps.filter(o=>!o.archivada);
   const anioActual=ahoraLocal().getFullYear();
 
-  // Total y Pagadas → año corriente
   const opsAnio=ops.filter(o=>{
     const f=o.fecha_operativa?(aFechaLocal(o.fecha_operativa)):
              aFechaLocal(o.fecha_pago);
@@ -1639,14 +1550,11 @@ function renderDashboard() {
   const total=opsAnio.length;
   const pagadas=opsAnio.filter(o=>o.pagada).length;
 
-  // Pendientes, %, Revisar, Sin DUX → histórico
   const pendientes=ops.filter(o=>!o.pagada&&o.fecha_operativa).length;
   const pct=ops.length>0?Math.round(ops.filter(o=>o.pagada).length/ops.length*100):0;
   const revisar=ops.filter(o=>o.tipo_operacion==='REVISAR').length;
   const soloVlp=ops.filter(o=>o.origen==='SOLO_VLP').length;
 
-  // ANUL Pagadas: se calcula sobre allOps (no ops), ya que las ANUL pagadas
-  // nunca están archivadas (calcularArchivada las excluye si pagada=true).
   const anul=allOps.filter(o=>o.estado_sim==='ANUL'&&o.pagada).length;
 
   document.getElementById('dTotal').textContent=total;
@@ -1684,7 +1592,7 @@ function renderDashboard() {
       <span>${badgeTipo(t)} ${t}</span><span style="font-weight:700">${n}</span>
     </div>`).join('');
 
-  const sinFechaOperativa=ops.filter(o=>o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&!o.reporte_fecha_descartado&&o.estado_sim!=='ANUL').length;
+  const sinFechaOperativa=ops.filter(o=>o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&!o.reporte_fecha_descartado&&o.estado_sim!=='ANUL'&&o.estado_sim!=='OFIC').length;
 
   let alertas=[];
   if(revisar>0)alertas.push(`⚠️ ${revisar} operaciones con régimen REVISAR — requieren atención manual`);
@@ -1730,30 +1638,25 @@ window.renderPendientes=function() {
 
   const baseDenom=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
   document.getElementById('pTotal').textContent=baseDenom.length;
-  // Expo/Impo/ZF pendientes: se excluyen las ANUL (estado_sim==='ANUL'),
-  // porque esas ya se cuentan aparte en la card "ANUL pendientes". Así
-  // Expo + Impo + ZF + ANUL = Total pendientes, sin doble conteo (una
-  // operación ANUL con tipo EXPORTACION antes se contaba en Expo Y en ANUL
-  // al mismo tiempo).
   document.getElementById('pExpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='EXPORTACION'&&o.estado_sim!=='ANUL').length;
   document.getElementById('pImpo').textContent=baseDenom.filter(o=>o.tipo_operacion==='IMPORTACION'&&o.estado_sim!=='ANUL').length;
   document.getElementById('pZF').textContent=baseDenom.filter(o=>o.tipo_operacion==='ZONA_FRANCA'&&o.estado_sim!=='ANUL').length;
-  // Card ANUL pendientes: mismo array ya cargado en memoria (allOps), sin
-  // lecturas extra a Firestore — misma lógica de "pocas lecturas" que el
-  // resto del sistema.
   document.getElementById('pAnul').textContent=baseDenom.filter(o=>o.estado_sim==='ANUL').length;
 
   document.getElementById('tablaPendientes').innerHTML=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const dias=fo?diasEntreFechas(fo,hoy):null;
     const diasStr=dias!==null?(dias>90?`<span style="color:#dc2626;font-weight:700">${dias}d</span>`:dias>60?`<span style="color:#d97706">${dias}d</span>`:`${dias}d`):'-';
+    const fechaBadge = o.fecha_operativa_provisional
+      ? `<span title="Fecha provisoria (Retiro AFIP) — falta Mercadería a bordo / Plaza">${formatFecha(fo)} 📅</span>`
+      : formatFecha(fo);
     return `<tr>
       <td><input type="checkbox" class="chkPend" value="${o.id}" onchange="actualizarSeleccion()" /></td>
       <td><strong>${o.operacion}</strong></td>
       <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente}">${clienteCorto(o.cliente)||'-'}</td>
       <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
       <td>${badgeTipo(o.tipo_operacion)}</td>
-      <td style="font-size:11px">${formatFecha(fo)}</td>
+      <td style="font-size:11px">${fechaBadge}</td>
       <td style="font-size:11px">${o.mes_operativo||'-'}</td>
       <td>${badgeSIM(o.estado_sim)}</td>
       <td>${badgeOrigen(o.origen)}</td>
@@ -1815,7 +1718,6 @@ window.confirmarPagoFactura = async function() {
   mostrarCarga();
   try {
 
-  // Fecha LOCAL, sin problemas de zona horaria (ver módulo de fechas)
   const fechaPago = fechaDesdeInputDate(fechaStr);
 
   const update = {
@@ -1830,7 +1732,6 @@ window.confirmarPagoFactura = async function() {
     observaciones: obs
       ? (o.observaciones ? o.observaciones + ' | ' + obs : obs)
       : (o.observaciones || ''),
-    // Se cobró: si estaba archivada por ANUL sin pagar, se desarchiva.
     archivada: false,
     ts_actualizacion: ahoraLocal()
   };
@@ -1935,7 +1836,6 @@ window.limpiarFiltrosPag=function(){
   renderPagadas();
 };
 
-// ====================================================
 // ====================================================
 // VIAJES CEPAS
 // ====================================================
@@ -2115,31 +2015,40 @@ window.renderFechasFaltantes=function() {
   const filtTipo=mselGetValues('mselTipoFF');
   const verDescartadas=document.getElementById('filtroVerDescartadasFF')?.checked||false;
 
-  // Solo entran al reporte las operaciones cuyo Estado SIM es AUTO o CANC:
-  // son las únicas que ya están en condiciones de tener fecha operativa
-  // cargada (mercadería a bordo para EXPO / cumplido en plaza para el resto)
-  // y a las que realmente les falta ese dato en DUX. SALI, PRES, vacío u
-  // otros estados no se muestran acá. Las ANUL tienen su propio circuito
-  // (fecha operativa = Retiro legajo de AFIP, ver procesarDatosExcelDUX) y
-  // por eso no entran a este reporte.
-  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'&&!o.fecha_operativa&&(o.estado_sim==='AUTO'||o.estado_sim==='CANC')&&(o.estado||'').toUpperCase()!=='OFI');
+  // Entran al reporte las operaciones no-OFIC y no-ANUL que:
+  //   - no tienen fecha_operativa en absoluto, o
+  //   - tienen fecha_operativa PERO es provisoria (vino de Retiro AFIP
+  //     como repuesto, todavía falta el dato real de Mercadería a bordo /
+  //     Plaza-Cumplido).
+  // Las OFIC se descartan siempre (todavía no les toca el turno) y las
+  // ANUL tienen su propio circuito aparte (no entran nunca a este reporte,
+  // tengan o no Retiro AFIP cargado).
+  const base=allOps.filter(o=>!o.archivada&&o.tipo_operacion&&o.tipo_operacion!=='REVISAR'
+    &&o.estado_sim!=='OFIC'&&o.estado_sim!=='ANUL'
+    &&(!o.fecha_operativa||o.fecha_operativa_provisional));
 
   document.getElementById('ffTotal').textContent=base.filter(o=>!o.reporte_fecha_descartado).length;
   document.getElementById('ffExpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='EXPORTACION').length;
   document.getElementById('ffImpo').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.tipo_operacion==='IMPORTACION').length;
+  document.getElementById('ffProvisorias').textContent=base.filter(o=>!o.reporte_fecha_descartado&&o.fecha_operativa_provisional).length;
   document.getElementById('ffDescartadas').textContent=base.filter(o=>o.reporte_fecha_descartado).length;
 
   let fil=verDescartadas?base.filter(o=>o.reporte_fecha_descartado):base.filter(o=>!o.reporte_fecha_descartado);
   if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')).toLowerCase().includes(buscar));
   if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
 
-  document.getElementById('tablaFF').innerHTML=fil.map(o=>`<tr>
+  document.getElementById('tablaFF').innerHTML=fil.map(o=>{
+    const fechaCol = o.fecha_operativa_provisional
+      ? `<span class="badge badge-provisoria" title="Falta Mercadería a bordo / Plaza-Cumplido. Mes puede cambiar al cargar el dato real.">📅 Provisoria (${formatFecha(aFechaLocal(o.fecha_operativa))})</span>`
+      : (o.fecha_operativa ? formatFecha(aFechaLocal(o.fecha_operativa)) : '<span style="color:#dc2626">Sin fecha</span>');
+    return `<tr>
       <td><strong>${o.operacion}</strong></td>
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||''}">${clienteCorto(o.cliente)||'-'}</td>
       <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
       <td>${badgeTipo(o.tipo_operacion)}</td>
       <td>${badgeSIM(o.estado_sim)}</td>
       <td>${badgeOrigen(o.origen)}</td>
+      <td style="font-size:11px">${fechaCol}</td>
       <td>
         <div style="display:flex;gap:4px">
           <button class="btn btn-outline btn-sm" title="Editar / cargar fecha" onclick="abrirFicha('${o.id}')">✏️ Editar</button>
@@ -2148,7 +2057,8 @@ window.renderFechasFaltantes=function() {
             :`<button class="btn btn-danger btn-sm" title="Quitar del reporte" onclick="descartarReporteFF('${o.id}')">✕ Quitar</button>`}
         </div>
       </td>
-    </tr>`).join('')||`<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">${verDescartadas?'Sin operaciones descartadas':'✓ Sin operaciones con fecha faltante'}</td></tr>`;
+    </tr>`;
+  }).join('')||`<tr><td colspan="8" style="text-align:center;color:#888;padding:20px">${verDescartadas?'Sin operaciones descartadas':'✓ Sin operaciones con fecha faltante'}</td></tr>`;
   document.getElementById('resumenFF').textContent=`📄 ${fil.length} operaciones mostradas`;
 };
 
@@ -2210,7 +2120,7 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">Estado SIM</div><div class="ficha-val">${badgeSIM(o.estado_sim)}</div></div>
     <div class="ficha-item"><div class="ficha-label">Situación</div><div class="ficha-val">${o.situacion||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">F. Oficialización</div><div class="ficha-val">${formatFecha(fofic)}</div></div>
-    <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${formatFecha(fo)}</div></div>
+    <div class="ficha-item"><div class="ficha-label">Fecha Operativa</div><div class="ficha-val">${formatFecha(fo)}${o.fecha_operativa_provisional?' <span class="badge badge-provisoria" style="margin-left:4px">📅 Provisoria</span>':''}</div></div>
     <div class="ficha-item"><div class="ficha-label">Mes Operativo</div><div class="ficha-val">${o.mes_operativo||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Estado Pago</div><div class="ficha-val">${o.pagada?'<span class="badge badge-pagado">✓ PAGADA</span>':'<span class="badge badge-pendiente">PENDIENTE</span>'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Origen Pago</div><div class="ficha-val">${esFactura?'<span class="badge badge-factura">💵 Factura Propia</span>':(o.pagada?'<span class="badge badge-pagado">VLP</span>':'-')}</div></div>
@@ -2218,6 +2128,8 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">VLP / Factura</div><div class="ficha-val" style="font-size:11px">${o.vlp_pago||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Importe</div><div class="ficha-val">${o.importe_vlp?'$'+Number(o.importe_vlp).toLocaleString('es-AR',{minimumFractionDigits:2}):'-'}</div></div>
     <div class="ficha-item full"><div class="ficha-label">Mercadería</div><div class="ficha-val" style="font-size:12px">${o.mercaderia||'-'}</div></div>`;
+
+  document.getElementById('fichaAvisoProvisoria').style.display = o.fecha_operativa_provisional ? '' : 'none';
 
   const esCepas=o.cliente&&o.cliente.toUpperCase().includes('CEPAS');
   document.getElementById('fichaCepasSection').style.display=esCepas?'':'none';
@@ -2263,10 +2175,12 @@ window.guardarFicha=async function(){
       update.fecha_operativa=nuevaFecha;
       update.mes_operativo=calcMesOperativo(nuevaFecha);
       update.fecha_operativa_manual=true;
+      update.fecha_operativa_provisional=false; // al cargar a mano, deja de ser provisoria
     } else {
       update.fecha_operativa=null;
       update.mes_operativo=null;
       update.fecha_operativa_manual=false;
+      update.fecha_operativa_provisional=false;
     }
   }
 
@@ -2276,8 +2190,6 @@ window.guardarFicha=async function(){
     update.cepas_transportista=document.getElementById('fichaTransp').value.trim();
     update.cepas_observaciones=document.getElementById('fichaObsCepas').value.trim();
     update.cepas_liquidado=document.getElementById('fichaLiquidado').value==='true';
-    // fechaDesdeInputDate() evita el bug de UTC de "new Date('yyyy-mm-dd')"
-    // que corría estas fechas un día para atrás en Argentina.
     const fr=document.getElementById('fichaFechaRetiro').value;
     update.cepas_fecha_retiro=fr?fechaDesdeInputDate(fr):null;
     const fl=document.getElementById('fichaFechaLiquid').value;
@@ -2329,17 +2241,14 @@ window.renderLog=function(){
 window.limpiarFiltrosLog=function(){['filtroLogOp','filtroLogTipo'].forEach(id=>document.getElementById(id).value='');renderLog();};
 
 // ====================================================
-// ESTILO UNIFICADO DE EXCEL (igual que en Operaciones): Arial 7, bordes finos,
-// encabezado azul con letra blanca, fila TOTAL en rojo. Se usa en TODAS las
-// exportaciones de este módulo (Pendientes, Pagadas, Fuera de término, CEPAS,
-// Viajes) para que tengan el mismo look & feel que las planillas de Operaciones.
+// ESTILO UNIFICADO DE EXCEL
 // ====================================================
 function estilizarHojaExcel(ws, opts){
   const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [] } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const formatoDecimal = '#,##0.00';
-  const totalRowIdx = 1 + numDataRows; // fila 0-index de la fila TOTAL
+  const totalRowIdx = 1 + numDataRows;
 
   const range = XLSX.utils.decode_range(ws['!ref']);
   for(let R = range.s.r; R <= range.e.r; R++){
@@ -2352,7 +2261,6 @@ function estilizarHojaExcel(ws, opts){
       }
 
       if(R === 0){
-        // Encabezado: negrita, fondo azul, letra blanca, Arial 7
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
           fill: { fgColor: { rgb: '1E3A8A' } },
@@ -2360,7 +2268,6 @@ function estilizarHojaExcel(ws, opts){
           alignment: { horizontal: 'center', vertical: 'center' }
         };
       } else if(R === totalRowIdx){
-        // Fila TOTAL: negrita y destacada en rojo, Arial 7
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'DC2626' } },
           fill: { fgColor: { rgb: 'FEF2F2' } },
@@ -2369,7 +2276,6 @@ function estilizarHojaExcel(ws, opts){
           numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
       } else {
-        // Filas de datos, Arial 7
         ws[addr].s = {
           font: { sz: 7, name: 'Arial' },
           border: bordeTodo,
@@ -2391,20 +2297,20 @@ window.exportarPendientesExcel=function(){
     const fb=b.fecha_operativa?aFechaLocal(b.fecha_operativa):fechaLocal(2099,1,1);
     return fa-fb;
   });
-  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería'];
+  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Fecha Provisoria','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería'];
   const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const dias=fo?diasEntreFechas(fo,hoy):null;
-    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||''];
+    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.fecha_operativa_provisional?'Sí':'No',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||''];
   });
-  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','',''];
+  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','','',''];
   const aoa=[header,...rows,totalRow];
   const ws=XLSX.utils.aoa_to_sheet(aoa);
   const lastCol=XLSX.utils.encode_col(header.length-1);
   const lastDataRow=1+rows.length;
   ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
-  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:10},{wch:12},{wch:12},{wch:30}];
-  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[9]});
+  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:30}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[10]});
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Pendientes');
   XLSX.writeFile(wb,'VLP_Pendientes_'+todayISO()+'.xlsx');
@@ -2512,22 +2418,15 @@ window.abrirModalDash = function(tipo) {
                aFechaLocal(o.fecha_pago);
       return o.pagada&&f&&f.getFullYear()===anioActual;
     },
-    // Mismo criterio que la card y la pestaña Pendientes: exige fecha
-    // operativa. Las ANUL con Retiro AFIP cargado entran acá igual que
-    // cualquier otra pendiente.
     pendientes: o=>!o.pagada&&o.fecha_operativa,
     revisar: o=>o.tipo_operacion==='REVISAR',
     sinDux: o=>o.origen==='SOLO_VLP',
-    // ANUL pagadas puede haber quedado desarchivada por el pago, así que
-    // usamos allOps (no ops) para no perderla si algún otro criterio de
-    // archivado la tocara en el futuro.
     anul: o=>o.estado_sim==='ANUL'&&o.pagada
   };
   _dashOps = (tipo==='anul'?allOps.filter(o=>!o.archivada||o.pagada):ops).filter(filtros[tipo]);
   _dashTipo = tipo;
   document.getElementById('modalDashTitulo').textContent = titulos[tipo] + ' (' + _dashOps.length + ')';
   document.getElementById('buscarModalDash').value = '';
-  // Cambiar header si es sinDux
   const thead = document.querySelector('#tablaModalDash').closest('table').querySelector('thead tr');
   if(tipo==='sinDux') {
     thead.innerHTML='<th>Operación</th><th>Razón Social VLP</th><th>Tipo</th><th>Fecha VLP</th><th>N° Doc VLP</th><th>Origen</th>';
@@ -2592,17 +2491,6 @@ function badgeOrigen(o) {
 // ====================================================
 // LIMPIEZA ÚNICA DE HISTÓRICO — DESARCHIVAR ANUL SIN PAGAR
 // ====================================================
-// Ejecutar UNA sola vez desde la consola del navegador (F12 → Console),
-// escribiendo: desarchivarAnulHistoricas()
-// Revierte el archivado automático que hacía el sistema hasta el
-// 2026-08-21 sobre las ANUL sin pagar. No les asigna fecha operativa (eso
-// requiere reimportar el DUX, que ahora sí trae "Retiro legajo de AFIP" —
-// ver procesarDatosExcelDUX): sólo las saca de archivada para que, si el
-// próximo reimport de DUX les encuentra esa fecha, puedan aparecer en
-// Pendientes. Es más simple reimportar el último DUX después de este
-// cambio: el propio import ya deja archivada:false en todos los casos
-// (ver calcularArchivada()), así que esta función es sólo un atajo por si
-// no se va a reimportar DUX de inmediato.
 window.desarchivarAnulHistoricas = async function() {
   const aDesarchivar = allOps.filter(o=>o.estado_sim==='ANUL'&&!o.pagada&&o.archivada);
   if(!aDesarchivar.length){ toast('No hay ANUL archivadas para revertir','success'); return; }
