@@ -2326,13 +2326,14 @@ window.exportarReporteExcel=function(){
 
   const wb=XLSX.utils.book_new();
 
-  const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por'];
-  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
+  const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','Importe neto','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por'];
+  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),dec2(m.tipo==='Ingreso'?m.importe:-m.importe),m.numeroCheque||'',m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
   const totImporte=movs.reduce((s,m)=>s+Number(m.importe||0),0);
-  const totalRow=['TOTAL',`${movs.length} mov.`,'','','','',dec2(totImporte),'','','','','','',''];
+  const totNeto=movs.reduce((s,m)=>s+(m.tipo==='Ingreso'?Number(m.importe||0):-Number(m.importe||0)),0);
+  const totalRow=['TOTAL',`${movs.length} mov.`,'','','','',dec2(totImporte),dec2(totNeto),'','','','','','',''];
   const aoa=[header,...rows,totalRow];
   const ws1=XLSX.utils.aoa_to_sheet(aoa);
-  ws1['!cols']=[{wch:11},{wch:9},{wch:16},{wch:22},{wch:24},{wch:13},{wch:13},{wch:12},{wch:16},{wch:12},{wch:13},{wch:18},{wch:28},{wch:14}];
+  ws1['!cols']=[{wch:11},{wch:9},{wch:16},{wch:22},{wch:24},{wch:13},{wch:13},{wch:13},{wch:12},{wch:16},{wch:12},{wch:13},{wch:18},{wch:28},{wch:14}];
   const lastCol=XLSX.utils.encode_col(header.length-1);
   const firstDataRow=2, lastDataRow=1+rows.length, totalRowNum=2+rows.length;
   ws1['!autofilter']={ ref:`A1:${lastCol}${lastDataRow}` };
@@ -2340,7 +2341,9 @@ window.exportarReporteExcel=function(){
   ws1[addrCant]={ t:'str', v:`${rows.length} mov.`, f:`SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mov."` };
   const addrImp=XLSX.utils.encode_cell({r:totalRowNum-1,c:6});
   ws1[addrImp]={ t:'n', v:dec2(totImporte), f:`SUBTOTAL(109,G${firstDataRow}:G${lastDataRow})` };
-  estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6], colsFecha:[0,9] });
+  const addrImpNeto=XLSX.utils.encode_cell({r:totalRowNum-1,c:7});
+  ws1[addrImpNeto]={ t:'n', v:dec2(totNeto), f:`SUBTOTAL(109,H${firstDataRow}:H${lastDataRow})` };
+  estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6,7], colsNumericas:[6,7], colsFecha:[0,10] });
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
 
   if(tipo==='todos'||tipo==='porCuenta'){
