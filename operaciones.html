@@ -870,10 +870,17 @@
     <div class="section-card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
         <h3 style="margin:0;">📋 Detalle completo</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <select id="ramiro_filtro_mes" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
-            <option value="">Todos los meses</option>
-          </select>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div class="ac-wrap" style="position:relative;">
+            <button type="button" class="btn-outline" onclick="toggleRamiroMesesDropdown()" id="ramiro-meses-btn">📅 Meses<span class="multisel-badge" id="ramiro-meses-badge" style="display:none;"></span> ▾</button>
+            <div id="ramiro-meses-dropdown" class="multisel-dropdown">
+              <div class="multisel-actions">
+                <button type="button" class="btn-outline" onclick="seleccionarTodosMesesRamiro(true)">Todos</button>
+                <button type="button" class="btn-outline" onclick="seleccionarTodosMesesRamiro(false)">Ninguno</button>
+              </div>
+              <div id="ramiro-meses-checks"></div>
+            </div>
+          </div>
           <input type="date" id="ramiro_filtro_fecha" onchange="renderRamiro()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
           <button class="btn-outline" onclick="document.getElementById('ramiro_filtro_fecha').value='';renderRamiro()">✕ Día</button>
           <select id="ramiro_filtro_estado" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
@@ -884,10 +891,20 @@
           <button class="btn-success" onclick="marcarTodoPagadoRamiro()">✅ Marcar todo pagado</button>
         </div>
       </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding:10px 14px;background:#eff6ff;border-radius:10px;border:1.5px solid #bfdbfe;">
+        <span id="ramiro-seleccion-info" style="font-size:13px;font-weight:700;color:#1e3a8a;">Ninguna operación seleccionada para el reporte</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn-outline" onclick="marcarPagadasSeleccionRamiro()">✅ Marcar seleccionadas como pagadas</button>
+          <button class="btn-success" onclick="exportarRamiroExcel()">📥 Exportar Excel (lo que se va a pagar)</button>
+        </div>
+      </div>
+
       <div class="tabla-wrap">
         <table>
           <thead>
             <tr>
+              <th style="width:36px;"><input type="checkbox" id="ramiro_chk_todas" onchange="toggleRamiroSeleccionTodas(this.checked)" title="Tildar todas las filtradas"></th>
               <th>Tipo</th>
               <th>Fecha</th>
               <th>Cliente</th>
