@@ -139,3 +139,13 @@ td.mono{font-family:monospace;font-size:12px;}
   .op-grid{grid-template-columns:1fr 1fr;}
   .resumen-box{grid-template-columns:1fr;}
 }
+
+/* MULTISELECT MESES (Ramiro) */
+.multisel-dropdown{position:absolute;top:100%;left:0;background:#fff;border:1.5px solid #bfdbfe;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,0.12);z-index:100;min-width:210px;max-height:260px;overflow-y:auto;padding:8px;display:none;}
+.multisel-dropdown.show{display:block;}
+.multisel-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;font-size:13px;cursor:pointer;}
+.multisel-item:hover{background:#eff6ff;}
+.multisel-item input[type=checkbox]{accent-color:#1e3a8a;width:15px;height:15px;}
+.multisel-actions{display:flex;gap:6px;margin-bottom:8px;}
+.multisel-actions button{flex:1;font-size:11px;padding:5px;}
+.multisel-badge{background:#eff6ff;color:#1e3a8a;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:4px;}
