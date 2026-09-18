@@ -721,8 +721,14 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_mic').value), 'MIC base');
 
   if(document.getElementById('chk_mic_fojas').checked){
+    // La 1ra foja del MIC ya viene incluida en "MIC base" — solo se cobran las fojas
+    // que exceden esa primera. Con 1 foja cargada (la del propio MIC) no se cobra
+    // nada; desde la 2da foja en adelante se cobra t_mic_foja por cada una extra.
     const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
-    usd(parseFloat(document.getElementById('t_mic_foja').value)*n, `Fojas adicionales MIC ×${n}`);
+    const cobrarFojas = Math.max(0, n - 1);
+    if(cobrarFojas > 0){
+      usd(parseFloat(document.getElementById('t_mic_foja').value)*cobrarFojas, `AD Foja(${cobrarFojas})`);
+    }
   }
 
   if(document.getElementById('chk_finsem').checked)
@@ -805,7 +811,11 @@ function construirDatosOperacion(){
   }
   if(esMultinota) adicTags.push('Multinota');
   if(esAdicionales) adicTags.push('Adicionales');
-  if(document.getElementById('chk_mic_fojas').checked)  adicTags.push(`FojaMIC×${document.getElementById('n_mic_fojas').value}`);
+  if(document.getElementById('chk_mic_fojas').checked){
+    const nFojas = parseInt(document.getElementById('n_mic_fojas').value)||1;
+    const cobrarFojas = Math.max(0, nFojas - 1);
+    if(cobrarFojas > 0) adicTags.push(`AD Foja(${cobrarFojas})`);
+  }
   if(document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
   if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
 
