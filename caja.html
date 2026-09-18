@@ -1969,6 +1969,32 @@ function estilizarHojaExcel(ws, opts){
 }
 window.estilizarHojaExcel = estilizarHojaExcel;
 
+// Da el mismo estilo "fila de TOTAL" (negrita, rojo, fondo) a filas extra
+// que quedan después de la que ya estiliza estilizarHojaExcel — se usa
+// cuando una hoja necesita más de una fila de total (ej: TOTAL PESOS y,
+// debajo, TOTAL DÓLARES).
+function estilizarFilasTotalExtra(ws, startRow1Based, count, colCount, colsDecimal2){
+  if(count<=0) return;
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const formatoDecimal = '#,##0.00';
+  for(let i=0;i<count;i++){
+    const R = startRow1Based - 1 + i;
+    for(let C=0;C<colCount;C++){
+      const addr = XLSX.utils.encode_cell({r:R,c:C});
+      if(!ws[addr]) ws[addr] = { t:'s', v:'' };
+      ws[addr].s = {
+        font: { bold:true, sz:7, name:'Arial', color:{rgb:'DC2626'} },
+        fill: { fgColor:{rgb:'FEF2F2'} },
+        border: bordeTodo,
+        alignment: { horizontal: colsDecimal2.includes(C)?'right':'left' },
+        numFmt: colsDecimal2.includes(C)?formatoDecimal:undefined
+      };
+    }
+  }
+}
+window.estilizarFilasTotalExtra = estilizarFilasTotalExtra;
+
 window.exportarChequesExcel=function(){
   const filas=allMovimientos.filter(m=>m.cuenta==='Cheque'&&m.numeroCheque).sort((a,b)=>(a.fechaVencCheque||'').localeCompare(b.fechaVencCheque||''));
   if(!filas.length){ toast('No hay cheques para exportar','error'); return; }
@@ -2284,6 +2310,120 @@ function hojaResumenConTotal(wb, nombreHoja, header, rows, totales, anchoCols){
   XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
 }
 
+const NOMBRES_MES_CORTO=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// Agrupa movimientos por Cliente + Mes: si un mismo cliente hizo varios
+// pagos en el mismo mes, quedan UNIFICADOS en una sola fila con el total
+// de ese mes (en vez de una fila por cada pago suelto).
+function agruparPorClienteYMes(movsFiltrados){
+  const mapa = {};
+  for(const m of movsFiltrados){
+    const p=(m.fecha||'').split('/'); if(p.length!==3) continue;
+    const mesIdx = Number(p[1])-1; const anio = p[2];
+    if(isNaN(mesIdx) || mesIdx<0 || mesIdx>11 || !anio) continue;
+    const orden = anio+String(mesIdx+1).padStart(2,'0');
+    const key = m.cliente+'||'+orden;
+    if(!mapa[key]) mapa[key] = { cliente:m.cliente||'Sin nombre', mesLabel: NOMBRES_MES_CORTO[mesIdx]+' '+anio, orden, ing:0, egr:0 };
+    const v=Number(m.importe)||0;
+    m.tipo==='Ingreso'?mapa[key].ing+=v:mapa[key].egr+=v;
+  }
+  return Object.values(mapa).sort((a,b)=> a.cliente.localeCompare(b.cliente,'es') || a.orden.localeCompare(b.orden));
+}
+
+// Arma la hoja "Por Cliente y Mes": Cliente | Mes | Ingresos | Egresos | Saldo.
+function hojaPorClienteYMes(wb, nombreHoja, filas, labelIng, labelEgr, labelSaldo){
+  const header=['Cliente','Mes',labelIng||'Ingresos',labelEgr||'Egresos',labelSaldo||'Saldo'];
+  const rows = filas.map(f=>[f.cliente, f.mesLabel, dec2(f.ing), dec2(f.egr), dec2(f.ing-f.egr)]);
+  const totIng = filas.reduce((s,f)=>s+f.ing,0);
+  const totEgr = filas.reduce((s,f)=>s+f.egr,0);
+  const totalRow=['TOTAL','',dec2(totIng),dec2(totEgr),dec2(totIng-totEgr)];
+  const aoa=[header,...rows,totalRow];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:24},{wch:11},{wch:13},{wch:13},{wch:13}];
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  const firstDataRow=2, lastDataRow=1+rows.length, totalRowNum=2+rows.length;
+  ws['!autofilter']={ ref:`A1:${lastCol}${lastDataRow}` };
+  [2,3,4].forEach(c=>{
+    const colLetter=XLSX.utils.encode_col(c);
+    const addr=XLSX.utils.encode_cell({r:totalRowNum-1,c});
+    ws[addr]={ t:'n', v:totalRow[c], f:`SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+  });
+  estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[2,3,4], colsNumericas:[2,3,4] });
+  XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
+}
+window.agruparPorClienteYMes = agruparPorClienteYMes;
+window.hojaPorClienteYMes = hojaPorClienteYMes;
+
+// Agrupa las filas de una hoja de Movimientos por Cliente + Mes (y moneda,
+// para no mezclar pesos con dólares) y agrega una fila de Subtotal después
+// de cada grupo de 2 o más movimientos, justo debajo del último — así, si
+// un cliente hizo varios pagos en el mismo mes, quedan unificados con su
+// total ahí mismo, sin perder el detalle (factura, cheque, etc.) de cada
+// movimiento individual.
+function agruparMovimientosConSubtotal(movsList, aFila, colImporte, numCols, colImporteNeto){
+  const grupos = {};
+  const orden = [];
+  for(const m of movsList){
+    const p=(m.fecha||'').split('/'); if(p.length!==3) continue;
+    const mesIdx=Number(p[1])-1; const anio=p[2];
+    if(isNaN(mesIdx)||mesIdx<0||mesIdx>11||!anio) continue;
+    const claveOrdenMes = anio+String(mesIdx+1).padStart(2,'0');
+    const esUsd = m.cuenta==='Dólares';
+    const cliente = m.cliente||'Sin nombre';
+    const key = cliente+'||'+claveOrdenMes+'||'+(esUsd?'USD':'ARS');
+    if(!grupos[key]){ grupos[key]={cliente, claveOrdenMes, mesIdx, anio, esUsd, movs:[]}; orden.push(key); }
+    grupos[key].movs.push(m);
+  }
+  orden.sort((a,b)=>{
+    const ga=grupos[a], gb=grupos[b];
+    return ga.cliente.localeCompare(gb.cliente,'es') || ga.claveOrdenMes.localeCompare(gb.claveOrdenMes) || (ga.esUsd===gb.esUsd?0:(ga.esUsd?1:-1));
+  });
+  const filas=[]; const subtotalIdxs=[];
+  for(const key of orden){
+    const g=grupos[key];
+    g.movs.sort((a,b)=>fechaOrdenable(a.fecha).localeCompare(fechaOrdenable(b.fecha)));
+    for(const m of g.movs) filas.push(aFila(m));
+    if(g.movs.length>1){
+      const total = g.movs.reduce((s,m)=>s+Number(m.importe||0),0);
+      const fila = new Array(numCols).fill('');
+      fila[0] = `Subtotal ${g.cliente} · ${NOMBRES_MES_CORTO[g.mesIdx]} ${g.anio}${g.esUsd?' (U$D)':''}`;
+      fila[colImporte] = dec2(total);
+      if(colImporteNeto!==undefined && colImporteNeto!==null){
+        const totalNeto = g.movs.reduce((s,m)=>s+(m.tipo==='Ingreso'?Number(m.importe||0):-Number(m.importe||0)),0);
+        fila[colImporteNeto] = dec2(totalNeto);
+      }
+      filas.push(fila);
+      subtotalIdxs.push(filas.length-1);
+    }
+  }
+  return { filas, subtotalIdxs };
+}
+window.agruparMovimientosConSubtotal = agruparMovimientosConSubtotal;
+
+// Resalta las filas de Subtotal insertadas por agruparMovimientosConSubtotal
+// (distinto del estilo de TOTAL general: azul en vez de rojo, para diferenciarlas).
+function estilizarFilasSubtotal(ws, subtotalIdxs0Based, colCount, colsMoney){
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const formatoDecimal = '#,##0.00';
+  subtotalIdxs0Based.forEach(idx=>{
+    const R = idx+1;
+    for(let C=0;C<colCount;C++){
+      const addr = XLSX.utils.encode_cell({r:R,c:C});
+      if(!ws[addr]) ws[addr] = { t:'s', v:'' };
+      const esMoney = colsMoney.includes(C);
+      ws[addr].s = {
+        font: { bold:true, sz:7, name:'Arial', color:{rgb:'1E3A8A'} },
+        fill: { fgColor:{rgb:'EFF6FF'} },
+        border: bordeTodo,
+        alignment: { horizontal: esMoney?'right':'left' },
+        numFmt: esMoney?formatoDecimal:undefined
+      };
+    }
+  });
+}
+window.estilizarFilasSubtotal = estilizarFilasSubtotal;
+
 window.exportarReporteExcel=function(){
   const desde=document.getElementById('repDesde').value;const hasta=document.getElementById('repHasta').value;const tipo=document.getElementById('repTipo').value;
   let movs=allMovimientos.filter(m=>{if(tipo==='ingresos'&&m.tipo!=='Ingreso')return false;if(tipo==='egresos'&&m.tipo!=='Egreso')return false;if(desde||hasta){const d=fechaOrdenable(m.fecha);if(d){if(desde&&d<desde)return false;if(hasta&&d>hasta)return false;}}return true;});
@@ -2293,23 +2433,36 @@ window.exportarReporteExcel=function(){
   const wb=XLSX.utils.book_new();
 
   const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','Importe neto','N° Cheque','Banco Cheque','Venc. Cheque','Estado Cheque','Quién pagó','Observaciones','Cargado por'];
-  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),dec2(m.tipo==='Ingreso'?m.importe:-m.importe),m.numeroCheque||'',m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||'']);
-  const totImporte=movs.reduce((s,m)=>s+Number(m.importe||0),0);
-  const totNeto=movs.reduce((s,m)=>s+(m.tipo==='Ingreso'?Number(m.importe||0):-Number(m.importe||0)),0);
-  const totalRow=['TOTAL',`${movs.length} mov.`,'','','','',dec2(totImporte),dec2(totNeto),'','','','','','',''];
-  const aoa=[header,...rows,totalRow];
+  // Se agrupa por Cliente + Mes: si el mismo cliente tuvo varios pagos en un
+  // mismo mes, se le agrega debajo una fila de Subtotal que los unifica.
+  const { filas: rows, subtotalIdxs } = agruparMovimientosConSubtotal(
+    movs,
+    m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),dec2(m.tipo==='Ingreso'?m.importe:-m.importe),m.numeroCheque||'',m.bancoCheque||'',celdaFechaExcel(m.fechaVencCheque),m.estadoCheque||'',m.pagadorCheque||'',m.observaciones||'',m.creadoPor||''],
+    6, 15, 7
+  );
+  // Los totales se separan en PESOS y DÓLARES: sumarlos juntos en la misma
+  // columna daría un número sin sentido (un ingreso de U$D 1.500 contaría
+  // como $1.500). Se agrega una fila de total por cada moneda presente.
+  const movsPesosTot = movs.filter(m=>m.cuenta!=='Dólares');
+  const movsUsdTot = movs.filter(m=>m.cuenta==='Dólares');
+  const totImportePesos=movsPesosTot.reduce((s,m)=>s+Number(m.importe||0),0);
+  const totNetoPesos=movsPesosTot.reduce((s,m)=>s+(m.tipo==='Ingreso'?Number(m.importe||0):-Number(m.importe||0)),0);
+  const filasTotal=[['TOTAL PESOS',`${movsPesosTot.length} mov.`,'','','','',dec2(totImportePesos),dec2(totNetoPesos),'','','','','','','']];
+  let totImporteUsd=0, totNetoUsd=0;
+  if(movsUsdTot.length){
+    totImporteUsd=movsUsdTot.reduce((s,m)=>s+Number(m.importe||0),0);
+    totNetoUsd=movsUsdTot.reduce((s,m)=>s+(m.tipo==='Ingreso'?Number(m.importe||0):-Number(m.importe||0)),0);
+    filasTotal.push(['TOTAL DÓLARES (U$D)',`${movsUsdTot.length} mov.`,'','','','',dec2(totImporteUsd),dec2(totNetoUsd),'','','','','','','']);
+  }
+  const aoa=[header,...rows,...filasTotal];
   const ws1=XLSX.utils.aoa_to_sheet(aoa);
   ws1['!cols']=[{wch:11},{wch:9},{wch:16},{wch:22},{wch:24},{wch:13},{wch:13},{wch:13},{wch:12},{wch:16},{wch:12},{wch:13},{wch:18},{wch:28},{wch:14}];
   const lastCol=XLSX.utils.encode_col(header.length-1);
-  const firstDataRow=2, lastDataRow=1+rows.length, totalRowNum=2+rows.length;
+  const firstDataRow=2, lastDataRow=1+rows.length;
   ws1['!autofilter']={ ref:`A1:${lastCol}${lastDataRow}` };
-  const addrCant=XLSX.utils.encode_cell({r:totalRowNum-1,c:1});
-  ws1[addrCant]={ t:'str', v:`${rows.length} mov.`, f:`SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mov."` };
-  const addrImp=XLSX.utils.encode_cell({r:totalRowNum-1,c:6});
-  ws1[addrImp]={ t:'n', v:dec2(totImporte), f:`SUBTOTAL(109,G${firstDataRow}:G${lastDataRow})` };
-  const addrImpNeto=XLSX.utils.encode_cell({r:totalRowNum-1,c:7});
-  ws1[addrImpNeto]={ t:'n', v:dec2(totNeto), f:`SUBTOTAL(109,H${firstDataRow}:H${lastDataRow})` };
   estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6,7], colsNumericas:[6,7], colsFecha:[0,10] });
+  estilizarFilasTotalExtra(ws1, rows.length+3, filasTotal.length-1, header.length, [6,7]);
+  estilizarFilasSubtotal(ws1, subtotalIdxs, header.length, [6,7]);
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
 
   if(tipo==='todos'||tipo==='porCuenta'){
@@ -2352,6 +2505,15 @@ window.exportarReporteExcel=function(){
       const totClUsd={ ing: entradasClUsd.reduce((s,[,d])=>s+d.ing,0), egr: entradasClUsd.reduce((s,[,d])=>s+d.egr,0) };
       hojaResumenConTotal(wb,'Por cliente (dólares)',['Cliente','Ingresos U$D','Egresos U$D','Saldo U$D'],rowsClUsd,totClUsd,[{wch:26},{wch:14},{wch:14},{wch:14}]);
     }
+
+    // Por Cliente y Mes: si un cliente hizo varios pagos en el mismo mes,
+    // quedan unificados en una sola fila con el total de ese mes.
+    const filasClMes = agruparPorClienteYMes(movsPesos);
+    if(filasClMes.length) hojaPorClienteYMes(wb,'Por cliente y mes',filasClMes);
+    if(movsUsd.length){
+      const filasClMesUsd = agruparPorClienteYMes(movsUsd);
+      if(filasClMesUsd.length) hojaPorClienteYMes(wb,'Por cliente y mes (dólares)',filasClMesUsd,'Ingresos U$D','Egresos U$D','Saldo U$D');
+    }
   }
 
   XLSX.writeFile(wb,'Globalcomint_Reporte_'+today().replace(/\//g,'-')+'.xlsx');
@@ -2373,11 +2535,29 @@ window.exportarInformeCompletoExcel=function(){
 
   // 1) Movimientos del año (detalle completo, con Dólares identificados en su propia columna de cuenta)
   const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Estado Cheque','Observaciones','Cargado por'];
-  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.estadoCheque||'',m.observaciones||'',m.creadoPor||'']);
-  const ws1=XLSX.utils.aoa_to_sheet([header,...rows]);
+  // Se agrupa por Cliente + Mes: si el mismo cliente tuvo varios pagos en un
+  // mismo mes, se le agrega debajo una fila de Subtotal que los unifica.
+  const { filas: rows, subtotalIdxs } = agruparMovimientosConSubtotal(
+    movs,
+    m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.estadoCheque||'',m.observaciones||'',m.creadoPor||''],
+    6, 11
+  );
+  // Fila(s) de TOTAL — separadas por moneda, igual criterio que en "Exportar
+  // por rango de fechas": nunca se suman pesos y dólares en la misma celda.
+  const movsPesosDet = movs.filter(m=>m.cuenta!=='Dólares');
+  const movsUsdDet = movs.filter(m=>m.cuenta==='Dólares');
+  const totImpPesosDet = movsPesosDet.reduce((s,m)=>s+Number(m.importe||0),0);
+  const filasTotalDet=[['TOTAL PESOS',`${movsPesosDet.length} mov.`,'','','','',dec2(totImpPesosDet),'','','','']];
+  if(movsUsdDet.length){
+    const totImpUsdDet = movsUsdDet.reduce((s,m)=>s+Number(m.importe||0),0);
+    filasTotalDet.push(['TOTAL DÓLARES (U$D)',`${movsUsdDet.length} mov.`,'','','','',dec2(totImpUsdDet),'','','','']);
+  }
+  const ws1=XLSX.utils.aoa_to_sheet([header,...rows,...filasTotalDet]);
   ws1['!cols']=[{wch:11},{wch:9},{wch:16},{wch:22},{wch:24},{wch:13},{wch:13},{wch:12},{wch:13},{wch:28},{wch:14}];
   ws1['!autofilter']={ ref:`A1:${XLSX.utils.encode_col(header.length-1)}${1+rows.length}` };
   estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6], colsFecha:[0] });
+  estilizarFilasTotalExtra(ws1, rows.length+3, filasTotalDet.length-1, header.length, [6]);
+  estilizarFilasSubtotal(ws1, subtotalIdxs, header.length, [6]);
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos '+anioSel);
 
   // 2) Resumen mensual (pesos)
@@ -2418,6 +2598,15 @@ window.exportarInformeCompletoExcel=function(){
     for(const m of movsUsd){ if(!clMapUsd[m.cliente]) clMapUsd[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMapUsd[m.cliente].ing+=v:clMapUsd[m.cliente].egr+=v; }
     const entradasClUsd=Object.entries(clMapUsd).sort((a,b)=>b[1].ing-a[1].ing);
     hojaResumenConTotal(wb,'Por cliente (dólares)',['Cliente','Ingresos U$D','Egresos U$D','Saldo U$D'],entradasClUsd.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]),{ing:entradasClUsd.reduce((s,[,d])=>s+d.ing,0),egr:entradasClUsd.reduce((s,[,d])=>s+d.egr,0)},[{wch:26},{wch:14},{wch:14},{wch:14}]);
+  }
+
+  // 5b) Por Cliente y Mes: si un cliente hizo varios pagos en el mismo mes,
+  // quedan unificados en una sola fila con el total de ese mes.
+  const filasClMes = agruparPorClienteYMes(movsPesos);
+  if(filasClMes.length) hojaPorClienteYMes(wb,'Por cliente y mes',filasClMes);
+  if(movsUsd.length){
+    const filasClMesUsd = agruparPorClienteYMes(movsUsd);
+    if(filasClMesUsd.length) hojaPorClienteYMes(wb,'Por cliente y mes (dólares)',filasClMesUsd,'Ingresos U$D','Egresos U$D','Saldo U$D');
   }
 
   // 6-9) Costo de Personal
