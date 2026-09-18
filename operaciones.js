@@ -2956,10 +2956,119 @@ window.exportarMudanzas = function(){
   XLSX.writeFile(wb, nombreArchivo);
 };
 
-// ── CUENTA RAMIRO ──
+// ══════════════════════════════ CUENTA RAMIRO ══════════════════════════════
+
+// ── Selección de MESES (multi-select) ──
+// Antes había un <select> simple de un solo mes. Ahora es un dropdown con checkboxes
+// que permite tildar varios meses a la vez. Un Set vacío significa "Todos los meses"
+// (mismo comportamiento que el "" del select viejo). Se recuerda entre renders.
+let ramiroMesesSeleccionados = new Set(); // vacío = todos los meses
+let ramiroMesesDisponibles = []; // se recalcula en cada renderRamiro()
+
+window.toggleRamiroMesesDropdown = function(){
+  const dd = document.getElementById('ramiro-meses-dropdown');
+  dd.classList.toggle('show');
+};
+
+// Cierra el dropdown de meses si se clickea afuera
+document.addEventListener('click', function(e){
+  const dd  = document.getElementById('ramiro-meses-dropdown');
+  const btn = document.getElementById('ramiro-meses-btn');
+  if(!dd || !btn) return;
+  if(dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)){
+    dd.classList.remove('show');
+  }
+});
+
+window.seleccionarTodosMesesRamiro = function(todos){
+  if(todos){
+    ramiroMesesSeleccionados = new Set(ramiroMesesDisponibles);
+  } else {
+    ramiroMesesSeleccionados = new Set();
+  }
+  renderRamiro();
+};
+
+window.toggleRamiroMes = function(mes, checked){
+  if(checked) ramiroMesesSeleccionados.add(mes);
+  else ramiroMesesSeleccionados.delete(mes);
+  renderRamiro();
+};
+
+function renderRamiroMesesDropdown(){
+  const checksEl = document.getElementById('ramiro-meses-checks');
+  const badgeEl  = document.getElementById('ramiro-meses-badge');
+  if(!checksEl) return;
+
+  if(!ramiroMesesDisponibles.length){
+    checksEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px;">Sin registros</div>';
+  } else {
+    checksEl.innerHTML = ramiroMesesDisponibles.map(m => `
+      <label class="multisel-item">
+        <input type="checkbox" ${ramiroMesesSeleccionados.has(m)?'checked':''} onchange="toggleRamiroMes('${m}', this.checked)">
+        ${m}
+      </label>
+    `).join('');
+  }
+
+  // Badge: si no hay ninguno tildado (o están todos tildados) se interpreta como
+  // "Todos los meses" y no se muestra número; si hay una selección parcial, se
+  // muestra la cantidad de meses elegidos.
+  const hayFiltro = ramiroMesesSeleccionados.size > 0 && ramiroMesesSeleccionados.size < ramiroMesesDisponibles.length;
+  if(hayFiltro){
+    badgeEl.style.display = 'inline-block';
+    badgeEl.textContent = ramiroMesesSeleccionados.size;
+  } else {
+    badgeEl.style.display = 'none';
+  }
+}
+
+// ── Selección de OPERACIONES para el reporte de pago ──
+// Set de keys `${col}_${id}` (col = 'ops' | 'mudanzas') para distinguir entre las dos
+// colecciones que alimentan la Cuenta Ramiro. Se usa tanto para exportar a Excel "lo
+// que se va a pagar" como para el botón de marcar varias como pagadas de una vez.
+let ramiroSeleccionadas = new Set();
+let ramiroItemsPorKey = {}; // se repuebla en cada renderRamiro(): key -> item completo
+
+function keyRamiro(col, id){ return col + '_' + id; }
+
+window.toggleRamiroItemSeleccion = function(key, checked){
+  if(checked) ramiroSeleccionadas.add(key);
+  else ramiroSeleccionadas.delete(key);
+  actualizarInfoSeleccionRamiro();
+  // Sincroniza el checkbox "tildar todas" sin tener que re-renderizar toda la tabla
+  const chkTodas = document.getElementById('ramiro_chk_todas');
+  if(chkTodas){
+    const keysFiltradas = Object.keys(ramiroItemsPorKey);
+    chkTodas.checked = keysFiltradas.length > 0 && keysFiltradas.every(k => ramiroSeleccionadas.has(k));
+  }
+};
+
+window.toggleRamiroSeleccionTodas = function(checked){
+  // Aplica a TODAS las filas que hoy cumplen el filtro (mes/día/estado), no solo a
+  // las de la página visible, para que sirva de verdad como "armá el reporte completo".
+  Object.keys(ramiroItemsPorKey).forEach(k => {
+    if(checked) ramiroSeleccionadas.add(k);
+    else ramiroSeleccionadas.delete(k);
+  });
+  renderRamiro();
+};
+
+function actualizarInfoSeleccionRamiro(){
+  const infoEl = document.getElementById('ramiro-seleccion-info');
+  if(!infoEl) return;
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){
+    infoEl.textContent = 'Ninguna operación seleccionada para el reporte';
+    return;
+  }
+  const totalPesos = seleccionadas.reduce((a,b) => a + b.pesos, 0);
+  const totalUsd   = seleccionadas.reduce((a,b) => a + b.ramiroUsd, 0);
+  infoEl.textContent = `${seleccionadas.length} seleccionada(s) — USD ${fmt(totalUsd)} · $${fmt(totalPesos)}`;
+}
+
 window.renderRamiro = function(){
   const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
-  const filtMes     = document.getElementById('ramiro_filtro_mes')?.value || '';
   const filtFecha   = document.getElementById('ramiro_filtro_fecha')?.value || '';
   const tc = 1440;
 
@@ -3000,21 +3109,29 @@ window.renderRamiro = function(){
 
   itemsTodos.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
 
-  // Poblar el selector de meses en base a todos los registros
-  const selMes = document.getElementById('ramiro_filtro_mes');
-  if(selMes){
-    const vActual = selMes.value;
-    const meses = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
-    selMes.innerHTML = '<option value="">Todos los meses</option>' +
-      meses.map(m => `<option value="${m}">${m}</option>`).join('');
-    selMes.value = vActual;
-  }
+  // ── Poblar el dropdown de meses (multi-select) en base a todos los registros ──
+  ramiroMesesDisponibles = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+  // Si había meses tildados que ya no existen más (ej. se borró la última operación de
+  // ese mes), se los saca de la selección para no quedar filtrando por algo vacío.
+  ramiroMesesSeleccionados = new Set([...ramiroMesesSeleccionados].filter(m => ramiroMesesDisponibles.includes(m)));
+  renderRamiroMesesDropdown();
 
   let items = [...itemsTodos];
-  if(filtMes)   items = items.filter(i => i.fecha && i.fecha.startsWith(filtMes));
+  // Set vacío = todos los meses (comportamiento igual al "" del select viejo).
+  if(ramiroMesesSeleccionados.size > 0){
+    items = items.filter(i => i.fecha && ramiroMesesSeleccionados.has(i.fecha.slice(0,7)));
+  }
   if(filtFecha) items = items.filter(i => i.fecha === filtFecha);
 
   const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
+
+  // Mapa key->item de TODO lo filtrado (antes de paginar), para poder tildar "todas las
+  // filtradas" y para poder resolver la selección al exportar/marcar pagado, sin importar
+  // en qué página de la tabla esté cada fila.
+  ramiroItemsPorKey = {};
+  filtrados.forEach(i => { ramiroItemsPorKey[keyRamiro(i.col, i.id)] = i; });
+  // Limpiar selección de items que ya no están visibles con el filtro actual
+  ramiroSeleccionadas = new Set([...ramiroSeleccionadas].filter(k => ramiroItemsPorKey[k]));
 
   const totalUsd      = items.reduce((a,b) => a + b.ramiroUsd, 0);
   const totalPesos    = items.reduce((a,b) => a + b.pesos, 0);
@@ -3050,16 +3167,23 @@ window.renderRamiro = function(){
   const ramiroPaginacionEl = document.getElementById('ramiro-paginacion');
 
   if(!filtrados.length){
-    tbodyRamiro.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+    tbodyRamiro.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
     if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = '';
+    actualizarInfoSeleccionRamiro();
+    const chkTodasVacio = document.getElementById('ramiro_chk_todas');
+    if(chkTodasVacio) chkTodasVacio.checked = false;
     return;
   }
 
   // filtrados ya viene ordenado del más nuevo al más viejo (itemsTodos se ordena por fecha desc)
   const { pagina, page, totalPaginas } = paginarArray('ramiro', filtrados, PAGE_SIZE_GENERICO);
 
-  tbodyRamiro.innerHTML = pagina.map(i => `
+  tbodyRamiro.innerHTML = pagina.map(i => {
+    const key = keyRamiro(i.col, i.id);
+    const tildada = ramiroSeleccionadas.has(key);
+    return `
       <tr>
+        <td><input type="checkbox" ${tildada?'checked':''} onchange="toggleRamiroItemSeleccion('${key}', this.checked)"></td>
         <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
         <td>${i.fecha||''}</td>
         <td><strong>${i.cliente}</strong></td>
@@ -3080,9 +3204,115 @@ window.renderRamiro = function(){
           <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
         </td>
       </tr>
-    `).join('');
+    `;
+  }).join('');
 
   if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'ramiro');
+
+  // Sincronizar checkbox "tildar todas" con el estado real de la selección (sobre
+  // TODO lo filtrado, no solo la página visible)
+  const keysFiltradas = Object.keys(ramiroItemsPorKey);
+  const chkTodas = document.getElementById('ramiro_chk_todas');
+  if(chkTodas) chkTodas.checked = keysFiltradas.length > 0 && keysFiltradas.every(k => ramiroSeleccionadas.has(k));
+
+  actualizarInfoSeleccionRamiro();
+};
+
+// ── MARCAR LAS SELECCIONADAS COMO PAGADAS ──
+window.marcarPagadasSeleccionRamiro = async function(){
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){ toast('⚠️ No hay operaciones seleccionadas'); return; }
+
+  const pendientes = seleccionadas.filter(i => i.estado !== 'si');
+  if(!pendientes.length){ toast('Las seleccionadas ya están todas pagadas'); return; }
+
+  // Mudanzas que todavía no llegaron al 50% cobrado no se pueden marcar como pagadas
+  const bloqueadas = pendientes.filter(i => i.col === 'mudanzas' && !i.cobrado);
+  const aplicar = pendientes.filter(i => !(i.col === 'mudanzas' && !i.cobrado));
+
+  if(!aplicar.length){
+    toast('⚠️ Todas las seleccionadas son mudanzas que todavía no cobraron el 50%');
+    return;
+  }
+
+  if(!confirm(`¿Marcar ${aplicar.length} operación(es) como pagadas a Ramiro?${bloqueadas.length ? ` (${bloqueadas.length} quedan afuera por no tener el 50% cobrado)` : ''}`)) return;
+
+  for(const i of aplicar){
+    const colName = i.col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+    const campo   = i.col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+    await updateDoc(doc(db, colName, i.id), { [campo]: 'si' });
+  }
+  toast(`✅ ${aplicar.length} registro(s) marcados como pagados`);
+};
+
+// ── EXPORTAR EXCEL: reporte de lo que se le va a pagar a Ramiro (seleccionadas) ──
+window.exportarRamiroExcel = function(){
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){
+    toast('⚠️ Tildá al menos una operación de la tabla para armar el reporte');
+    return;
+  }
+
+  const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
+
+  // Orden cronológico, más vieja primero, para que el reporte se lea como un listado
+  // de pago prolijo (igual criterio que las otras exportaciones del módulo).
+  const ordenadas = [...seleccionadas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const header = ['TIPO','FECHA','CLIENTE','DETALLE','USD RAMIRO','$ (TC)','ESTADO'];
+
+  const rows = ordenadas.map(i => [
+    i.tipo,
+    i.fecha || '',
+    i.cliente || '',
+    i.detalle || '',
+    dec2(i.ramiroUsd),
+    dec2(i.pesos),
+    i.estado === 'si' ? 'PAGADO' : 'PENDIENTE'
+  ].map(puntoSiVacio));
+
+  const totUsd   = ordenadas.reduce((a,b) => a + (b.ramiroUsd||0), 0);
+  const totPesos = ordenadas.reduce((a,b) => a + (b.pesos||0), 0);
+  const totalRow = ['TOTAL', `${ordenadas.length} operación(es)`, '', '', dec2(totUsd), dec2(totPesos), ''].map(puntoSiVacio);
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:10},{wch:11},{wch:20},{wch:26},{wch:12},{wch:12},{wch:11}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length;
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+
+  // TOTAL con fórmulas SUBTOTAL: si se filtra en Excel, recalcula solo lo visible
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} operación(es)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" operación(es)"` };
+    [4,5].forEach(c => { // USD RAMIRO, $ (TC)
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [4,5],
+    colsNumericas: [4,5]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pago Ramiro');
+
+  const hoy = fechaLocalISO();
+  const nombreArchivo = `pago_ramiro_${hoy}_${ordenadas.length}ops.xlsx`.replace(/\s+/g,'_');
+  XLSX.writeFile(wb, nombreArchivo);
+  toast('📥 Excel generado: ' + ordenadas.length + ' operación(es) por $' + fmt(totPesos));
 };
 
 // ── EDITAR (revertir a pendiente) un item de Ramiro por si se marcó pagado por error ──
