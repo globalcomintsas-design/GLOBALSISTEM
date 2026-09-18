@@ -192,9 +192,8 @@ tr:hover td{background:#fafbff;}
   <div class="tabs">
     <div class="tab active" onclick="showTab('movimientos',this)">💰 Movimientos</div>
     <div class="tab" onclick="showTab('cheques',this)">📄 Cheques</div>
-    <div class="tab" onclick="showTab('cuentacorriente',this)">📋 Cta. Corriente</div>
-    <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
     <div class="tab" onclick="showTab('reportes',this)">📊 Reportes</div>
+    <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
     <div class="tab" onclick="showTab('boletas',this)">🧾 Boletas</div>
     <div class="tab" onclick="showTab('conciliacion',this)">🏦 Conciliación</div>
     <div class="tab" onclick="showTab('usuarios',this)" id="tabUsuarios" style="display:none">👥 Usuarios</div>
@@ -353,16 +352,62 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
-    <!-- CUENTA CORRIENTE -->
-    <div class="page" id="page-cuentacorriente">
+    <!-- REPORTES (unificado: incluye Cta. Corriente) -->
+    <div class="page" id="page-reportes">
       <div class="section">
-        <div class="section-title">Cuenta Corriente por Cliente <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
-        <div id="ccAnioTabs" class="cc-anio-tabs"></div>
+        <div class="section-title">
+          Informe Anual
+          <div class="btn-row">
+            <button class="btn btn-success btn-sm" onclick="exportarInformeCompletoExcel()">📊 Exportar informe completo</button>
+            <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
+          </div>
+        </div>
+        <div id="repAnioTabs" class="cc-anio-tabs"></div>
+        <div class="cards">
+          <div class="card"><div class="card-label">Ingresos del año</div><div class="card-value green" id="repIngAnio">$ 0</div></div>
+          <div class="card"><div class="card-label">Egresos del año</div><div class="card-value red" id="repEgrAnio">$ 0</div></div>
+          <div class="card"><div class="card-label">Neto del año</div><div class="card-value" id="repNetoAnio">$ 0</div></div>
+          <div class="card"><div class="card-label">Mov. este año</div><div class="card-value" id="repCantAnio">0</div></div>
+          <div class="card"><div class="card-label">Dólares Ingresos</div><div class="card-value blue" id="repIngAnioUsd">U$D 0</div></div>
+          <div class="card"><div class="card-label">Dólares Egresos</div><div class="card-value blue" id="repEgrAnioUsd">U$D 0</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Mov.</th></tr></thead>
+            <tbody id="tablaResMensual"></tbody>
+            <tfoot id="tablaResMensualFooter"></tfoot>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resumen por Cuenta (año seleccionado)</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cuenta</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th></tr></thead>
+            <tbody id="tablaResCuenta"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Resumen por Cliente (año seleccionado) <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
+        <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Cada cliente aparece una sola vez, con el total de Ingresos y Egresos del año en pesos sumados. Los movimientos en Dólares se resumen aparte, en la tabla de abajo, para que no se mezclen los importes.</p>
         <div class="search-bar"><input type="text" id="buscarCC" placeholder="Buscar cliente..." oninput="renderCC()" /></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Total Egresos</th><th>Saldo</th><th>Último mov.</th><th>Detalle</th></tr></thead>
+            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Total Egresos</th><th>Saldo</th><th>Mov.</th><th>Último mov.</th><th>Detalle</th></tr></thead>
             <tbody id="tablaCC"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section" id="seccionClientesUsd" style="display:none">
+        <div class="section-title">Resumen por Cliente en Dólares (año seleccionado)</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cliente</th><th>Ingresos U$D</th><th>Egresos U$D</th><th>Saldo U$D</th></tr></thead>
+            <tbody id="tablaCCUsd"></tbody>
           </table>
         </div>
       </div>
@@ -407,6 +452,54 @@ tr:hover td{background:#fafbff;}
           </table>
         </div>
       </div>
+
+      <div class="section">
+        <div class="section-title">Top Clientes por Ingreso (histórico completo)</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Movimientos</th></tr></thead>
+            <tbody id="tablaTopClientes"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          🔀 Créditos a Nuestro Favor (Cheques Endosados)
+        </div>
+        <p style="font-size:12px;color:#666;margin-bottom:12px;">
+          Cuando un cheque que endosamos vale más que las facturas que cubre, la diferencia queda acá registrada
+          como plata a nuestro favor con ese proveedor, para descontar de una próxima factura de él.
+        </p>
+        <div class="cards">
+          <div class="card"><div class="card-label">Crédito a nuestro favor (pendiente)</div><div class="card-value orange" id="credTotalPendiente">$ 0</div></div>
+          <div class="card"><div class="card-label">Créditos sin usar</div><div class="card-value" id="credCantPendiente">0</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Proveedor</th><th>Cheque N°</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
+            <tbody id="tablaCreditosCheques"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Exportar por rango de fechas</div>
+        <div class="form-grid">
+          <div class="field"><label>Desde</label><input type="date" id="repDesde" /></div>
+          <div class="field"><label>Hasta</label><input type="date" id="repHasta" /></div>
+          <div class="field"><label>Tipo de reporte</label>
+            <select id="repTipo">
+              <option value="todos">Todos los movimientos</option>
+              <option value="ingresos">Solo ingresos</option>
+              <option value="egresos">Solo egresos</option>
+              <option value="porCuenta">Por cuenta</option>
+              <option value="porCliente">Por cliente</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="exportarReporteExcel()">Generar Excel</button>
+      </div>
     </div>
 
     <!-- VENCIMIENTOS -->
@@ -432,99 +525,7 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
-    <!-- REPORTES -->
-    <div class="page" id="page-reportes">
-      <div class="cards">
-        <div class="card"><div class="card-label">Ingresos del mes</div><div class="card-value green" id="repIngMes">$ 0</div></div>
-        <div class="card"><div class="card-label">Egresos del mes</div><div class="card-value red" id="repEgrMes">$ 0</div></div>
-        <div class="card"><div class="card-label">Neto del mes</div><div class="card-value" id="repNetoMes">$ 0</div></div>
-        <div class="card"><div class="card-label">Mov. este mes</div><div class="card-value" id="repCantMes">0</div></div>
-      </div>
-      <div class="section">
-        <div class="section-title">
-          Exportar Reporte
-          <div class="btn-row">
-            <button class="btn btn-success btn-sm" onclick="exportarReporteExcel()">📊 Excel completo</button>
-            <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
-          </div>
-        </div>
-        <div class="form-grid">
-          <div class="field"><label>Desde</label><input type="date" id="repDesde" /></div>
-          <div class="field"><label>Hasta</label><input type="date" id="repHasta" /></div>
-          <div class="field"><label>Tipo de reporte</label>
-            <select id="repTipo">
-              <option value="todos">Todos los movimientos</option>
-              <option value="ingresos">Solo ingresos</option>
-              <option value="egresos">Solo egresos</option>
-              <option value="porCuenta">Por cuenta</option>
-              <option value="porCliente">Por cliente</option>
-            </select>
-          </div>
-        </div>
-        <button class="btn btn-primary" onclick="exportarReporteExcel()">Generar Excel</button>
-      </div>
-      <div class="section">
-        <div class="section-title">
-          Resumen Anual
-          <div style="display:flex;align-items:center;gap:8px">
-            <label style="font-size:11px;color:#666">Año</label>
-            <select id="repAnio" onchange="renderReportes()" style="padding:7px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;"></select>
-          </div>
-        </div>
-        <div class="cards">
-          <div class="card"><div class="card-label">Ingresos del año</div><div class="card-value green" id="repIngAnio">$ 0</div></div>
-          <div class="card"><div class="card-label">Egresos del año</div><div class="card-value red" id="repEgrAnio">$ 0</div></div>
-          <div class="card"><div class="card-label">Neto del año</div><div class="card-value" id="repNetoAnio">$ 0</div></div>
-          <div class="card"><div class="card-label">Mov. este año</div><div class="card-value" id="repCantAnio">0</div></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Mes</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th><th>Mov.</th></tr></thead>
-            <tbody id="tablaResMensual"></tbody>
-            <tfoot id="tablaResMensualFooter"></tfoot>
-          </table>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Resumen por Cuenta</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Cuenta</th><th>Ingresos</th><th>Egresos</th><th>Saldo</th></tr></thead>
-            <tbody id="tablaResCuenta"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">Top Clientes por Ingreso</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Cliente</th><th>Total Ingresos</th><th>Movimientos</th></tr></thead>
-            <tbody id="tablaTopClientes"></tbody>
-          </table>
-        </div>
-      </div>
-      <div class="section">
-        <div class="section-title">
-          🔀 Créditos a Nuestro Favor (Cheques Endosados)
-        </div>
-        <p style="font-size:12px;color:#666;margin-bottom:12px;">
-          Cuando un cheque que endosamos vale más que las facturas que cubre, la diferencia queda acá registrada
-          como plata a nuestro favor con ese proveedor, para descontar de una próxima factura de él.
-        </p>
-        <div class="cards">
-          <div class="card"><div class="card-label">Crédito a nuestro favor (pendiente)</div><div class="card-value orange" id="credTotalPendiente">$ 0</div></div>
-          <div class="card"><div class="card-label">Créditos sin usar</div><div class="card-value" id="credCantPendiente">0</div></div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Fecha</th><th>Proveedor</th><th>Cheque N°</th><th>Monto</th><th>Estado</th><th>Acciones</th></tr></thead>
-            <tbody id="tablaCreditosCheques"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- BOLETAS (Factura A / C de los socios) -->
+    <!-- BOLETAS (Factura A / Factura C de los socios) -->
     <div class="page" id="page-boletas">
       <div class="section">
         <div class="section-title">
@@ -849,18 +850,14 @@ let mudanzasPend = [];        // mudanzas de operaciones.html (para marcar "cobr
 let opsPorFactura = {};       // { "0001-00000123": true } - facturas asignadas a operaciones
 
 // ── Clientes/Proveedores para el autocompletado de Caja ──
-// Se arma con TRES fuentes: los despachantes de Operaciones, los clientes finales de
-// Operaciones (ambos son "los mismos de Operaciones, que son nuestros clientes") y los
-// proveedores propios de Caja (colección 'caja_proveedores'), que se van guardando solos
-// a medida que se cargan movimientos con un nombre que todavía no está en la lista.
 let despachantesNombresCaja = [];
 let clientesFinalesNombresCaja = [];
 let proveedoresNombresCaja = [];
 let clientesNombresCaja = [];
 window.clientesNombresCaja = clientesNombresCaja;
 
-// ── Cuenta Corriente: año seleccionado (tabs) ──
-let ccAnioSeleccionado = new Date().getFullYear();
+// ── Reportes/Cta. Corriente: año único seleccionado (pestañas), maneja TODO en Reportes ──
+let repAnioSeleccionado = new Date().getFullYear();
 let costoPersonalActual = null;
 
 function actualizarClientesNombresCaja(){
@@ -873,7 +870,7 @@ function actualizarClientesNombresCaja(){
 }
 
 // ── Conciliación bancaria (todo en memoria, no genera lecturas extra a Firestore) ──
-let concLineasBanco = [];     // lineas parseadas del resumen del banco, ya clasificadas y comparadas
+let concLineasBanco = [];
 
 function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -1030,7 +1027,6 @@ window.showTab = function(name, el) {
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+name).classList.add('active');
   el.classList.add('active');
-  if (name==='cuentacorriente') renderCC();
   if (name==='reportes') renderReportes();
   if (name==='vencimientos') renderVencimientos();
   if (name==='usuarios') renderUsuarios();
@@ -1039,8 +1035,6 @@ window.showTab = function(name, el) {
 };
 
 // TOGGLE CHEQUE FIELDS (Nuevo Movimiento)
-// Cuenta=Cheque + Tipo=Ingreso  -> carga un cheque NUEVO que entra a cartera (como antes).
-// Cuenta=Cheque + Tipo=Egreso   -> endosa cheque(s) ya en cartera (endosoChequeWrap).
 window.toggleChequeFields = function() {
   const tipo = document.getElementById('tipo').value;
   const cuenta = document.getElementById('cuenta').value;
@@ -1063,7 +1057,6 @@ window.toggleChequeFieldsModal = function() {
 function ocultarSpinner(){ const s=document.getElementById('spinnerOverlay'); if(s) s.style.display='none'; }
 
 function initFirestore() {
-  // Timeout de seguridad: si en 8s no cargó, oculta el spinner igual
   setTimeout(ocultarSpinner, 8000);
   onSnapshot(collection(db,'usuarios'), snap => {
     allUsuarios = {};
@@ -1074,11 +1067,9 @@ function initFirestore() {
     allMovimientos = snap.docs.map(d=>({id:d.id,...d.data()}));
     allMovimientos.sort((a,b)=>(b.ts||0)-(a.ts||0));
     procesarVencimientosCheques();
-    renderSaldos(); renderFiltroMesMovimientos(); filtrar(); renderCC(); renderReportes(); renderCheques();
-    // Si el formulario de "Endosar Cheque(s)" está abierto, refresca la lista de cheques disponibles
+    renderSaldos(); renderFiltroMesMovimientos(); filtrar(); renderReportes(); renderCheques();
     const endosoWrap = document.getElementById('endosoChequeWrap');
     if(endosoWrap && endosoWrap.style.display!=='none') renderListaChequesEndosoCheque();
-    // Si ya había una conciliación procesada en pantalla, la recalcula contra los movimientos actuales
     if (concLineasBanco.length) compararConciliacionConCaja();
     ocultarSpinner();
   });
@@ -1094,12 +1085,10 @@ function initFirestore() {
       const titulo = (document.getElementById('titleDetalleCC').textContent||'').replace('📋 ','');
       if(titulo) renderCreditoEnDetalleCC(titulo);
     }
-    // Refresca el aviso de crédito del formulario de endoso de cheque, si está visible
     const endosoWrap = document.getElementById('endosoChequeWrap');
     if(endosoWrap && endosoWrap.style.display!=='none') verificarCreditoProveedorEndoso();
   });
 
-  // ── Listeners del módulo Operaciones (solo lectura desde Caja) ──
   onSnapshot(collection(db,'corresponsales_clientes'), snap => {
     despachantesOp = snap.docs.map(d => (d.data().nombre||'').toUpperCase());
     despachantesNombresCaja = snap.docs.map(d => d.data().nombre).filter(Boolean);
@@ -1127,15 +1116,11 @@ function initFirestore() {
 }
 
 // CHEQUES VENCIMIENTOS
-// Acredita solo, por vencimiento, los cheques cuyo estado NO fue tocado a mano.
-// Si alguien cambió el estado manualmente (por ej. para volver a ponerlo "En cartera"
-// y poder endosarlo), queda marcado con estadoChequeManual:true y este proceso
-// automático NO lo vuelve a pisar.
 async function procesarVencimientosCheques() {
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   for (const m of allMovimientos) {
     if (m.cuenta !== 'Cheque' || !m.fechaVencCheque) continue;
-    if (m.estadoChequeManual) continue; // estado puesto a mano: manda el usuario
+    if (m.estadoChequeManual) continue;
     if (m.estadoCheque === 'Rechazado' || m.estadoCheque === 'Acreditado' || m.estadoCheque === 'Endosado') continue;
     const fv = new Date(m.fechaVencCheque+'T00:00:00');
     if (fv <= hoy) {
@@ -1148,7 +1133,7 @@ async function procesarVencimientosCheques() {
 function renderSaldos() {
   const c = { Caja:0, Banco:0, Cheque:0, 'Mercado Pago':0, Dolares:0 };
   for (const m of allMovimientos) {
-    if (m.excluirDeSaldos) continue; // movimientos contables (ej: egreso por endoso) que no representan plata disponible
+    if (m.excluirDeSaldos) continue;
     const v = Number(m.importe)||0;
     if (m.cuenta === 'Dólares') {
       m.tipo==='Ingreso' ? c.Dolares+=v : c.Dolares-=v;
@@ -1182,7 +1167,6 @@ window.guardarMovimiento = async function() {
   const tipo = document.getElementById('tipo').value;
   const cuenta = document.getElementById('cuenta').value;
 
-  // Egreso + Cheque = endosar cheque(s) de la cartera (flujo separado)
   if (tipo==='Egreso' && cuenta==='Cheque') {
     await guardarEndosoCheque();
     return;
@@ -1206,13 +1190,11 @@ window.guardarMovimiento = async function() {
   }
   const nuevoRef = await addDoc(collection(db,'movimientos'), data);
 
-  // ── Vinculación automática con Operaciones (solo Ingresos) ──
   if (tipo === 'Ingreso') {
     try { await vincularIngresoConOperaciones({ cliente, factura, importe, detalle }); }
     catch(e){ console.warn('Vinculación con Operaciones falló:', e); }
   }
 
-  // ── Guarda el Cliente/Proveedor como nuevo si todavía no estaba en la lista ──
   try { await guardarProveedorSiEsNuevo(cliente); }
   catch(e){ console.warn('No se pudo guardar el proveedor nuevo:', e); }
 
@@ -1466,8 +1448,6 @@ window.guardarEdicion=async function(){
     data.pagadorCheque=document.getElementById('ePagadorCheque').value.trim();
     data.estadoCheque=document.getElementById('eEstadoCheque').value;
     data.endosadoA=document.getElementById('eEndosadoA').value.trim();
-    // Si el estado lo cambiaste vos a mano, queda fijado: el proceso automático
-    // de vencimientos ya no lo vuelve a poner en "Acreditado".
     const movOriginal = allMovimientos.find(x=>x.id===editandoId);
     if(movOriginal && (movOriginal.estadoCheque||'En cartera') !== data.estadoCheque){
       data.estadoChequeManual = true;
@@ -1483,8 +1463,6 @@ window.guardarEdicion=async function(){
   cerrarModal();toast('Actualizado ✓ (' + fmtMoney(importeEditado) + ')','success');
 };
 
-// Libera el estado fijado a mano de un cheque: vuelve a quedar bajo el
-// automático por vencimiento (botón 🔓 en la tabla de Cheques).
 window.liberarEstadoManualCheque = async function(id){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   if(!confirm('¿Volver a dejar este cheque bajo el acreditado automático por vencimiento?')) return;
@@ -1494,17 +1472,6 @@ window.liberarEstadoManualCheque = async function(id){
   }catch(e){ toast('Error: '+e.message,'error'); }
 };
 
-/* ══════════════════════════════════════════════════════════════════════
-   ── CRÉDITOS A NUESTRO FAVOR: consumo (total o parcial) ───────────────
-   Se usa tanto al aplicar el crédito automáticamente en un endoso de
-   cheque(s), como al usarlo manualmente desde Cta. Corriente. Consume
-   los créditos pendientes de un proveedor en orden FIFO (más viejo
-   primero). Si un crédito alcanza para cubrir todo lo que se consume,
-   se borra. Si sobra parte del crédito, se actualiza el monto restante
-   en el mismo documento (no se borra hasta llegar a $0).
-   Devuelve el monto realmente consumido (por si el proveedor tenía
-   menos crédito disponible del que se pidió aplicar).
-   ══════════════════════════════════════════════════════════════════════ */
 async function consumirCreditoProveedor(proveedor, montoAConsumir){
   let restante = dec2(montoAConsumir);
   let consumidoTotal = 0;
@@ -1542,7 +1509,6 @@ function creditoPendienteProveedor(nombre){
 }
 window.creditoPendienteProveedor = creditoPendienteProveedor;
 
-// Botón "💰 Usar crédito" en el detalle de Cta. Corriente (uso manual, sin estar cargando un endoso)
 window.usarCreditoManual = async function(proveedor){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   const total = creditoPendienteProveedor(proveedor);
@@ -1559,27 +1525,6 @@ window.usarCreditoManual = async function(proveedor){
   }catch(e){ toast('Error: '+e.message,'error'); }
 };
 
-/* ══════════════════════════════════════════════════════════════════════
-   ── ENDOSAR CHEQUE(S) — integrado al formulario "Nuevo Movimiento" ──
-   Se activa eligiendo Tipo=Egreso + Cuenta=Cheque. Al confirmar el endoso:
-   1) Si el proveedor tiene crédito a nuestro favor pendiente, y el
-      usuario dejó tildado "Aplicar crédito automáticamente" (tildado
-      por defecto), ese crédito se descuenta primero del total a cubrir.
-   2) Cada cheque tildado se actualiza: estadoCheque='Endosado' (queda
-      excluido de los saldos: esa plata nunca estuvo disponible en caja,
-      se usó directamente para endosar) y estadoChequeManual=true, para
-      que el proceso de vencimientos no lo vuelva a tocar nunca.
-   3) Si se usan cheques, se crea UN Egreso en 'movimientos' con cuenta
-      'Cheque', marcado con excluirDeSaldos:true.
-   4) Si se agrega un complemento en efectivo/transferencia, se crea
-      OTRO Egreso en la cuenta elegida (Caja/Banco/Mercado Pago), SIN
-      excluir de saldos (esa sí es plata real que sale de la cuenta).
-   5) Si el total endosado (cheques + complemento) SUPERA el neto a cubrir
-      (facturas menos crédito aplicado), la diferencia queda como NUEVO
-      crédito a nuestro favor con ese proveedor.
-   6) Si el total endosado es MENOR, no se bloquea: se registra lo endosado
-      y el resto queda pendiente para cargarlo después.
-   ══════════════════════════════════════════════════════════════════════ */
 let endosoChequeFilasCount = 0;
 let endosoChequePreseleccionarId = null;
 
@@ -1654,7 +1599,6 @@ function renderListaChequesEndosoCheque(preseleccionarId){
     wrap.innerHTML = '<div style="padding:10px;color:#888;font-size:12px;">No hay cheques disponibles en cartera. Si el cheque que querés endosar figura "Acreditado", editalo (✏️) y ponelo en "En cartera": queda fijado a mano y aparece acá.</div>';
     return;
   }
-  // conserva los que ya estaban tildados al re-renderizar (por ej. cuando llega un snapshot nuevo)
   const tildadosActuales = new Set([...document.querySelectorAll('.endoso-cheque-check:checked')].map(chk=>chk.dataset.id));
   wrap.innerHTML = candidatos.map(m=>{
     const marcado = m.id===preseleccionarId || tildadosActuales.has(m.id);
@@ -1729,13 +1673,11 @@ async function guardarEndosoCheque(){
   try{
     const numerosCheques = chequesMovs.map(m=>m.numeroCheque).filter(Boolean);
 
-    // 0) Aplica el crédito del proveedor (si correspondía)
     let creditoRealmenteAplicado = 0;
     if(creditoAplicado>0.009){
       creditoRealmenteAplicado = await consumirCreditoProveedor(destino, creditoAplicado);
     }
 
-    // 1) Actualiza cada cheque tildado
     for(const m of chequesMovs){
       await updateDoc(doc(db,'movimientos', m.id), {
         estadoCheque: 'Endosado',
@@ -1750,7 +1692,6 @@ async function guardarEndosoCheque(){
       });
     }
 
-    // 2) Egreso contable por el total de los cheques (no toca saldos)
     if(totalCheques>0){
       const detalleFacturas = filas.map(f => `${f.factura||'s/n'}: ${fmtMoney(f.monto)}`).join(' · ');
       let detalleTxt = `Endoso de cheque(s) N° ${numerosCheques.join(', ')} — cubre: ${detalleFacturas}`;
@@ -1773,7 +1714,6 @@ async function guardarEndosoCheque(){
       });
     }
 
-    // 3) Egreso real si se agregó complemento en efectivo/transferencia
     if(montoComplemento>0){
       await addDoc(collection(db,'movimientos'), {
         tipo: 'Egreso',
@@ -1789,7 +1729,6 @@ async function guardarEndosoCheque(){
       });
     }
 
-    // 4) Si sobra, se guarda como NUEVO crédito a NUESTRO FAVOR con este proveedor
     if(diferencia > 0.009){
       await addDoc(collection(db,'caja_creditos_cheques'), {
         proveedor: destino,
@@ -1818,8 +1757,6 @@ async function guardarEndosoCheque(){
   }
 }
 
-// Atajo desde la pestaña Cheques: cambia a Movimientos, arma Tipo=Egreso + Cuenta=Cheque
-// y deja YA tildado ese cheque puntual en la lista de medios de pago del endoso.
 window.irAEndosarCheque = function(chequeId){
   if (currentUser?.rol==='viewer') { toast('Sin permiso','error'); return; }
   endosoChequePreseleccionarId = chequeId;
@@ -1827,12 +1764,11 @@ window.irAEndosarCheque = function(chequeId){
   showTab('movimientos', primerTab);
   document.getElementById('tipo').value = 'Egreso';
   document.getElementById('cuenta').value = 'Cheque';
-  toggleChequeFields(); // dispara prepararEndosoChequeForm(), que tilda el cheque preseleccionado
+  toggleChequeFields();
   document.getElementById('page-movimientos').scrollIntoView({behavior:'smooth'});
   setTimeout(()=>document.getElementById('cliente').focus(), 300);
 };
 
-// ── Créditos por cheques endosados: render en Reportes + card resumen en Movimientos ──
 function renderCreditosCheques(){
   const tbody = document.getElementById('tablaCreditosCheques');
   const pendientes = allCreditosCheques.filter(c=>!c.usado);
@@ -1864,7 +1800,6 @@ window.marcarCreditoUsado = async function(id){
   }catch(e){ toast('Error: '+e.message,'error'); }
 };
 
-// Muestra el crédito pendiente de un proveedor dentro del detalle de Cta. Corriente
 function renderCreditoEnDetalleCC(cliente){
   const wrap = document.getElementById('creditoDetalleCC');
   if(!wrap) return;
@@ -1957,10 +1892,6 @@ window.cerrarModalCheque=function(){document.getElementById('modalDetalleCheque'
 window.limpiarFiltrosCheques=function(){['filtroChEstado','filtroChBanco','filtroChCliente','filtroChDesde','filtroChHasta'].forEach(id=>document.getElementById(id).value='');resetPaginaCheques();};
 
 // ── FECHAS PARA EXCEL ──────────────────────────────────────────────────
-// Convierte "dd/mm/aaaa" (o "aaaa-mm-dd") al número de serie de fecha de Excel.
-// Guardando la celda como FECHA real (y no como texto), el filtro del encabezado
-// en Excel se abre agrupado por Año › Mes › Día, y se puede tildar un mes entero
-// o días sueltos de ese mes.
 function fechaSerialExcel(fecha){
   if(!fecha) return null;
   const s = String(fecha).trim();
@@ -1978,14 +1909,12 @@ function fechaSerialExcel(fecha){
   const serial = Math.round(ms / 86400000);
   return serial > 0 ? serial : null;
 }
-// Devuelve el serial si se pudo interpretar; si no, deja el texto original (o vacío)
 function celdaFechaExcel(fecha){
   const s = fechaSerialExcel(fecha);
   return s === null ? (fecha || '') : s;
 }
 window.fechaSerialExcel = fechaSerialExcel;
 
-// ── EXPORTAR EXCEL: estilo unificado (Arial 7) — mismo criterio que usa operaciones.js ──
 function estilizarHojaExcel(ws, opts){
   const { numDataRows, colsDecimal2 = [], colsNumericas = [], colsFecha = [] } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
@@ -2004,7 +1933,6 @@ function estilizarHojaExcel(ws, opts){
         ws[addr].z = formatoDecimal;
       }
 
-      // Columnas de fecha: quedan como fecha real, así el filtro se agrupa por mes y día
       if(R > 0 && R !== totalRowIdx && colsFecha.includes(C) && typeof ws[addr].v === 'number'){
         ws[addr].t = 'n';
         ws[addr].z = formatoFecha;
@@ -2069,21 +1997,25 @@ window.exportarChequesExcel=function(){
   toast('Excel generado ✓','success');
 };
 
-// CUENTA CORRIENTE
-function renderCCAnioTabs(){
-  const wrap=document.getElementById('ccAnioTabs');
+// ══════════════════════════════════════════════════════════════════════
+// REPORTES (unificado: incluye lo que antes era Cta. Corriente)
+// ══════════════════════════════════════════════════════════════════════
+function renderRepAnioTabs(){
+  const wrap=document.getElementById('repAnioTabs');
   if(!wrap) return;
   const anios=[...new Set(allMovimientos.map(m=>anioDeFecha(m.fecha)).filter(Boolean))].sort((a,b)=>b-a);
   const anioActual=new Date().getFullYear();
   if(!anios.includes(anioActual)) anios.unshift(anioActual);
-  if(!anios.includes(ccAnioSeleccionado)) ccAnioSeleccionado=anios[0];
-  wrap.innerHTML=anios.map(a=>`<div class="cc-anio-tab${a===ccAnioSeleccionado?' active':''}" onclick="cambiarAnioCC(${a})">${a}</div>`).join('');
+  if(!anios.includes(repAnioSeleccionado)) repAnioSeleccionado=anios[0];
+  wrap.innerHTML=anios.map(a=>`<div class="cc-anio-tab${a===repAnioSeleccionado?' active':''}" onclick="cambiarAnioReportes(${a})">${a}</div>`).join('');
 }
-window.cambiarAnioCC=function(anio){
-  ccAnioSeleccionado=anio;
+window.cambiarAnioReportes=function(anio){
+  repAnioSeleccionado=anio;
   document.getElementById('detalleCC').style.display='none';
-  renderCC();
+  renderReportes();
 };
+// alias por compatibilidad si algo externo llama a la función vieja
+window.cambiarAnioCC = window.cambiarAnioReportes;
 
 function calcularCostoPersonalAnio(anio){
   const filtrados = allMovimientos.filter(m=>anioDeFecha(m.fecha)===anio);
@@ -2121,7 +2053,7 @@ function calcularCostoPersonalAnio(anio){
 window.calcularCostoPersonalAnio = calcularCostoPersonalAnio;
 
 function renderCostoPersonal(){
-  costoPersonalActual = calcularCostoPersonalAnio(ccAnioSeleccionado);
+  costoPersonalActual = calcularCostoPersonalAnio(repAnioSeleccionado);
   const elS=document.getElementById('cpSueldo'); if(elS) elS.textContent=fmtMoney(costoPersonalActual.sueldo.total);
   const elA=document.getElementById('cpAutonomo'); if(elA) elA.textContent=fmtMoney(costoPersonalActual.autonomo.total);
   const elM=document.getElementById('cpMovilidad'); if(elM) elM.textContent=fmtMoney(costoPersonalActual.movilidad.total);
@@ -2130,39 +2062,64 @@ function renderCostoPersonal(){
 
 const CONCEPTO_LABEL={ sueldo:'Sueldo Neto', autonomo:'Autónomo', movilidad:'Movilidad', finDeSemana:'Fin de Semana' };
 window.verDetalleConcepto=function(concepto){
-  if(!costoPersonalActual) costoPersonalActual=calcularCostoPersonalAnio(ccAnioSeleccionado);
+  if(!costoPersonalActual) costoPersonalActual=calcularCostoPersonalAnio(repAnioSeleccionado);
   const datos=costoPersonalActual[concepto];
-  document.getElementById('tituloDetalleConcepto').textContent=CONCEPTO_LABEL[concepto]+' · '+ccAnioSeleccionado;
+  document.getElementById('tituloDetalleConcepto').textContent=CONCEPTO_LABEL[concepto]+' · '+repAnioSeleccionado;
   const filas=Object.entries(datos.porEmpleado).sort((a,b)=>b[1]-a[1]);
-  document.getElementById('tablaDetalleConcepto').innerHTML=filas.map(([nombre,monto])=>`<tr><td><strong>${nombre}</strong></td><td>${fmtMoney(monto)}</td></tr>`).join('')||'<tr><td colspan="2" style="text-align:center;color:#888;padding:16px">Sin datos en '+ccAnioSeleccionado+'</td></tr>';
+  document.getElementById('tablaDetalleConcepto').innerHTML=filas.map(([nombre,monto])=>`<tr><td><strong>${nombre}</strong></td><td>${fmtMoney(monto)}</td></tr>`).join('')||'<tr><td colspan="2" style="text-align:center;color:#888;padding:16px">Sin datos en '+repAnioSeleccionado+'</td></tr>';
   document.getElementById('modalDetalleConcepto').classList.add('open');
 };
 window.cerrarModalConcepto=function(){document.getElementById('modalDetalleConcepto').classList.remove('open');};
 
+// Resumen por cliente (año seleccionado) — SOLO PESOS. Cada cliente aparece
+// una única vez con sus totales sumados. Los Dólares se resumen aparte
+// (renderCCUsd) para que no se mezclen los importes en pesos.
 window.renderCC=function(){
-  renderCCAnioTabs();
+  renderRepAnioTabs();
   const buscar=(document.getElementById('buscarCC')?.value||'').toLowerCase();
-  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===ccAnioSeleccionado);
+  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===repAnioSeleccionado);
+  const movsAnioPesos = movsAnio.filter(m=>m.cuenta!=='Dólares');
   const mapa={};
-  for(const m of movsAnio){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0,ultimo:'',movs:[]};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;mapa[cl].movs.push(m);if(!mapa[cl].ultimo||m.fecha>mapa[cl].ultimo)mapa[cl].ultimo=m.fecha;}
+  for(const m of movsAnioPesos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0,cant:0,ultimo:''};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;mapa[cl].cant++;if(!mapa[cl].ultimo||m.fecha>mapa[cl].ultimo)mapa[cl].ultimo=m.fecha;}
   const sorted=Object.entries(mapa).filter(([cl])=>!buscar||cl.toLowerCase().includes(buscar)).sort((a,b)=>b[1].ing-a[1].ing);
-  document.getElementById('tablaCC').innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.ing)}</td><td style="color:#dc2626">${fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtMoney(s)}</td><td>${d.ultimo||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCC('${cl}')">Ver detalle</button></td></tr>`;}).join('')||'<tr><td colspan="6" style="text-align:center;padding:20px;color:#888">Sin datos en '+ccAnioSeleccionado+'</td></tr>';
+  document.getElementById('tablaCC').innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.ing)}</td><td style="color:#dc2626">${fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtMoney(s)}</td><td>${d.cant}</td><td>${d.ultimo||'-'}</td><td><button class="btn btn-outline btn-sm" onclick="verDetalleCC('${cl.replace(/'/g,"\\'")}')">Ver detalle</button></td></tr>`;}).join('')||'<tr><td colspan="7" style="text-align:center;padding:20px;color:#888">Sin datos en '+repAnioSeleccionado+'</td></tr>';
+  renderCCUsd(movsAnio);
   renderCostoPersonal();
 };
+
+// Resumen por cliente EN DÓLARES (año seleccionado) — planilla separada,
+// para no sumar dólares junto con pesos en ningún lado.
+function renderCCUsd(movsAnio){
+  const movsUsd = movsAnio.filter(m=>m.cuenta==='Dólares');
+  const secc = document.getElementById('seccionClientesUsd');
+  if(!movsUsd.length){ if(secc) secc.style.display='none'; return; }
+  if(secc) secc.style.display='';
+  const mapa={};
+  for(const m of movsUsd){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
+  const sorted=Object.entries(mapa).sort((a,b)=>b[1].ing-a[1].ing);
+  const tbody=document.getElementById('tablaCCUsd');
+  if(tbody) tbody.innerHTML=sorted.map(([cl,d])=>{const s=d.ing-d.egr;return `<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtUSD(d.ing)}</td><td style="color:#dc2626">${fmtUSD(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${fmtUSD(s)}</td></tr>`;}).join('')||'';
+}
+
 window.verDetalleCC=function(cliente){
-  const movs=allMovimientos.filter(m=>m.cliente===cliente && anioDeFecha(m.fecha)===ccAnioSeleccionado).sort((a,b)=>(b.ts||0)-(a.ts||0));
-  document.getElementById('titleDetalleCC').textContent='📋 '+cliente+' · '+ccAnioSeleccionado;
-  document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">Sin movimientos en '+ccAnioSeleccionado+'</td></tr>';
+  const movs=allMovimientos.filter(m=>m.cliente===cliente && anioDeFecha(m.fecha)===repAnioSeleccionado).sort((a,b)=>(b.ts||0)-(a.ts||0));
+  document.getElementById('titleDetalleCC').textContent='📋 '+cliente+' · '+repAnioSeleccionado;
+  document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">Sin movimientos en '+repAnioSeleccionado+'</td></tr>';
   renderCreditoEnDetalleCC(cliente);
   document.getElementById('detalleCC').style.display='block';
   document.getElementById('detalleCC').scrollIntoView({behavior:'smooth'});
 };
+
+// Excel "Resumen por Cliente" (año seleccionado): una hoja en pesos (cada
+// cliente sumado una sola vez) y, si hay movimientos en dólares ese año,
+// otra hoja aparte en U$D — nunca se mezclan los dos en una misma columna.
 window.exportarCCExcel=function(){
+  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===repAnioSeleccionado);
+  const movsAnioPesos = movsAnio.filter(m=>m.cuenta!=='Dólares');
   const mapa={};
-  const movsAnio = allMovimientos.filter(m=>anioDeFecha(m.fecha)===ccAnioSeleccionado);
-  for(const m of movsAnio){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
+  for(const m of movsAnioPesos){const cl=m.cliente||'Sin nombre';if(!mapa[cl])mapa[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapa[cl].ing+=v:mapa[cl].egr+=v;}
   const ordenados=Object.entries(mapa).sort((a,b)=>b[1].ing-a[1].ing);
-  if(!ordenados.length){ toast('No hay datos para exportar en '+ccAnioSeleccionado,'error'); return; }
+  if(!ordenados.length){ toast('No hay datos para exportar en '+repAnioSeleccionado,'error'); return; }
   const header=['Cliente','Ingresos','Egresos','Saldo'];
   const rows=ordenados.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
   const totIng=ordenados.reduce((s,[,d])=>s+d.ing,0);
@@ -2185,10 +2142,22 @@ window.exportarCCExcel=function(){
   estilizarHojaExcel(ws,{ numDataRows:rows.length, colsDecimal2:[1,2,3], colsNumericas:[1,2,3] });
 
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'Cuenta Corriente');
+  XLSX.utils.book_append_sheet(wb,ws,'Por Cliente (pesos)');
 
-  // ── Hojas separadas por concepto (Sueldos / Autónomos / Movilidad / Fines de Semana) ──
-  const costoPersonal = calcularCostoPersonalAnio(ccAnioSeleccionado);
+  // Hoja aparte de Dólares por cliente, si hubo movimientos en U$D ese año
+  const movsUsd = movsAnio.filter(m=>m.cuenta==='Dólares');
+  if(movsUsd.length){
+    const mapaUsd={};
+    for(const m of movsUsd){const cl=m.cliente||'Sin nombre';if(!mapaUsd[cl])mapaUsd[cl]={ing:0,egr:0};const v=Number(m.importe)||0;m.tipo==='Ingreso'?mapaUsd[cl].ing+=v:mapaUsd[cl].egr+=v;}
+    const ordenadosUsd=Object.entries(mapaUsd).sort((a,b)=>b[1].ing-a[1].ing);
+    const rowsUsd=ordenadosUsd.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
+    const totIngUsd=ordenadosUsd.reduce((s,[,d])=>s+d.ing,0);
+    const totEgrUsd=ordenadosUsd.reduce((s,[,d])=>s+d.egr,0);
+    hojaResumenConTotal(wb,'Por Cliente (dólares)',['Cliente','Ingresos U$D','Egresos U$D','Saldo U$D'],rowsUsd,{ing:totIngUsd,egr:totEgrUsd},[{wch:26},{wch:14},{wch:14},{wch:14}]);
+  }
+
+  // Hojas separadas por concepto (Sueldos / Autónomos / Movilidad / Fines de Semana)
+  const costoPersonal = calcularCostoPersonalAnio(repAnioSeleccionado);
   const hojasConcepto = [
     { nombre:'Sueldos', datos:costoPersonal.sueldo, colLabel:'Sueldo Neto' },
     { nombre:'Autonomos', datos:costoPersonal.autonomo, colLabel:'Autónomo' },
@@ -2210,7 +2179,7 @@ window.exportarCCExcel=function(){
     XLSX.utils.book_append_sheet(wb,wsHc,hc.nombre);
   });
 
-  XLSX.writeFile(wb,'CuentaCorriente_'+ccAnioSeleccionado+'_'+today().replace(/\//g,'-')+'.xlsx');
+  XLSX.writeFile(wb,'CuentaCorriente_'+repAnioSeleccionado+'_'+today().replace(/\//g,'-')+'.xlsx');
   toast('Excel generado ✓','success');
 };
 
@@ -2235,31 +2204,16 @@ window.renderVencimientos=function(){
 window.marcarPagado=async function(id){await updateDoc(doc(db,'vencimientos',id),{pagado:true});toast('Marcado como pagado ✓','success');};
 window.eliminarVenc=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'vencimientos',id));};
 
-// REPORTES
+// Render principal de Reportes (unificado: cards del año + mensual + por
+// cuenta + por cliente + costo de personal + créditos), todo colgado del
+// mismo repAnioSeleccionado. Ya no hay cards "del mes" (quedaban rotas,
+// no respetaban el año elegido) — la tabla mensual cumple ese rol.
 window.renderReportes=function(){
-  const hoy=new Date();const mes=hoy.getMonth();const anio=hoy.getFullYear();
-  const delMes=allMovimientos.filter(m=>{const p=(m.fecha||'').split('/');if(p.length<3)return false;const d=new Date(p[2],p[1]-1,p[0]);return d.getMonth()===mes&&d.getFullYear()===anio;});
-  const ingMes=delMes.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
-  const egrMes=delMes.filter(m=>m.tipo==='Egreso'&&m.cuenta!=='Dólares').reduce((s,m)=>s+Number(m.importe),0);
-  document.getElementById('repIngMes').textContent=fmtMoney(ingMes);
-  document.getElementById('repEgrMes').textContent=fmtMoney(egrMes);
-  const neto=ingMes-egrMes;const netoEl=document.getElementById('repNetoMes');netoEl.textContent=fmtMoney(neto);netoEl.className='card-value '+(neto>=0?'green':'red');
-  document.getElementById('repCantMes').textContent=delMes.length;
-
-  const selAnio=document.getElementById('repAnio');
-  const aniosDisponibles=[...new Set(allMovimientos.map(m=>{const p=(m.fecha||'').split('/');return p.length===3?Number(p[2]):null;}).filter(a=>a&&!isNaN(a)))];
-  if(!aniosDisponibles.includes(anio)) aniosDisponibles.push(anio);
-  aniosDisponibles.sort((a,b)=>b-a);
-  const clave=aniosDisponibles.join(',');
-  if(selAnio.dataset.built!==clave){
-    const prevVal=selAnio.value;
-    selAnio.innerHTML=aniosDisponibles.map(a=>`<option value="${a}">${a}</option>`).join('');
-    selAnio.dataset.built=clave;
-    selAnio.value=aniosDisponibles.includes(Number(prevVal))?prevVal:String(anio);
-  }
-  const anioSel=Number(selAnio.value)||anio;
-  const delAnio=allMovimientos.filter(m=>{const p=(m.fecha||'').split('/');if(p.length<3)return false;return Number(p[2])===anioSel;});
+  renderRepAnioTabs();
+  const anioSel = repAnioSeleccionado;
+  const delAnio=allMovimientos.filter(m=>anioDeFecha(m.fecha)===anioSel);
   const delAnioPesos=delAnio.filter(m=>m.cuenta!=='Dólares');
+  const delAnioUsd=delAnio.filter(m=>m.cuenta==='Dólares');
   const ingAnio=delAnioPesos.filter(m=>m.tipo==='Ingreso').reduce((s,m)=>s+Number(m.importe),0);
   const egrAnio=delAnioPesos.filter(m=>m.tipo==='Egreso').reduce((s,m)=>s+Number(m.importe),0);
   document.getElementById('repIngAnio').textContent=fmtMoney(ingAnio);
@@ -2269,6 +2223,11 @@ window.renderReportes=function(){
   netoAnioEl.textContent=fmtMoney(netoAnio);
   netoAnioEl.className='card-value '+(netoAnio>=0?'green':'red');
   document.getElementById('repCantAnio').textContent=delAnio.length;
+
+  const ingAnioUsd=delAnioUsd.filter(m=>m.tipo==='Ingreso').reduce((s,m)=>s+Number(m.importe),0);
+  const egrAnioUsd=delAnioUsd.filter(m=>m.tipo==='Egreso').reduce((s,m)=>s+Number(m.importe),0);
+  document.getElementById('repIngAnioUsd').textContent=fmtUSD(ingAnioUsd);
+  document.getElementById('repEgrAnioUsd').textContent=fmtUSD(egrAnioUsd);
 
   const nombresMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const porMes=Array.from({length:12},()=>({ing:0,egr:0,cant:0}));
@@ -2280,6 +2239,7 @@ window.renderReportes=function(){
     m.tipo==='Ingreso'?porMes[mi].ing+=v:porMes[mi].egr+=v;
     porMes[mi].cant++;
   }
+  const hoy=new Date();
   const hoyAnio=hoy.getFullYear(), hoyMes=hoy.getMonth();
   document.getElementById('tablaResMensual').innerHTML=porMes.map((d,i)=>{
     const s=d.ing-d.egr;
@@ -2288,14 +2248,20 @@ window.renderReportes=function(){
   }).join('');
   document.getElementById('tablaResMensualFooter').innerHTML=`<tr style="background:#f8fafc"><td><strong>Total ${anioSel}</strong></td><td style="color:#16a34a"><strong>${fmtMoney(ingAnio)}</strong></td><td style="color:#dc2626"><strong>${fmtMoney(egrAnio)}</strong></td><td class="${netoAnio>=0?'cc-saldo-pos':'cc-saldo-neg'}"><strong>${fmtMoney(netoAnio)}</strong></td><td><strong>${delAnio.length}</strong></td></tr>`;
 
+  // Resumen por Cuenta: ahora filtrado por el año seleccionado (antes era histórico completo)
   const cuentas={Caja:{ing:0,egr:0},Banco:{ing:0,egr:0},Cheque:{ing:0,egr:0},'Mercado Pago':{ing:0,egr:0},'Dólares':{ing:0,egr:0}};
-  for(const m of allMovimientos){if(!cuentas[m.cuenta])continue;const v=Number(m.importe)||0;m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v;}
+  for(const m of delAnio){if(!cuentas[m.cuenta])continue;const v=Number(m.importe)||0;m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v;}
   document.getElementById('tablaResCuenta').innerHTML=Object.entries(cuentas).map(([c,d])=>{const s=d.ing-d.egr;const isDolar=c==='Dólares';return `<tr><td><strong>${c}</strong></td><td style="color:#16a34a">${isDolar?fmtUSD(d.ing):fmtMoney(d.ing)}</td><td style="color:#dc2626">${isDolar?fmtUSD(d.egr):fmtMoney(d.egr)}</td><td class="${s>=0?'cc-saldo-pos':'cc-saldo-neg'}">${isDolar?fmtUSD(s):fmtMoney(s)}</td></tr>`;}).join('');
+
+  // Top Clientes por Ingreso: se deja como histórico completo (todo pesos), es un ranking global
   const clientes={};
   for(const m of allMovimientos.filter(m=>m.tipo==='Ingreso'&&m.cuenta!=='Dólares')){if(!clientes[m.cliente])clientes[m.cliente]={total:0,cant:0};clientes[m.cliente].total+=Number(m.importe)||0;clientes[m.cliente].cant++;}
   document.getElementById('tablaTopClientes').innerHTML=Object.entries(clientes).sort((a,b)=>b[1].total-a[1].total).slice(0,10).map(([cl,d])=>`<tr><td><strong>${cl}</strong></td><td style="color:#16a34a">${fmtMoney(d.total)}</td><td>${d.cant}</td></tr>`).join('')||'<tr><td colspan="3" style="text-align:center;color:#888">Sin datos</td></tr>';
+
   renderCreditosCheques();
+  renderCC();
 };
+
 function fechaOrdenable(fechaAR){
   const p=(fechaAR||'').split('/');
   return p.length===3 ? p[2]+'-'+p[1].padStart(2,'0')+'-'+p[0].padStart(2,'0') : '';
@@ -2347,21 +2313,45 @@ window.exportarReporteExcel=function(){
   XLSX.utils.book_append_sheet(wb,ws1,'Movimientos');
 
   if(tipo==='todos'||tipo==='porCuenta'){
+    // Separa pesos de dólares: dos hojas, nunca sumados juntos
+    const movsPesos = movs.filter(m=>m.cuenta!=='Dólares');
     const cuentas={};
-    for(const m of movs){ if(!cuentas[m.cuenta]) cuentas[m.cuenta]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v; }
+    for(const m of movsPesos){ if(!cuentas[m.cuenta]) cuentas[m.cuenta]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v; }
     const entradas=Object.entries(cuentas);
     const rowsCta=entradas.map(([c,d])=>[c,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
     const totCta={ ing: entradas.reduce((s,[,d])=>s+d.ing,0), egr: entradas.reduce((s,[,d])=>s+d.egr,0) };
     hojaResumenConTotal(wb,'Por cuenta',['Cuenta','Ingresos','Egresos','Saldo'],rowsCta,totCta,[{wch:16},{wch:14},{wch:14},{wch:14}]);
+
+    const movsUsd = movs.filter(m=>m.cuenta==='Dólares');
+    if(movsUsd.length){
+      const totIngUsd=movsUsd.filter(m=>m.tipo==='Ingreso').reduce((s,m)=>s+Number(m.importe||0),0);
+      const totEgrUsd=movsUsd.filter(m=>m.tipo==='Egreso').reduce((s,m)=>s+Number(m.importe||0),0);
+      hojaResumenConTotal(wb,'Dólares',['Cuenta','Ingresos U$D','Egresos U$D','Saldo U$D'],[['Dólares',dec2(totIngUsd),dec2(totEgrUsd),dec2(totIngUsd-totEgrUsd)]],{ing:totIngUsd,egr:totEgrUsd},[{wch:16},{wch:14},{wch:14},{wch:14}]);
+    }
   }
 
   if(tipo==='todos'||tipo==='porCliente'){
+    // "Por cliente" en PESOS únicamente — cada cliente sumado una sola vez.
+    // Los movimientos en Dólares NUNCA se suman acá (antes se mezclaban con
+    // los pesos y un ingreso de U$D 1.500 terminaba contando como $1.500).
+    const movsPesos = movs.filter(m=>m.cuenta!=='Dólares');
     const clMap={};
-    for(const m of movs){ if(!clMap[m.cliente]) clMap[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMap[m.cliente].ing+=v:clMap[m.cliente].egr+=v; }
+    for(const m of movsPesos){ if(!clMap[m.cliente]) clMap[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMap[m.cliente].ing+=v:clMap[m.cliente].egr+=v; }
     const entradasCl=Object.entries(clMap).sort((a,b)=>b[1].ing-a[1].ing);
     const rowsCl=entradasCl.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
     const totCl={ ing: entradasCl.reduce((s,[,d])=>s+d.ing,0), egr: entradasCl.reduce((s,[,d])=>s+d.egr,0) };
-    hojaResumenConTotal(wb,'Por cliente',['Cliente','Ingresos','Egresos','Saldo'],rowsCl,totCl,[{wch:26},{wch:14},{wch:14},{wch:14}]);
+    hojaResumenConTotal(wb,'Por cliente (pesos)',['Cliente','Ingresos','Egresos','Saldo'],rowsCl,totCl,[{wch:26},{wch:14},{wch:14},{wch:14}]);
+
+    // Por cliente en Dólares — hoja separada
+    const movsUsd = movs.filter(m=>m.cuenta==='Dólares');
+    if(movsUsd.length){
+      const clMapUsd={};
+      for(const m of movsUsd){ if(!clMapUsd[m.cliente]) clMapUsd[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMapUsd[m.cliente].ing+=v:clMapUsd[m.cliente].egr+=v; }
+      const entradasClUsd=Object.entries(clMapUsd).sort((a,b)=>b[1].ing-a[1].ing);
+      const rowsClUsd=entradasClUsd.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]);
+      const totClUsd={ ing: entradasClUsd.reduce((s,[,d])=>s+d.ing,0), egr: entradasClUsd.reduce((s,[,d])=>s+d.egr,0) };
+      hojaResumenConTotal(wb,'Por cliente (dólares)',['Cliente','Ingresos U$D','Egresos U$D','Saldo U$D'],rowsClUsd,totClUsd,[{wch:26},{wch:14},{wch:14},{wch:14}]);
+    }
   }
 
   XLSX.writeFile(wb,'Globalcomint_Reporte_'+today().replace(/\//g,'-')+'.xlsx');
@@ -2370,22 +2360,95 @@ window.exportarReporteExcel=function(){
 window.exportarExcel=function(){document.getElementById('repDesde').value='';document.getElementById('repHasta').value='';document.getElementById('repTipo').value='todos';exportarReporteExcel();};
 window.exportarPDF=function(){window.print();};
 
+// Exporta TODO el informe del año seleccionado en un solo Excel (reemplaza
+// tener que usar dos botones separados de Reportes y de Cta. Corriente):
+// Movimientos del año, Mensual, Por Cuenta, Por Cliente (pesos), Por Cliente
+// (dólares, si aplica), y las 4 hojas de Costo de Personal.
+window.exportarInformeCompletoExcel=function(){
+  const anioSel = repAnioSeleccionado;
+  const movs = allMovimientos.filter(m=>anioDeFecha(m.fecha)===anioSel).sort((a,b)=>fechaOrdenable(a.fecha).localeCompare(fechaOrdenable(b.fecha)));
+  if(!movs.length){ toast('No hay movimientos para exportar en '+anioSel,'error'); return; }
+
+  const wb=XLSX.utils.book_new();
+
+  // 1) Movimientos del año (detalle completo, con Dólares identificados en su propia columna de cuenta)
+  const header=['Fecha','Tipo','Factura','Cliente','Detalle','Cuenta','Importe','N° Cheque','Estado Cheque','Observaciones','Cargado por'];
+  const rows=movs.map(m=>[celdaFechaExcel(m.fecha),m.tipo,m.factura||'',m.cliente,m.detalle||'',m.cuenta,dec2(m.importe),m.numeroCheque||'',m.estadoCheque||'',m.observaciones||'',m.creadoPor||'']);
+  const ws1=XLSX.utils.aoa_to_sheet([header,...rows]);
+  ws1['!cols']=[{wch:11},{wch:9},{wch:16},{wch:22},{wch:24},{wch:13},{wch:13},{wch:12},{wch:13},{wch:28},{wch:14}];
+  ws1['!autofilter']={ ref:`A1:${XLSX.utils.encode_col(header.length-1)}${1+rows.length}` };
+  estilizarHojaExcel(ws1,{ numDataRows:rows.length, colsDecimal2:[6], colsNumericas:[6], colsFecha:[0] });
+  XLSX.utils.book_append_sheet(wb,ws1,'Movimientos '+anioSel);
+
+  // 2) Resumen mensual (pesos)
+  const movsPesos = movs.filter(m=>m.cuenta!=='Dólares');
+  const nombresMes=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const porMes=Array.from({length:12},()=>({ing:0,egr:0,cant:0}));
+  for(const m of movs){
+    const p=(m.fecha||'').split('/');if(p.length<3)continue;
+    const mi=Number(p[1])-1;if(mi<0||mi>11)continue;
+    if(m.cuenta==='Dólares'){porMes[mi].cant++;continue;}
+    const v=Number(m.importe)||0;
+    m.tipo==='Ingreso'?porMes[mi].ing+=v:porMes[mi].egr+=v;
+    porMes[mi].cant++;
+  }
+  const rowsMes=porMes.map((d,i)=>[nombresMes[i],dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr),d.cant]);
+  const totIngM=porMes.reduce((s,d)=>s+d.ing,0), totEgrM=porMes.reduce((s,d)=>s+d.egr,0), totCantM=porMes.reduce((s,d)=>s+d.cant,0);
+  const wsMes=XLSX.utils.aoa_to_sheet([['Mes','Ingresos','Egresos','Saldo','Mov.'],...rowsMes,['TOTAL',dec2(totIngM),dec2(totEgrM),dec2(totIngM-totEgrM),totCantM]]);
+  wsMes['!cols']=[{wch:14},{wch:14},{wch:14},{wch:14},{wch:8}];
+  estilizarHojaExcel(wsMes,{ numDataRows:rowsMes.length, colsDecimal2:[1,2,3], colsNumericas:[1,2,3,4] });
+  XLSX.utils.book_append_sheet(wb,wsMes,'Mensual '+anioSel);
+
+  // 3) Por cuenta (pesos, año seleccionado)
+  const cuentas={};
+  for(const m of movsPesos){ if(!cuentas[m.cuenta]) cuentas[m.cuenta]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?cuentas[m.cuenta].ing+=v:cuentas[m.cuenta].egr+=v; }
+  const entradasCta=Object.entries(cuentas);
+  hojaResumenConTotal(wb,'Por cuenta',['Cuenta','Ingresos','Egresos','Saldo'],entradasCta.map(([c,d])=>[c,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]),{ing:entradasCta.reduce((s,[,d])=>s+d.ing,0),egr:entradasCta.reduce((s,[,d])=>s+d.egr,0)},[{wch:16},{wch:14},{wch:14},{wch:14}]);
+
+  // 4) Por cliente en pesos (cada cliente sumado UNA sola vez)
+  const clMap={};
+  for(const m of movsPesos){ if(!clMap[m.cliente]) clMap[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMap[m.cliente].ing+=v:clMap[m.cliente].egr+=v; }
+  const entradasCl=Object.entries(clMap).sort((a,b)=>b[1].ing-a[1].ing);
+  hojaResumenConTotal(wb,'Por cliente (pesos)',['Cliente','Ingresos','Egresos','Saldo'],entradasCl.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]),{ing:entradasCl.reduce((s,[,d])=>s+d.ing,0),egr:entradasCl.reduce((s,[,d])=>s+d.egr,0)},[{wch:26},{wch:14},{wch:14},{wch:14}]);
+
+  // 5) Dólares — total del año y por cliente, en su propia hoja, nunca mezclado con pesos
+  const movsUsd = movs.filter(m=>m.cuenta==='Dólares');
+  if(movsUsd.length){
+    const clMapUsd={};
+    for(const m of movsUsd){ if(!clMapUsd[m.cliente]) clMapUsd[m.cliente]={ing:0,egr:0}; const v=Number(m.importe)||0; m.tipo==='Ingreso'?clMapUsd[m.cliente].ing+=v:clMapUsd[m.cliente].egr+=v; }
+    const entradasClUsd=Object.entries(clMapUsd).sort((a,b)=>b[1].ing-a[1].ing);
+    hojaResumenConTotal(wb,'Por cliente (dólares)',['Cliente','Ingresos U$D','Egresos U$D','Saldo U$D'],entradasClUsd.map(([cl,d])=>[cl,dec2(d.ing),dec2(d.egr),dec2(d.ing-d.egr)]),{ing:entradasClUsd.reduce((s,[,d])=>s+d.ing,0),egr:entradasClUsd.reduce((s,[,d])=>s+d.egr,0)},[{wch:26},{wch:14},{wch:14},{wch:14}]);
+  }
+
+  // 6-9) Costo de Personal
+  const costoPersonal = calcularCostoPersonalAnio(anioSel);
+  const hojasConcepto = [
+    { nombre:'Sueldos', datos:costoPersonal.sueldo, colLabel:'Sueldo Neto' },
+    { nombre:'Autonomos', datos:costoPersonal.autonomo, colLabel:'Autónomo' },
+    { nombre:'Movilidad', datos:costoPersonal.movilidad, colLabel:'Movilidad' },
+    { nombre:'Fines de Semana', datos:costoPersonal.finDeSemana, colLabel:'Fin de Semana' }
+  ];
+  hojasConcepto.forEach(hc=>{
+    const filasHc=Object.entries(hc.datos.porEmpleado).sort((a,b)=>b[1]-a[1]).map(([nombre,monto])=>[nombre,dec2(monto)]);
+    if(!filasHc.length) return;
+    const totalHc=dec2(hc.datos.total);
+    const wsHc=XLSX.utils.aoa_to_sheet([['Empleado',hc.colLabel],...filasHc,['TOTAL',totalHc]]);
+    wsHc['!cols']=[{wch:24},{wch:16}];
+    const lastRowHc=1+filasHc.length;
+    const addrTotalHc=XLSX.utils.encode_cell({r:lastRowHc,c:1});
+    wsHc[addrTotalHc]={ t:'n', v:totalHc, f:`SUBTOTAL(109,B2:B${lastRowHc})` };
+    estilizarHojaExcel(wsHc,{ numDataRows:filasHc.length, colsDecimal2:[1], colsNumericas:[1] });
+    XLSX.utils.book_append_sheet(wb,wsHc,hc.nombre);
+  });
+
+  XLSX.writeFile(wb,'Globalcomint_Informe_'+anioSel+'.xlsx');
+  toast('Informe completo generado ✓','success');
+};
+
 /* ══════════════════════════════════════════════════════════════════════
    ── BOLETAS (Factura A / Factura C de cada socio) ──────────────────
-   Colección Firestore: 'caja_boletas'. Se filtra SIEMPRE por período
-   (campo 'periodo', formato yyyy-mm) usando getDocs puntual — igual
-   criterio que usa sueldos.html para movilidad/fines de semana — para
-   no dejar un onSnapshot en vivo escuchando toda la colección histórica.
-   Los rubros con % de IVA sugerido se guardan en 'caja_rubros_iva'
-   (colección chica, un doc por rubro personalizado) para poder
-   reutilizarlos entre sesiones sin tener que retipearlos.
    ══════════════════════════════════════════════════════════════════════ */
 
-// Rubros habituales que puede traer una boleta de gastos de una empresa
-// de despacho de aduana en Argentina, con la tasa de IVA que discrimina
-// una Factura A para cada uno (Factura C = Monotributo, nunca discrimina IVA).
-// Fuente: tasas de IVA vigentes AFIP (general 21%, reducida 10.5%,
-// incrementada 27%, exento 0%).
 const BOLETAS_RUBROS_BASE = [
   { id:'general',        label:'Gastos varios (tasa general)',        iva:21   },
   { id:'combustible',    label:'Combustible (nafta / gasoil / GNC)',  iva:21   },
@@ -2405,22 +2468,20 @@ const BOLETAS_RUBROS_BASE = [
   { id:'transportePas',  label:'Transporte público de pasajeros',      iva:0    },
   { id:'otro',           label:'Otro (elegir % manualmente)',          iva:null },
 ];
-let boletasRubrosCustom = [];   // rubros agregados a mano por el usuario, guardados en Firestore
+let boletasRubrosCustom = [];
 function rubrosBoletasTodos(){ return [...BOLETAS_RUBROS_BASE.filter(r=>r.id!=='otro'), ...boletasRubrosCustom, BOLETAS_RUBROS_BASE.find(r=>r.id==='otro')]; }
 
-// Socios de sueldos.html (los mismos 6 que cobran autónomo + dividendo)
 const BOLETAS_SOCIOS = ['Bruno Cola','Pablo Mazzolin','Daniel Nievas','Adrián Juri','Diego Gómez','Sebastián Oliveros'];
 
 let boletasPeriodoActual = new Date().toISOString().slice(0,7);
-let allBoletas = [];          // SOLO las del período seleccionado (getDocs puntual, no listener)
-let boletasCargadas = false;  // evita recargar de más si el usuario reabre la pestaña sin cambiar de mes
+let allBoletas = [];
+let boletasCargadas = false;
 let rubrosBoletasCargados = false;
 let boletasPage = 1;
 const BOLETAS_PAGE_SIZE = 15;
 
 function fmtPct(n){ return (Number(n)%1===0?Number(n):Number(n).toFixed(1)) + '%'; }
 
-// Arma el <select> de rubros y deja armado el <select> de socios (una sola vez)
 function construirSelectoresBoletas(){
   const selRubro=document.getElementById('boletaRubro');
   if(selRubro){
@@ -2438,9 +2499,6 @@ function construirSelectoresBoletas(){
   }
 }
 
-// Trae (una sola vez por sesión) los rubros personalizados que ya se hayan
-// guardado antes, para no repetir la carga a mano. Colección chica (unos
-// pocos documentos), se lee con getDocs una única vez y se cachea.
 async function cargarRubrosCustomBoletas(){
   if(rubrosBoletasCargados) return;
   try{
@@ -2451,9 +2509,6 @@ async function cargarRubrosCustomBoletas(){
   construirSelectoresBoletas();
 }
 
-// Trae SOLO las boletas del período pedido (where periodo==), igual criterio
-// que sueldos.html para movilidad/finesdesemana: minimiza lecturas porque
-// nunca trae el histórico completo, solo el mes que se está mirando.
 async function cargarBoletasPeriodo(periodo){
   try{
     const q = query(collection(db,'caja_boletas'), where('periodo','==',periodo));
@@ -2464,7 +2519,6 @@ async function cargarBoletasPeriodo(periodo){
   boletasCargadas = true;
 }
 
-// Punto de entrada al abrir la pestaña Boletas (llamado desde showTab)
 window.initBoletasTab = async function(){
   construirSelectoresBoletas();
   await cargarRubrosCustomBoletas();
@@ -2478,7 +2532,6 @@ window.initBoletasTab = async function(){
   }
 };
 
-// Cambia el período visible en la pestaña Boletas (dispara UNA lectura nueva, filtrada)
 window.cambiarPeriodoBoletas = async function(){
   const val = document.getElementById('boletaPeriodo').value;
   if(!val) return;
@@ -2490,7 +2543,6 @@ window.cambiarPeriodoBoletas = async function(){
   document.getElementById('spinnerOverlay').style.display='none';
 };
 
-// Al elegir un rubro, sugiere el % de IVA correspondiente (si la factura es A)
 window.toggleBoletaRubroActual = function(){
   const sel=document.getElementById('boletaRubro');
   const ivaInput=document.getElementById('boletaIva');
@@ -2506,7 +2558,6 @@ window.toggleBoletaRubroActual = function(){
   actualizarInfoIvaBoleta();
 };
 
-// Factura C (monotributo) nunca discrimina IVA: deshabilita y limpia el campo.
 window.toggleBoletaTipoFactura = function(){
   const tipo=document.getElementById('boletaTipoFactura').value;
   const ivaInput=document.getElementById('boletaIva');
@@ -2543,8 +2594,6 @@ function actualizarInfoIvaBoleta(){
 }
 window.actualizarInfoIvaBoleta = actualizarInfoIvaBoleta;
 
-// Guarda un rubro nuevo (tipeado en "Otro") en 'caja_rubros_iva' para que
-// quede disponible la próxima vez, con el % de IVA que el usuario definió.
 async function guardarRubroCustomSiCorresponde(){
   const sel=document.getElementById('boletaRubro');
   if(!sel||sel.value!=='otro') return null;
@@ -2637,7 +2686,6 @@ window.renderBoletas = function(){
     return true;
   });
 
-  // Cards resumen (sobre TODO el período, no solo lo filtrado en pantalla)
   const totalImporte = allBoletas.reduce((s,b)=>s+Number(b.importe||0),0);
   const totalIva = allBoletas.filter(b=>b.tipoFactura==='A').reduce((s,b)=>s+Number(b.ivaMonto||0),0);
   const cantA = allBoletas.filter(b=>b.tipoFactura==='A').length;
@@ -2647,7 +2695,6 @@ window.renderBoletas = function(){
   const elA=document.getElementById('boletasCantA'); if(elA) elA.textContent=cantA;
   const elC=document.getElementById('boletasCantC'); if(elC) elC.textContent=cantC;
 
-  // Resumen por socio (para ver rápido cuánto trajo cada uno este mes)
   const porSocio = {};
   BOLETAS_SOCIOS.forEach(s=>porSocio[s]={total:0,cant:0});
   allBoletas.forEach(b=>{ if(!porSocio[b.socio]) porSocio[b.socio]={total:0,cant:0}; porSocio[b.socio].total+=Number(b.importe||0); porSocio[b.socio].cant++; });
