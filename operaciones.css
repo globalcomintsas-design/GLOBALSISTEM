@@ -149,3 +149,9 @@ td.mono{font-family:monospace;font-size:12px;}
 .multisel-actions{display:flex;gap:6px;margin-bottom:8px;}
 .multisel-actions button{flex:1;font-size:11px;padding:5px;}
 .multisel-badge{background:#eff6ff;color:#1e3a8a;border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700;margin-left:4px;}
+
+/* ÁRBOL AÑO / MES / DÍA (Listado -> filtro de fecha + reporte Excel) */
+.arbol-nodo{margin-bottom:1px;}
+.arbol-fila{display:flex;align-items:center;gap:2px;}
+.arbol-flecha{cursor:pointer;font-size:11px;color:#1e3a8a;width:14px;flex-shrink:0;display:inline-block;text-align:center;user-select:none;}
+.arbol-flecha:hover{color:#1e40af;font-weight:700;}
