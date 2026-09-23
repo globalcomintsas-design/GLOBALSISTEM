@@ -356,6 +356,17 @@
             <select id="filtro_mes" onchange="marcarMesListadoElegidoPorUsuario();resetPaginaListado()">
               <option value="">Todos los meses</option>
             </select>
+            <div class="ac-wrap" style="position:relative;">
+              <button type="button" class="btn-outline" onclick="toggleListadoFechasDropdown()" id="listado-fechas-btn">📅 Año/Mes/Día<span class="multisel-badge" id="listado-fechas-badge" style="display:none;"></span> ▾</button>
+              <div id="listado-fechas-dropdown" class="multisel-dropdown" style="min-width:260px;">
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Tildá años, meses o días puntuales. Se combina con los demás filtros.</div>
+                <div class="multisel-actions">
+                  <button type="button" class="btn-outline" onclick="seleccionarTodoArbolFechasListado()">Todos</button>
+                  <button type="button" class="btn-outline" onclick="limpiarArbolFechasListado()">Ninguno</button>
+                </div>
+                <div id="listado-fechas-checks"></div>
+              </div>
+            </div>
             <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
             <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
             <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
