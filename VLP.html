@@ -2288,38 +2288,85 @@ function estilizarHojaExcel(ws, opts){
   }
 }
 
+// ---- Fila TOTAL "viva": se recalcula al filtrar en Excel ----
+// fn: 103 = cuenta filas visibles (COUNTA ignorando ocultas) · 109 = suma de visibles
+function totalVivo(ws, colDestino, colRango, cantFilas, fn, valor, fmt){
+  if(cantFilas < 1) return; // sin datos no hay rango que sumar
+  const addr = XLSX.utils.encode_cell({ r: cantFilas + 1, c: colDestino });
+  const L = XLSX.utils.encode_col(colRango);
+  ws[addr] = {
+    t: 'n',
+    f: `SUBTOTAL(${fn},${L}2:${L}${cantFilas + 1})`,
+    v: valor,
+    z: fmt,
+    s: ws[addr] ? ws[addr].s : undefined
+  };
+}
+
 // ====================================================
 // EXPORTAR EXCEL
 // ====================================================
 window.exportarPendientesExcel=function(){
   const hoy=hoyLocal();
-  const fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa).sort((a,b)=>{
+  // Respeta los mismos filtros que la pantalla
+  const buscar=(document.getElementById('buscarPend')?.value||'').toLowerCase();
+  const filtMes=mselGetValues('mselMesPend');
+  const filtTipo=mselGetValues('mselTipoPend');
+  const filtSim=mselGetValues('mselSimPend');
+  const filtOrigen=document.getElementById('filtroOrigenPend')?.value||'';
+
+  let fil=allOps.filter(o=>!o.pagada&&!o.archivada&&o.fecha_operativa);
+  if(buscar)fil=fil.filter(o=>(o.operacion+o.cliente+o.mercaderia+o.codigo_regimen).toLowerCase().includes(buscar));
+  if(filtMes.length)fil=fil.filter(o=>filtMes.includes(o.mes_operativo));
+  if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
+  if(filtSim.length)fil=fil.filter(o=>filtSim.includes(o.estado_sim));
+  if(filtOrigen)fil=fil.filter(o=>o.origen===filtOrigen);
+  fil.sort((a,b)=>{
     const fa=a.fecha_operativa?aFechaLocal(a.fecha_operativa):fechaLocal(2099,1,1);
     const fb=b.fecha_operativa?aFechaLocal(b.fecha_operativa):fechaLocal(2099,1,1);
     return fa-fb;
   });
+
   const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Fecha Provisoria','Mes Operativo','Estado SIM','Origen','Días Pendiente','Mercadería'];
   const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
     const dias=fo?diasEntreFechas(fo,hoy):null;
     return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.fecha_operativa_provisional?'Sí':'No',o.mes_operativo||'',o.estado_sim||'',o.origen||'',dias,o.mercaderia||''];
   });
-  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','','',''];
-  const aoa=[header,...rows,totalRow];
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const totalRow=['TOTAL',rows.length===0?'0 operación(es)':'','','','','','','','','','',''];
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows,totalRow]);
   const lastCol=XLSX.utils.encode_col(header.length-1);
-  const lastDataRow=1+rows.length;
-  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!autofilter']={ref:`A1:${lastCol}${1+rows.length}`};
   ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:12},{wch:10},{wch:12},{wch:12},{wch:30}];
   estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[10]});
+  totalVivo(ws,1,0,rows.length,103,rows.length,'0" operación(es)"');
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Pendientes');
   XLSX.writeFile(wb,'VLP_Pendientes_'+todayISO()+'.xlsx');
-  toast('Excel generado ✓','success');
+  toast(`Excel generado ✓ — ${rows.length} operaciones`,'success');
 };
 
 window.exportarPagadasExcel=function(){
-  const fil=allOps.filter(o=>o.pagada&&!o.archivada);
+  // Respeta los mismos filtros que la pantalla
+  const buscar=(document.getElementById('buscarPag')?.value||'').toLowerCase();
+  const filtMes=mselGetValues('mselMesPag');
+  const filtTipo=mselGetValues('mselTipoPag');
+  const filtVLP=document.getElementById('filtroVLPPag')?.value||'';
+  const filtOrigenPago=document.getElementById('filtroOrigenPago')?.value||'';
+
+  let fil=allOps.filter(o=>o.pagada&&!o.archivada);
+  if(buscar)fil=fil.filter(o=>(o.operacion+(o.cliente||'')+(o.vlp_pago||'')).toLowerCase().includes(buscar));
+  if(filtMes.length)fil=fil.filter(o=>filtMes.includes(o.mes_operativo));
+  if(filtTipo.length)fil=fil.filter(o=>filtTipo.includes(o.tipo_operacion));
+  if(filtVLP)fil=fil.filter(o=>o.vlp_pago===filtVLP);
+  if(filtOrigenPago==='VLP')fil=fil.filter(o=>o.origen_pago!=='FACTURA_PROPIA');
+  if(filtOrigenPago==='FACTURA_PROPIA')fil=fil.filter(o=>o.origen_pago==='FACTURA_PROPIA');
+  fil.sort((a,b)=>{
+    const fa=a.fecha_pago?aFechaLocal(a.fecha_pago):new Date(0);
+    const fb=b.fecha_pago?aFechaLocal(b.fecha_pago):new Date(0);
+    return fb-fa;
+  });
+
   const header=['Operación','Cliente','Destinación','Régimen','Tipo','Fecha Operativa','Mes Operativo','Fecha Pago','Días tardó','VLP / Factura','Origen Pago','Importe','N° Doc'];
   const rows=fil.map(o=>{
     const fo=aFechaLocal(o.fecha_operativa);
@@ -2328,18 +2375,18 @@ window.exportarPagadasExcel=function(){
     return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',fo?formatFecha(fo):'',o.mes_operativo||'',fp?formatFecha(fp):'',dias,o.vlp_pago||'',o.origen_pago||'VLP',o.importe_vlp||0,o.numero_doc_vlp||''];
   });
   const totImporte=fil.reduce((a,b)=>a+(b.importe_vlp||0),0);
-  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','','','',totImporte,''];
-  const aoa=[header,...rows,totalRow];
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const totalRow=['TOTAL',rows.length===0?'0 operación(es)':'','','','','','','','','','',totImporte,''];
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows,totalRow]);
   const lastCol=XLSX.utils.encode_col(header.length-1);
-  const lastDataRow=1+rows.length;
-  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!autofilter']={ref:`A1:${lastCol}${1+rows.length}`};
   ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:12},{wch:14},{wch:10},{wch:22},{wch:16},{wch:14},{wch:16}];
   estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[11],colsNumericas:[8,11]});
+  totalVivo(ws,1,0,rows.length,103,rows.length,'0" operación(es)"');
+  totalVivo(ws,11,11,rows.length,109,totImporte,'#,##0.00');
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Pagadas');
   XLSX.writeFile(wb,'VLP_Pagadas_'+todayISO()+'.xlsx');
-  toast('Excel generado ✓','success');
+  toast(`Excel generado ✓ — ${rows.length} operaciones`,'success');
 };
 
 window.exportarFueraTerminoExcel=function(){
@@ -2355,18 +2402,17 @@ window.exportarFueraTerminoExcel=function(){
     const fp=aFechaLocal(o.fecha_pago);
     return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',formatFecha(fo),formatFecha(fp),diasEntreFechas(fo,fp),o.vlp_pago||'',o.origen_pago||'VLP'];
   });
-  const totalRow=['TOTAL',`${fil.length} operación(es)`,'','','','','','','',''];
-  const aoa=[header,...rows,totalRow];
-  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  const totalRow=['TOTAL',rows.length===0?'0 operación(es)':'','','','','','','','',''];
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows,totalRow]);
   const lastCol=XLSX.utils.encode_col(header.length-1);
-  const lastDataRow=1+rows.length;
-  ws['!autofilter']={ref:`A1:${lastCol}${lastDataRow}`};
+  ws['!autofilter']={ref:`A1:${lastCol}${1+rows.length}`};
   ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:14},{wch:14},{wch:10},{wch:22},{wch:16}];
   estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[7]});
+  totalVivo(ws,1,0,rows.length,103,rows.length,'0" operación(es)"');
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Fuera de término');
   XLSX.writeFile(wb,'VLP_FueraTermino_'+todayISO()+'.xlsx');
-  toast('Excel generado ✓','success');
+  toast(`Excel generado ✓ — ${rows.length} operaciones`,'success');
 };
 
 window.exportarCepasExcel=function(){
