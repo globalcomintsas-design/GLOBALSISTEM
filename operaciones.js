@@ -94,13 +94,6 @@ window.marcarMesListadoElegidoPorUsuario = function(){ usuarioEligioMesListado =
 // ── UTILS ──
 
 // ── FECHA / MES "DE HOY" EN HORA LOCAL (no UTC) ──
-// OJO: `new Date().toISOString()` siempre devuelve la fecha en UTC. Como Argentina está
-// UTC-3, pasada cierta hora de la noche (ej. después de las 21hs) el reloj UTC ya cruzó
-// a la fecha del día siguiente, y el sistema terminaba mostrando "mañana" (o el mes
-// siguiente) como si ya hubiera llegado, aunque acá todavía no fuera esa fecha. Estas
-// dos funciones arman la fecha/mes "de hoy" usando SIEMPRE la hora local del navegador
-// (getFullYear/getMonth/getDate son locales), y se usan en todos lados donde antes se
-// usaba new Date().toISOString() para saber "qué día/mes es hoy".
 function fechaLocalISO(d = new Date()){
   const y = d.getFullYear();
   const m = String(d.getMonth()+1).padStart(2,'0');
@@ -124,10 +117,6 @@ function fmt2(n){
 window.fmt2 = fmt2;
 
 // ── PUNTO SI VACÍO (para exportaciones a Excel) ──
-// Reemplaza valores vacíos ('' / null / undefined) por un punto '.', para que en la
-// planilla quede explícito que ese campo NO se cargó (en vez de dejar la celda en
-// blanco, que se puede confundir con "se olvidaron de exportarlo"). No toca números
-// (incluido el 0), solo strings vacíos / null / undefined.
 function puntoSiVacio(v){
   return (v === '' || v === null || typeof v === 'undefined') ? '.' : v;
 }
@@ -154,10 +143,6 @@ function etiquetaTipoDespachante(tipo){
 window.etiquetaTipoDespachante = etiquetaTipoDespachante;
 
 // Estado de residencia (para color del Cliente final y de la columna Residencia en Mudanzas)
-// - Sin fecha de vencimiento cargada -> verde (no aplica / no tiene residencia temporal)
-// - Cancelada/renovada -> verde
-// - Falta más de 30 días -> amarillo
-// - Falta 30 días o menos (o ya vencida) -> rojo
 function estadoResidencia(m){
   if(!m || !m.vencimientoResidencia){
     return { clase:'ok', label:'N/A', bg:'#dcfce7', color:'#166534' };
@@ -179,13 +164,6 @@ function estadoResidencia(m){
 window.estadoResidencia = estadoResidencia;
 
 // ── ESTADO DE COBRO DE UNA MUDANZA (soporta pago parcial) ──
-// Antes "cobrado" era solo sí/no. Ahora se guarda `montoCobrado` (lo que efectivamente
-// se cobró en pesos) y se compara contra `bruto` para saber si está: sin cobrar, cobrado
-// parcialmente, o cobrado por completo. Se mantiene el campo booleano `cobrado` en el
-// documento (true solo cuando está 100% cobrado) por compatibilidad con lo que ya
-// depende de él (ej. desbloquear el pago a Ramiro). Para mudanzas viejas que solo tenían
-// el booleano `cobrado` (sin `montoCobrado` guardado), se lo reconstruye: si estaba
-// marcada como cobrada, se asume que se cobró el bruto completo; si no, que se cobró $0.
 function estadoCobro(m){
   const bruto = m && m.bruto ? m.bruto : 0;
   let cobrado;
@@ -195,9 +173,6 @@ function estadoCobro(m){
     cobrado = (m && m.cobrado) ? bruto : 0;
   }
   const saldo = bruto - cobrado;
-  // El pago a Ramiro se habilita apenas se cobró el 50% o más del bruto (no hace falta
-  // esperar al cobro completo). Si el bruto es $0 (ej. mudanza sin honorarios cargados
-  // todavía) se considera habilitado para no bloquear por falta de datos.
   const ramiroHabilitado = bruto <= 0.005 ? true : (cobrado >= (bruto * 0.5) - 0.005);
   if(cobrado <= 0.005){
     return { estado:'no', label:'❌ Sin cobrar', bg:'#fee2e2', color:'#991b1b', cobrado, saldo, ramiroHabilitado };
@@ -226,7 +201,7 @@ window.switchTab = function(tab){
   document.querySelectorAll('.tab').forEach((btn,i) => {
     btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos'][i]===tab);
   });
-  if(tab==='listado')   renderTabla();
+  if(tab==='listado'){ renderTabla(); renderListadoArbolFechas(); }
   if(tab==='dashboard') renderDashboard();
   if(tab==='saldos'){ renderSaldos(); renderLogVinculaciones(); }
   if(tab==='clientes')  renderTablaClientesFinales();
@@ -333,15 +308,6 @@ window.guardarNuevoAC = async function(inputId, listId, esDespachante){
 };
 
 // ── AUTO FIN DE SEMANA SEGÚN FECHA ──
-// Antes esta lógica vivía solo dentro de un listener 'change' del input de fecha. El
-// problema: 'change' únicamente dispara cuando el VALOR del campo cambia. Al guardar
-// una operación, limpiarFormulario() desmarca todos los checkboxes (incluido este) pero
-// NO toca la fecha — si seguís cargando operaciones el mismo día, el input de fecha
-// nunca vuelve a disparar 'change', así que el checkbox de Fin de semana quedaba
-// desmarcado a partir de la segunda carga del día, aunque siguiera siendo sábado o
-// domingo. Ahora es una función aparte que se llama tanto desde el listener de fecha
-// como cada vez que el formulario queda "limpio" (nueva carga / init), para que siempre
-// se reevalúe contra la fecha actual del campo, cambie o no.
 function actualizarFinSemPorFecha(){
   const val = document.getElementById('op_fecha').value;
   if(!val) return;
@@ -376,6 +342,7 @@ onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDe
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
   datosCargados = true;
   renderFiltros();
+  renderListadoArbolFechas();
   // re-render tab activo si corresponde
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Listado'))   renderTabla();
@@ -394,10 +361,6 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
 });
 
 // ── TARIFAS: persistencia en Firestore ──
-// Todos los campos de tarifa (USD y pesos) se guardan en un único documento de
-// configuración para que, al modificarlos, queden guardados y no se pierdan al
-// recargar la página ni al entrar desde otra compu. Se guardan como texto (tal cual
-// están en los inputs) y se restauran apenas carga la página.
 const TARIFA_IDS = [
   't_vn','t_r','t_sobre','t_cam_vn','t_cam_r','t_senasa_p','t_senasa_prod','t_hoja',
   't_mic','t_mic_foja','t_multinota','t_finsem',
@@ -444,16 +407,6 @@ onSnapshot(doc(db,'config','tarifas_operaciones'), snap => {
 });
 
 // ── Log de vinculaciones automáticas desde Caja ──
-// Se alimenta desde caja.html (colección 'log_vinculaciones_caja') cada vez que se carga
-// un Ingreso y el sistema intenta vincularlo con Operaciones (pago por factura, pago
-// genérico por despachante, o marcar una mudanza como cobrada). Se muestra en la
-// pestaña Saldos, junto al historial de pagos, para poder auditar qué hizo el sistema.
-//
-// Esta colección crece SOLA con el tiempo (una entrada por cada ingreso cargado en Caja,
-// para siempre), a diferencia de operaciones/mudanzas que están filtradas por año. La
-// tabla que la muestra ya pagina de a 15, así que no hace falta traer el historial
-// completo: se acota a los últimos 300 registros con limit(), para que el listener en
-// vivo nunca crezca sin techo.
 let logVinculaciones = [];
 onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc'), limit(300)), snap => {
   logVinculaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
@@ -469,7 +422,6 @@ function renderLogVinculaciones(){
     if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  // logVinculaciones ya viene ordenado del más nuevo al más viejo (orderBy ts desc)
   const { pagina, page, totalPaginas } = paginarArray('vinculaciones', logVinculaciones, PAGE_SIZE_GENERICO);
   tbody.innerHTML = pagina.map(l => {
     const huboAlerta = (l.acciones||[]).some(a => a.startsWith('⚠️'));
@@ -573,9 +525,6 @@ window.onTipoChange = function(){
   const destinGroup = document.getElementById('destinacion-group');
   const canalGroup  = document.getElementById('op_canal').closest('.form-group');
 
-  // Tipo "Adicionales" y "MIC": no tienen destinación/permiso, se oculta el campo
-  // y se limpia lo que tuviera cargado (para que no quede un valor viejo guardándose
-  // por accidente al pasar de otro tipo de operación a MIC/Adicionales).
   const sinDestinacion = esAdicionales || esMIC;
   destinGroup.style.display = sinDestinacion ? 'none' : '';
   if(sinDestinacion) document.getElementById('op_destinacion').value = '';
@@ -605,7 +554,6 @@ window.onTipoChange = function(){
 window.onCambiarDespachante = function(){
   const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
 
-  // Auto-detectar Kotinya por nombre
   if(nombre.includes('KOTINYA')){
     document.getElementById('tipo_desp_global').value = 'kotinya';
     esKotinya   = true;
@@ -647,10 +595,6 @@ function getTarifas(){
   const tcInput = document.getElementById('op_tc').value;
   const tcParsed  = parseFloat(tcInput);
   const tcValido  = !isNaN(tcParsed) && tcParsed > 0;
-  // Con tarifa en pesos no hay conversión USD->$, así que el TC deja de ser obligatorio.
-  // Si quedó un TC cargado de antes (ej. venía de otro tipo de despacho) se sigue
-  // usando para convertir algún adicional que esté tarifado en USD; si no hay ninguno
-  // cargado, se usa 1 para que esos adicionales no queden en $0 por falta de TC.
   const tcFalta = _esPesos ? false : !tcValido;
   const tc = _esPesos ? (tcValido ? tcParsed : 1) : (tcFalta ? 0 : tcParsed);
 
@@ -721,9 +665,6 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_mic').value), 'MIC base');
 
   if(document.getElementById('chk_mic_fojas').checked){
-    // La 1ra foja del MIC ya viene incluida en "MIC base" — solo se cobran las fojas
-    // que exceden esa primera. Con 1 foja cargada (la del propio MIC) no se cobra
-    // nada; desde la 2da foja en adelante se cobra t_mic_foja por cada una extra.
     const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
     const cobrarFojas = Math.max(0, n - 1);
     if(cobrarFojas > 0){
@@ -823,9 +764,6 @@ function construirDatosOperacion(){
     fecha: document.getElementById('op_fecha').value,
     despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
-    // MIC y Adicionales no tienen destinación/permiso: se guarda vacío aunque haya
-    // quedado un valor cargado de antes (ver también onTipoChange, que ya limpia el
-    // campo en pantalla apenas se elige alguno de estos dos tipos).
     destinacion: (esAdicionales || esMIC) ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
     canal: (esMIC || esMultinota || esAdicionales) ? '' : document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
@@ -849,7 +787,6 @@ function construirDatosOperacion(){
     esMIC,
     esMultinota,
     esAdicionales,
-    // Estado crudo del formulario (para poder reconstruirlo exacto al editar)
     tipoDespGlobal: tipo,
     opTcInput: document.getElementById('op_tc').value,
     adicionalesPesos: parseFloat(document.getElementById('op_adicionales_pesos').value) || 0,
@@ -872,9 +809,9 @@ function construirDatosOperacion(){
 }
 
 // ── GUARDAR OPERACIÓN (nueva) ──
-let guardandoOperacion = false; // evita doble-click / doble-submit mientras Firestore procesa
+let guardandoOperacion = false;
 window.guardarOperacion = async function(){
-  if(guardandoOperacion) return; // ya se está guardando, ignorar clicks repetidos
+  if(guardandoOperacion) return;
 
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
@@ -919,10 +856,10 @@ window.guardarOperacion = async function(){
 };
 
 // ── ACTUALIZAR OPERACIÓN (edición) ──
-let actualizandoOperacion = false; // evita doble-click / doble-submit mientras Firestore procesa
+let actualizandoOperacion = false;
 window.actualizarOperacion = async function(){
   if(!opEditandoId) return;
-  if(actualizandoOperacion) return; // ya se está actualizando, ignorar clicks repetidos
+  if(actualizandoOperacion) return;
 
   const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
   const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
@@ -986,16 +923,12 @@ window.editarOperacion = function(id){
 
   tieneFactura = o.tieneFactura !== false;
 
-  // Tipo de operación (EXPO/IMPO/TRAN/MIC/MULTINOTA) -> ajusta visibilidad de checks
-  // (esto también limpia la destinación en pantalla si el tipo es MIC/Adicionales)
   onTipoChange();
 
-  // Tipo de despacho (despachante/premium/apoderado/kotinya/despachante_pesos)
   document.getElementById('tipo_desp_global').value =
     o.tipoDespGlobal || (o.esApoderado ? 'apoderado' : o.esKotinya ? 'kotinya' : o.esPremium ? 'desp_externo' : o.esTarifaPesos ? 'despachante_pesos' : 'despachante');
   onTipoDespachoChange();
 
-  // Restaurar checkboxes/cantidades (por si onTipoChange los reseteó)
   document.getElementById('chk_sobre').checked       = !!o.chk_sobre;
   document.getElementById('chk_cam').checked         = !!o.chk_cam;
   document.getElementById('n_cam').value             = o.n_cam || 1;
@@ -1057,9 +990,6 @@ window.limpiarFormulario = function(){
   document.getElementById('op_tipo').value = 'EXPO';
   document.getElementById('tipo_desp_global').value = 'despachante';
   document.querySelectorAll('.chk-item input[type=checkbox]').forEach(c => c.checked = false);
-  // El paso de arriba desmarca TODOS los checkboxes, incluido Fin de semana — se lo
-  // vuelve a evaluar acá contra la fecha que sigue cargada en el campo, para que no
-  // quede desmarcado por error si seguís cargando operaciones el mismo sábado/domingo.
   actualizarFinSemPorFecha();
   cerrarAC('ac_despachante');
   cerrarAC('ac_cliente');
@@ -1145,9 +1075,6 @@ function renderTablaClientesFinales(){
 window.renderTablaClientesFinales = renderTablaClientesFinales;
 
 // ── CALCULAR COBERTURA FIFO (pagos sin factura asignada se aplican a las operaciones más viejas) ──
-// NOTA: esto sigue funcionando exactamente igual que antes (se usa para pintar la columna
-// "Cobertura" del Listado, operación por operación) y compara contra o.bruto — no se toca,
-// porque el pedido fue no modificar el Listado. Es un concepto distinto del saldo total.
 function calcularCoberturaFIFO(nombre){
   const { pagado } = calcularSaldoDespachante(nombre);
   const ops = operaciones.filter(o => o.despachante === nombre).sort((a,b)=>(a.ts||0)-(b.ts||0));
@@ -1161,9 +1088,6 @@ function calcularCoberturaFIFO(nombre){
 window.calcularCoberturaFIFO = calcularCoberturaFIFO;
 
 // ── ASIGNAR N° FACTURA A UNA OPERACIÓN ──
-// Este campo se puede editar SIEMPRE, tenga o no un número cargado: sirve tanto para
-// asignar la factura por primera vez como para corregirla si te equivocaste. No hay
-// ninguna restricción que lo bloquee una vez asignado.
 window.asignarFactura = async function(id, numFactura){
   const val = (numFactura||'').trim().toUpperCase();
   try {
@@ -1190,9 +1114,6 @@ window.toggleFacturaLotePanel = function(){
   }
 };
 
-// Si "incluirConFactura" está tildado, el lote también trae operaciones que YA tienen
-// un N° de factura cargado, para poder corregirlas (antes quedaban invisibles para
-// siempre una vez asignadas, por el filtro !o.numFactura).
 function opsParaLote(){
   const despachante = document.getElementById('lote_despachante').value;
   const desde = document.getElementById('lote_fecha_desde').value;
@@ -1236,9 +1157,6 @@ window.ejecutarAsignarFacturaMasiva = async function(){
 };
 
 // ── MAPA DE PENDIENTE DE PAGO POR OPERACIÓN (para el filtro "Solo pendientes de pago") ──
-// Usa la misma cobertura "exigible" (Neto mientras no tenga factura, Bruto una vez
-// facturada) que ya se usa en la pestaña Saldos, para que el filtro sea consistente
-// con lo que ahí se considera deuda real pendiente. pendiente > 0.5 => sigue debiéndose.
 function mapaPendientePorOperacion(){
   const map = {};
   const despachantesConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))];
@@ -1249,8 +1167,6 @@ function mapaPendientePorOperacion(){
 }
 window.mapaPendientePorOperacion = mapaPendientePorOperacion;
 
-// Filtra un array de operaciones según el select "filtro_pendiente" del Listado
-// ('' = todas, 'pendiente' = con saldo pendiente > $0.5, 'cubierta' = ya cubierta/pagada)
 function aplicarFiltroPendiente(ops, filtroPendiente){
   if(!filtroPendiente) return ops;
   const pendienteMap = mapaPendientePorOperacion();
@@ -1260,6 +1176,167 @@ function aplicarFiltroPendiente(ops, filtroPendiente){
   });
 }
 window.aplicarFiltroPendiente = aplicarFiltroPendiente;
+
+// ══════════════════════════════ ÁRBOL DE FECHAS (Año > Mes > Día) — LISTADO ══════════════════════════════
+// Filtro adicional para la pestaña Listado (y su reporte Excel): permite tildar años,
+// meses o días puntuales, igual que el selector de meses de Cuenta Ramiro pero con un
+// nivel más (día). Un Set vacío = sin filtro de fecha por árbol (se respetan igual los
+// demás filtros: despachante, mes simple, rango desde/hasta, pendiente).
+let listadoFechasSeleccionadas = new Set(); // fechas exactas 'YYYY-MM-DD' tildadas
+let listadoArbolAbierto = new Set(); // años/meses actualmente desplegados en el árbol
+
+const NOMBRES_MESES_ARBOL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// Arma { '2026': { '2026-09': ['2026-09-21', '2026-09-20', ...] } } a partir de las
+// fechas realmente cargadas en operaciones (ordenadas de más nueva a más vieja).
+function construirArbolFechasListado(){
+  const fechas = [...new Set(operaciones.map(o => o.fecha).filter(Boolean))].sort().reverse();
+  const arbol = {};
+  fechas.forEach(f => {
+    const anio = f.slice(0,4);
+    const mes  = f.slice(0,7);
+    if(!arbol[anio]) arbol[anio] = {};
+    if(!arbol[anio][mes]) arbol[anio][mes] = [];
+    arbol[anio][mes].push(f);
+  });
+  return arbol;
+}
+
+function diasDeAnio(arbol, anio){
+  return Object.values(arbol[anio] || {}).flat();
+}
+
+// 'todos' | 'ninguno' | 'parcial' según cuántos de esos días estén tildados
+function estadoGrupoFechas(dias){
+  if(!dias.length) return 'ninguno';
+  const seleccionados = dias.filter(d => listadoFechasSeleccionadas.has(d)).length;
+  if(seleccionados === 0) return 'ninguno';
+  if(seleccionados === dias.length) return 'todos';
+  return 'parcial';
+}
+
+window.toggleListadoArbolNodo = function(key){
+  if(listadoArbolAbierto.has(key)) listadoArbolAbierto.delete(key);
+  else listadoArbolAbierto.add(key);
+  renderListadoArbolFechas();
+};
+
+window.toggleListadoFechaGrupo = function(dias, checked){
+  dias.forEach(d => checked ? listadoFechasSeleccionadas.add(d) : listadoFechasSeleccionadas.delete(d));
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.toggleListadoFechaDia = function(dia, checked){
+  if(checked) listadoFechasSeleccionadas.add(dia);
+  else listadoFechasSeleccionadas.delete(dia);
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.limpiarArbolFechasListado = function(){
+  listadoFechasSeleccionadas.clear();
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.seleccionarTodoArbolFechasListado = function(){
+  const arbol = construirArbolFechasListado();
+  Object.values(arbol).forEach(meses => Object.values(meses).forEach(dias => dias.forEach(d => listadoFechasSeleccionadas.add(d))));
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.toggleListadoFechasDropdown = function(){
+  const dd = document.getElementById('listado-fechas-dropdown');
+  if(dd) dd.classList.toggle('show');
+};
+
+document.addEventListener('click', function(e){
+  const dd  = document.getElementById('listado-fechas-dropdown');
+  const btn = document.getElementById('listado-fechas-btn');
+  if(!dd || !btn) return;
+  if(dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)){
+    dd.classList.remove('show');
+  }
+});
+
+function renderListadoArbolFechas(){
+  const cont  = document.getElementById('listado-fechas-checks');
+  const badge = document.getElementById('listado-fechas-badge');
+  if(!cont) return;
+
+  const arbol = construirArbolFechasListado();
+  const anios = Object.keys(arbol).sort().reverse();
+
+  if(!anios.length){
+    cont.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px;">Sin operaciones cargadas</div>';
+  } else {
+    cont.innerHTML = anios.map(anio => {
+      const diasAnio = diasDeAnio(arbol, anio);
+      const estAnio = estadoGrupoFechas(diasAnio);
+      const abiertoAnio = listadoArbolAbierto.has(anio);
+      const meses = Object.keys(arbol[anio]).sort().reverse();
+      return `
+        <div class="arbol-nodo">
+          <div class="arbol-fila">
+            <span class="arbol-flecha" onclick="toggleListadoArbolNodo('${anio}')">${abiertoAnio?'▾':'▸'}</span>
+            <label class="multisel-item" style="flex:1;padding:4px 6px;">
+              <input type="checkbox" ${estAnio==='todos'?'checked':''} class="chk-arbol" data-indet="${estAnio==='parcial'}"
+                onchange="toggleListadoFechaGrupo(${JSON.stringify(diasAnio)}, this.checked)">
+              <strong>${anio}</strong>
+            </label>
+          </div>
+          ${abiertoAnio ? meses.map(mes => {
+            const diasMes = arbol[anio][mes];
+            const estMes = estadoGrupoFechas(diasMes);
+            const abiertoMes = listadoArbolAbierto.has(mes);
+            const nombreMes = NOMBRES_MESES_ARBOL[parseInt(mes.slice(5,7),10)-1] || mes;
+            return `
+              <div class="arbol-nodo" style="margin-left:16px;">
+                <div class="arbol-fila">
+                  <span class="arbol-flecha" onclick="toggleListadoArbolNodo('${mes}')">${abiertoMes?'▾':'▸'}</span>
+                  <label class="multisel-item" style="flex:1;padding:4px 6px;">
+                    <input type="checkbox" ${estMes==='todos'?'checked':''} class="chk-arbol" data-indet="${estMes==='parcial'}"
+                      onchange="toggleListadoFechaGrupo(${JSON.stringify(diasMes)}, this.checked)">
+                    ${nombreMes} (${mes})
+                  </label>
+                </div>
+                ${abiertoMes ? diasMes.slice().sort().reverse().map(dia => `
+                  <label class="multisel-item" style="margin-left:32px;">
+                    <input type="checkbox" ${listadoFechasSeleccionadas.has(dia)?'checked':''} onchange="toggleListadoFechaDia('${dia}', this.checked)">
+                    ${dia.slice(8,10)}/${dia.slice(5,7)}/${dia.slice(0,4)}
+                  </label>
+                `).join('') : ''}
+              </div>
+            `;
+          }).join('') : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
+  // El HTML no tiene atributo para "indeterminado": se marca por JS después de renderizar.
+  cont.querySelectorAll('input.chk-arbol[data-indet="true"]').forEach(chk => { chk.indeterminate = true; });
+
+  if(badge){
+    if(listadoFechasSeleccionadas.size > 0){
+      badge.style.display = 'inline-block';
+      badge.textContent = listadoFechasSeleccionadas.size;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+window.renderListadoArbolFechas = renderListadoArbolFechas;
+
+// Aplica el filtro de árbol de fechas sobre un array de operaciones (se usa tanto en
+// renderTabla como en exportarExcel, para que la tabla y el reporte siempre coincidan).
+function aplicarFiltroArbolFechas(ops){
+  if(!listadoFechasSeleccionadas.size) return ops;
+  return ops.filter(o => listadoFechasSeleccionadas.has(o.fecha));
+}
+window.aplicarFiltroArbolFechas = aplicarFiltroArbolFechas;
 
 // ── RENDER TABLA OPERACIONES ──
 function renderTabla(){
@@ -1279,6 +1356,7 @@ function renderTabla(){
   if(filtMes)   ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroArbolFechas(ops);
   ops = aplicarFiltroPendiente(ops, filtPendiente);
 
   // Más nueva primero: la última operación cargada arriba de todo, y así hacia atrás.
@@ -1297,11 +1375,6 @@ function renderTabla(){
     calcularCoberturaFIFO(desp).forEach(o => coberturaPorId[o.id] = o.pendiente);
   });
 
-  // ── Pendiente EXIGIBLE por operación (misma cobertura que usa Saldos / el filtro
-  // "Solo pendientes de pago"): a diferencia de coberturaPorId de arriba (que compara
-  // contra o.bruto y solo tiene sentido para operaciones SIN factura), esta sí sirve
-  // para saber si una operación YA FACTURADA está cubierta o no. Se usa exclusivamente
-  // para pintar el tag "Por factura" de abajo con su estado real.
   const pendienteExigiblePorId = mapaPendientePorOperacion();
 
   const totalPaginas = Math.max(1, Math.ceil(ops.length / LISTADO_PAGE_SIZE));
@@ -1314,10 +1387,6 @@ function renderTabla(){
     const pendiente = coberturaPorId[o.id];
     let coberturaHtml;
     if(o.numFactura){
-      // Antes acá se ponía siempre "Por factura" sin importar si ya se había cobrado
-      // o no. Ahora se usa la cobertura exigible (Neto/Bruto real, pagos por factura +
-      // FIFO) para mostrar si esa factura puntual ya está cubierta o todavía tiene
-      // saldo pendiente — así no hace falta ir a la pestaña Saldos para saberlo.
       const pendExigible = pendienteExigiblePorId[o.id] || 0;
       coberturaHtml = pendExigible > 0.5
         ? `<span class="tag" style="background:#fee2e2;color:#991b1b;" title="Factura ${o.numFactura}">🧾 ${o.numFactura} · $${fmt2(pendExigible)} pend.</span>`
@@ -1416,10 +1485,6 @@ function renderFiltros(){
     sel.innerHTML = '<option value="">Todos los meses</option>';
     meses.forEach(m => { const opt = document.createElement('option'); opt.value=m; opt.textContent=m; sel.appendChild(opt); });
     sel.value = v;
-    // Tanto el mes del Dashboard como el del Listado: se aseguran de tener el mes actual
-    // como opción (aunque todavía no haya operaciones cargadas ese mes) y arrancan
-    // seleccionados en el mes en curso hasta que el usuario elija otro mes a mano
-    // (incluido "Todos los meses"). Se recalcula en CADA render de filtros, no solo una vez.
     const mesActual = mesLocalISO();
     if(![...sel.options].some(o => o.value === mesActual)){
       const opt = document.createElement('option');
@@ -1444,8 +1509,6 @@ window.renderDashboard = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
-  // Mudanzas: no tienen "despachante", solo se filtran por mes. Si hay un despachante
-  // seleccionado, se muestran aparte (no se mezclan en los totales de ese despachante).
   const mudFiltradas = mudanzas.filter(m => !filtMes || m.fecha?.startsWith(filtMes));
   const incluirMudEnTotales = !filtCorr;
 
@@ -1464,33 +1527,19 @@ window.renderDashboard = function(){
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
-  // ── "Cobrado" y "Pendiente" son del PERÍODO filtrado (mes elegido arriba), no históricos ──
-  // OJO: se usa mesDeFecha() (no un simple startsWith) porque los pagos que llegan
-  // automáticos desde Caja a veces vienen en formato argentino "DD/MM/YYYY", y compararlos
-  // como si fueran ISO "YYYY-MM-DD" los dejaba afuera del período (por eso aparecía $0
-  // de "Pagado" en la tabla de despachantes aunque sí hubieran entrado pagos ese mes).
-  // Los pagos también se filtran por despachante (filtCorr) cuando corresponde, para
-  // que "Cobrado"/"Pendiente" del período reflejen SOLO al despachante elegido.
   const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
   let totCobradoPeriodo = pagos
     .filter(p => despFiltrados.includes(p.despachante) && (!filtCorr || p.despachante === filtCorr) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
     .reduce((a,b) => a + (b.monto||0), 0);
 
-  // Mudanzas: cobradas/sin cobrar/parciales ya vienen filtradas por el mismo período
-  // (mudFiltradas). Ahora se usa estadoCobro() para sumar el MONTO real cobrado y el
-  // saldo real pendiente de cada mudanza, en vez de todo-o-nada (antes una mudanza con
-  // pago parcial contaba entera como "pendiente" o entera como "cobrada").
   const mudPagado    = mudFiltradas.reduce((a,b) => a + estadoCobro(b).cobrado, 0);
   const mudPendiente = mudFiltradas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
   if(incluirMudEnTotales){
     totCobradoPeriodo += mudPagado;
   }
 
-  // Pendiente del período = lo facturado en el período menos lo cobrado en ese mismo período
   const totPendientePeriodo = totBruto - totCobradoPeriodo;
 
-  // ── "Deuda total pendiente HOY" es SIEMPRE histórica y total, ignora el filtro de mes ──
-  // (solo respeta el filtro de despachante, si eligió uno puntual)
   const nombresParaDeuda = filtCorr ? [filtCorr] : [...new Set(clientes.map(c => c.nombre))];
   const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
   const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
@@ -1530,17 +1579,6 @@ window.renderDashboard = function(){
     </div>` : ''}
   `;
 
-  // "Por despachante": ANTES esta tabla quedaba fija al mes calendario real del sistema
-  // sin importar qué mes eligieras arriba en "dash_mes" — por eso, si elegías por ejemplo
-  // 2026-08 pero la fecha real de hoy ya era septiembre, la tabla mostraba "(2026-09)"
-  // vacía en vez de los datos de agosto. Ahora respeta el mes elegido en el selector del
-  // Dashboard (filtMes); si no elegiste ningún mes ("Todos los meses"), usa el mes
-  // calendario actual como valor por defecto, igual que antes.
-  // El saldo mostrado sigue siendo el saldo HISTÓRICO real (incluye deuda de meses
-  // anteriores), igual al de la pestaña Saldos — no se limita al mes de la tabla.
-  // Cuando hay un despachante elegido (filtCorr), esta tabla queda acotada a SOLO ese
-  // despachante: tanto las operaciones del mes elegido como los pagos que se le suman
-  // se filtran por filtCorr.
   const _mesActualDash = mesLocalISO();
   const mesTablaDesp = filtMes || _mesActualDash;
   const opsMesTabla = operaciones.filter(o => mesDeFecha(o.fecha) === mesTablaDesp && (!filtCorr || o.despachante === filtCorr));
@@ -1551,23 +1589,13 @@ window.renderDashboard = function(){
     byCorr[o.despachante].ops++;
     byCorr[o.despachante].bruto += o.bruto||0;
   });
-  // Incluir también a los despachantes que tuvieron un PAGO en ese mes aunque no
-  // hayan cargado ninguna operación ese mes (para que no desaparezcan de la tabla).
-  // Se usa mesDeFecha() por la misma razón que arriba: pagos automáticos de Caja
-  // pueden venir en formato "DD/MM/YYYY". Respeta el filtro de despachante (filtCorr).
   pagos.filter(p => mesDeFecha(p.fecha) === mesTablaDesp && (!filtCorr || p.despachante === filtCorr)).forEach(p => {
     if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
   });
-  // Además, si NO hay un despachante puntual elegido, se agregan TODOS los despachantes
-  // registrados (aunque no hayan tenido ni operaciones ni pagos ese mes), para tener el
-  // panorama completo de una sola vista y no solo los que tuvieron movimiento.
   if(!filtCorr){
     despachantesNombres.forEach(n => { if(!byCorr[n]) byCorr[n] = {ops:0, bruto:0}; });
   }
 
-  // Mudanzas por cliente (siempre se muestra, filtrado solo por mes) — solo tiene
-  // sentido cuando NO hay un despachante puntual elegido, porque las mudanzas no
-  // están asociadas a ningún despachante.
   const byClienteMud = {};
   mudFiltradas.forEach(m => {
     const cl = m.cliente || 'Sin nombre';
@@ -1576,9 +1604,6 @@ window.renderDashboard = function(){
     byClienteMud[cl].bruto += m.bruto||0;
   });
 
-  // Mudanzas con residencia pendiente (amarillo o rojo) — no depende de los filtros del dashboard,
-  // es un estado vigente independiente del mes/despachante seleccionado. Tampoco tiene
-  // sentido mostrarla cuando se filtró por un despachante puntual.
   const mudResidenciaPendiente = mudanzas
     .map(m => ({ ...m, _est: estadoResidencia(m) }))
     .filter(m => m._est.clase !== 'ok')
@@ -1596,10 +1621,8 @@ window.renderDashboard = function(){
         <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
         <tbody>
           ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
-            // Pagado en el mes de la tabla, usando mesDeFecha() para soportar tanto fechas
-            // ISO (cargadas a mano) como fechas argentinas (auto desde Caja).
             const pagadoMes = pagos.filter(p => p.despachante === k && mesDeFecha(p.fecha) === mesTablaDesp).reduce((a,b)=>a+(b.monto||0),0);
-            const { saldo } = calcularSaldoDespachante(k); // saldo histórico real (incluye deuda de meses anteriores)
+            const { saldo } = calcularSaldoDespachante(k);
             const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
             return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
           }).join('') || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">${filtCorr ? 'Sin operaciones ni pagos de este despachante en ' + mesTablaDesp : 'Sin operaciones, pagos ni despachantes registrados en ' + mesTablaDesp}</td></tr>`}
@@ -1634,9 +1657,6 @@ window.renderDashboard = function(){
       </table>
     </div>`;
 
-  // Cuando hay un despachante puntual seleccionado, las mudanzas y la residencia no le
-  // pertenecen a ningún despachante en particular, así que se ocultan esas dos tarjetas
-  // y el dashboard queda enfocado únicamente en los datos de ese despachante.
   document.getElementById('dash-detalle').innerHTML = filtCorr
     ? cardDespachantes
     : (cardDespachantes + cardResidencia + cardMudanzas);
@@ -1680,17 +1700,6 @@ window.migrarEtiquetasAdicionales = async function(){
 };
 
 // ── MONTO EXIGIBLE POR OPERACIÓN (usado SOLO para calcular saldos) ──
-// Mientras la operación NO tenga N° de factura cargado (numFactura vacío), el IVA es
-// puramente informativo: lo único que se le puede reclamar al despachante es el NETO,
-// porque todavía no existe factura de ARCA que respalde ese IVA. Recién cuando se carga
-// el N° de factura (asignarFactura / lote / al facturar por ARCA), la operación pasa a
-// estar "Facturada" y el IVA se incorpora al monto exigible (Neto + IVA = Bruto).
-//
-// OJO: esto NO toca neto/iva/bruto en ningún lado. Esos tres valores se siguen calculando
-// igual que siempre (getTarifas / construirDatosOperacion) y se siguen mostrando igual en
-// la carga, el Listado, el Dashboard, las planillas Excel y los recibos. Esta función se
-// usa exclusivamente adentro de calcularSaldoDespachante, para no confundir "lo facturado"
-// (bruto, informativo) con "lo que hoy se le puede cobrar" (exigible).
 function montoExigible(o){
   const facturada = !!(o.numFactura && String(o.numFactura).trim());
   return facturada ? (o.bruto||0) : (o.neto||0);
@@ -1698,27 +1707,16 @@ function montoExigible(o){
 window.montoExigible = montoExigible;
 
 // ── NORMALIZAR FECHA A "YYYY-MM" (soporta ISO y formato argentino) ──
-// La gran mayoría de las fechas del sistema son ISO ("YYYY-MM-DD", las que salen de
-// <input type="date">). PERO los pagos que se cargan automáticamente desde Caja
-// (origenCaja) a veces vienen en formato argentino ("DD/MM/YYYY" o "D/M/YYYY"). Si a
-// esas fechas se les aplica .slice(0,7) como si fueran ISO, el resultado queda cortado
-// y sin sentido (ej: "11/08/2026".slice(0,7) = "11/08/2"). Esta función devuelve
-// siempre "YYYY-MM" sin importar el formato de entrada, para que el selector de mes y
-// los filtros por mes de Saldos agrupen bien todas las fechas.
 function mesDeFecha(fecha){
   if(!fecha) return '';
   const f = String(fecha).trim();
-  if(/^\d{4}-\d{2}/.test(f)) return f.slice(0,7); // ISO: YYYY-MM-DD o YYYY-MM
-  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); // AR: D/M/YYYY o DD/MM/YYYY
+  if(/^\d{4}-\d{2}/.test(f)) return f.slice(0,7);
+  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if(m) return `${m[3]}-${m[2].padStart(2,'0')}`;
   return '';
 }
 window.mesDeFecha = mesDeFecha;
 
-// ── AÑO DE UNA FECHA (soporta ISO y formato argentino) ──
-// Se usa en la exportación de "Movimientos" de la pestaña Saldos, para filtrar tanto
-// operaciones como pagos al año que corresponda (los pagos, a diferencia de las
-// operaciones, no vienen pre-filtrados por año desde Firestore).
 function anioDeFecha(fecha){
   const m = mesDeFecha(fecha);
   return m ? m.slice(0,4) : '';
@@ -1726,19 +1724,6 @@ function anioDeFecha(fecha){
 window.anioDeFecha = anioDeFecha;
 
 // ── COBERTURA FIFO SOBRE LO EXIGIBLE (para el saldo por mes en Saldos) ──
-// Hay dos tipos de pago en la colección 'despachantees_pagos':
-//   1) Pagos ATADOS A UNA FACTURA puntual (p.numFactura cargado) — normalmente llegan
-//      automáticos desde Caja cuando el ingreso matchea el N° de factura de una o más
-//      operaciones ya facturadas. Estos se aplican DIRECTO a esas operaciones, sin
-//      importar si son las más viejas o no: si pagan la factura de una operación de
-//      agosto, ese pago cancela esa operación de agosto.
-//   2) Pagos GENÉRICOS (sin numFactura, ej. una transferencia "a cuenta" sin factura
-//      puntual, o el sobrante de un pago de factura que pagó de más) — estos SÍ se
-//      reparten con FIFO por antigüedad: primero se usan para tapar la operación
-//      pendiente más vieja del despachante, y así siguiendo.
-// El resultado es coherente con lo que ya se ve en "Historial de pagos" (donde los
-// pagos con factura muestran la etiqueta "Fact. X") y con la columna "Cobertura" del
-// Listado.
 function calcularCoberturaExigibleFIFO(nombre){
   const pagosDesp = pagos.filter(p => p.despachante === nombre);
   const pagosConFactura = pagosDesp.filter(p => p.numFactura && String(p.numFactura).trim());
@@ -1748,10 +1733,6 @@ function calcularCoberturaExigibleFIFO(nombre){
     .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(a.ts||0))
     .map(o => ({ ...o, exigible: montoExigible(o), cubierto: 0 }));
 
-  // 1) Pagos atados a factura: se aplican directo a la(s) operación(es) con ese N° de
-  // factura (puede haber varias si se asignó la misma factura en lote). Si el pago
-  // alcanza y sobra (pagaron de más, o la factura no matchea ninguna operación
-  // existente), el sobrante pasa al pool genérico del paso 2.
   let poolGenerico = pagosGenericos.reduce((a,b) => a + (b.monto||0), 0);
 
   pagosConFactura.forEach(p => {
@@ -1768,8 +1749,6 @@ function calcularCoberturaExigibleFIFO(nombre){
     if(restante > 0) poolGenerico += restante;
   });
 
-  // 2) Pool genérico (pagos sin factura + sobrantes de pagos con factura): FIFO por
-  // antigüedad sobre lo que haya quedado pendiente después del paso 1.
   let restanteGenerico = poolGenerico;
   ops.forEach(o => {
     if(restanteGenerico <= 0) return;
@@ -1784,13 +1763,6 @@ function calcularCoberturaExigibleFIFO(nombre){
 window.calcularCoberturaExigibleFIFO = calcularCoberturaExigibleFIFO;
 
 // ── PAGOS Y SALDOS POR DESPACHANTE ──
-// Sin "mes": comportamiento histórico de siempre — exigible total menos pagado total.
-// Con "mes": los pagos históricos (de cualquier fecha) se reparten con FIFO entre las
-// operaciones del despachante empezando por las más viejas (ver calcularCoberturaExigibleFIFO),
-// y el saldo del mes es lo que queda pendiente en las operaciones DE ESE MES después de
-// aplicar esa cobertura. Esto hace que un pago hecho en agosto que cubre operaciones de
-// julio efectivamente reduzca la deuda de julio, en vez de aparecer como un pago "suelto"
-// de agosto sin relación con las operaciones que en realidad canceló.
 function calcularSaldoDespachante(nombre, mes){
   if(!mes){
     const ops = operaciones.filter(o => o.despachante === nombre);
@@ -1839,10 +1811,6 @@ window.eliminarPago = async function(id){
   toast('Pago eliminado');
 };
 
-// ── Selector de mes para la tabla de Saldos ──
-// Se puebla con todos los meses que aparecen en operaciones o pagos, más el mes en
-// curso (por si todavía no hay nada cargado ese mes). Arranca en "Todos los meses"
-// (histórico) y se respeta lo que el usuario elija, igual que los otros filtros de mes.
 function poblarSelectorMesSaldos(){
   const sel = document.getElementById('saldos_filtro_mes');
   if(!sel) return;
@@ -1856,10 +1824,6 @@ function poblarSelectorMesSaldos(){
   sel.value = v;
 }
 
-// ── Selector de despachante para la tabla de Saldos ──
-// Se puebla igual que los demás selectores de despachante del sistema (a partir de
-// 'clientes'). Al elegir uno, tanto la tabla "Saldo por despachante" como el botón de
-// exportar movimientos quedan acotados a ese despachante puntual.
 function poblarSelectorDespachanteSaldos(){
   const sel = document.getElementById('saldos_filtro_despachante');
   if(!sel) return;
@@ -1871,7 +1835,6 @@ function poblarSelectorDespachanteSaldos(){
 }
 
 function renderSaldos(){
-  // Select de despachantes (para registrar un pago)
   const sel = document.getElementById('pago_despachante');
   if(sel){
     const v = sel.value;
@@ -1883,11 +1846,9 @@ function renderSaldos(){
   const fechaEl = document.getElementById('pago_fecha');
   if(fechaEl && !fechaEl.value) fechaEl.value = fechaLocalISO();
 
-  // Filtro de mes de la tabla de saldos ('' = histórico completo, igual que antes)
   poblarSelectorMesSaldos();
   const filtMesSaldos = document.getElementById('saldos_filtro_mes')?.value || '';
 
-  // Filtro de despachante de la tabla de saldos ('' = todos)
   poblarSelectorDespachanteSaldos();
   const filtDespSaldos = document.getElementById('saldos_filtro_despachante')?.value || '';
 
@@ -1900,14 +1861,8 @@ function renderSaldos(){
     notaPeriodoEl.innerHTML = notaMes + notaDesp;
   }
 
-  // Tabla de saldos por despachante
   const tbodySaldos = document.getElementById('tbody-saldos');
   if(tbodySaldos){
-    // Si hay un mes filtrado, se listan los despachantes que tuvieron operaciones O
-    // pagos en ese mes (para no perder de vista, por ejemplo, un pago suelto sin
-    // operaciones ese mes). Sin filtro, se mantiene el comportamiento histórico: todos
-    // los despachantes que alguna vez tuvieron operaciones. Si además hay un despachante
-    // puntual elegido en el filtro, la lista queda acotada solo a ese.
     let nombresConOps;
     if(filtMesSaldos){
       nombresConOps = [...new Set(operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante).filter(Boolean))].sort();
@@ -1915,8 +1870,6 @@ function renderSaldos(){
       nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
     }
     if(filtDespSaldos){
-      // Siempre se muestra el despachante elegido, aunque no haya tenido movimiento
-      // en el mes filtrado (en ese caso la fila queda en $0).
       nombresConOps = [filtDespSaldos];
     }
 
@@ -1927,8 +1880,6 @@ function renderSaldos(){
         const { facturado, pagado, saldo } = calcularSaldoDespachante(n, filtMesSaldos);
         const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
         const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
-        // Indicador: ¿tiene este despachante operaciones sin factura aún (IVA no exigible)
-        // dentro del período seleccionado (o histórico, si no hay mes elegido)?
         const opsDelDesp = operaciones.filter(o => o.despachante === n && (!filtMesSaldos || mesDeFecha(o.fecha) === filtMesSaldos));
         const tieneSinFacturar = opsDelDesp.some(o => !(o.numFactura && String(o.numFactura).trim()));
         const ivaNoExigible = opsDelDesp
@@ -1947,7 +1898,6 @@ function renderSaldos(){
     }
   }
 
-  // Nota explicativa fija debajo de la tabla de Saldos (se agrega una sola vez)
   const tablaSaldosCard = tbodySaldos ? tbodySaldos.closest('.section-card') : null;
   if(tablaSaldosCard && !document.getElementById('nota-saldo-iva')){
     const nota = document.createElement('div');
@@ -1957,7 +1907,6 @@ function renderSaldos(){
     tablaSaldosCard.appendChild(nota);
   }
 
-  // Historial de pagos
   const tbodyHist = document.getElementById('tbody-pagos-hist');
   const pagosPaginacionEl = document.getElementById('pagos-paginacion');
   if(tbodyHist){
@@ -1965,7 +1914,6 @@ function renderSaldos(){
       tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>';
       if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = '';
     } else {
-      // Más nuevo primero (último pago cargado arriba de todo)
       const ordenados = [...pagos].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
       const { pagina, page, totalPaginas } = paginarArray('pagos', ordenados, PAGE_SIZE_GENERICO);
       tbodyHist.innerHTML = pagina.map(p => `
@@ -1984,13 +1932,6 @@ function renderSaldos(){
 window.renderSaldos = renderSaldos;
 
 // ── EXPORTAR MOVIMIENTOS DE UN DESPACHANTE (pestaña Saldos) ──
-// A diferencia de "Exportar Excel" del Listado (que solo exporta operaciones filtradas),
-// esta planilla arma el historial COMPLETO de un despachante puntual: cada operación
-// cargada (con su neto/IVA/bruto) intercalada cronológicamente con cada pago que se le
-// registró — incluidos los pagos que entraron SOLOS y automáticos desde Caja (quedan
-// marcados como "Automático desde Caja" en la columna Detalle). Incluye una columna de
-// SALDO ACUMULADO (ledger corrido) para poder mostrarle al despachante, de un vistazo,
-// cómo se fue formando su deuda/saldo a favor actual.
 window.exportarSaldosExcel = function(){
   const despachante = document.getElementById('saldos_filtro_despachante')?.value || '';
   if(!despachante){
@@ -1998,8 +1939,6 @@ window.exportarSaldosExcel = function(){
     return;
   }
 
-  // Las operaciones en memoria ya vienen acotadas al año en curso (así carga la app
-  // desde Firestore); los pagos, en cambio, se traen completos (todo el histórico).
   const opsDesp   = operaciones.filter(o => o.despachante === despachante);
   const pagosDesp = pagos.filter(p => p.despachante === despachante);
 
@@ -2015,7 +1954,7 @@ window.exportarSaldosExcel = function(){
       const [y,m,d] = f.slice(0,10).split('-');
       return `${d}/${m}/${y}`;
     }
-    return f; // ya viene en formato argentino (pagos automáticos de Caja)
+    return f;
   };
   const fechaISOparaOrdenar = (fecha) => {
     if(!fecha) return '';
@@ -2027,7 +1966,6 @@ window.exportarSaldosExcel = function(){
   };
   const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
 
-  // Filas de OPERACIÓN
   const filasOps = opsDesp.map(o => {
     const exigible = montoExigible(o);
     return {
@@ -2047,8 +1985,6 @@ window.exportarSaldosExcel = function(){
     };
   });
 
-  // Filas de PAGO (incluye los cargados a mano Y los automáticos desde Caja: estos
-  // últimos ya están en la colección 'despachantees_pagos' con origenCaja:true)
   const filasPagos = pagosDesp.map(p => {
     const refFactura = p.numFactura ? `Fact. ${p.numFactura}` : 'Pago genérico (se aplica por antigüedad)';
     const origen = p.origenCaja ? ' · Automático desde Caja' : ' · Cargado manual';
@@ -2067,12 +2003,9 @@ window.exportarSaldosExcel = function(){
     };
   });
 
-  // Se combinan y ordenan cronológicamente (a igual fecha, la operación va antes que el pago)
   const filas = [...filasOps, ...filasPagos].sort((a,b) =>
     a.fechaISO.localeCompare(b.fechaISO) || (a.tipo==='PAGO'?1:-1) - (b.tipo==='PAGO'?1:-1));
 
-  // Saldo corrido (ledger): exigible acumulado − pagado acumulado, en orden cronológico,
-  // para que se vea cómo se fue formando el saldo actual movimiento por movimiento.
   let acumExigible = 0, acumPagado = 0;
   const rows = filas.map(f => {
     acumExigible += f.exigible;
@@ -2092,8 +2025,6 @@ window.exportarSaldosExcel = function(){
 
   const header = ['FECHA','TIPO','CLIENTE','DETALLE','CANAL','NETO $','IVA $','BRUTO $','N° FACTURA','PAGO $','SALDO ACUMULADO $','OBSERVACIONES'];
 
-  // Totales: se usa el mismo cálculo que ya se ve en la tabla "Saldo por despachante"
-  // (histórico, sin filtro de mes), para que el Excel coincida siempre con la pantalla.
   const { facturado, pagado, saldo } = calcularSaldoDespachante(despachante);
   const totalRow = ['TOTAL', `${opsDesp.length} operación(es) · ${pagosDesp.length} pago(s)`, '', '', '',
     '', '', dec2(facturado), '', dec2(pagado), dec2(saldo), ''].map(puntoSiVacio);
@@ -2112,11 +2043,10 @@ window.exportarSaldosExcel = function(){
   const totalRowNum  = 2 + rows.length;
   ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
 
-  // TOTAL con fórmulas SUBTOTAL: si se filtra en Excel, recalcula solo lo visible
   {
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} movimiento(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" movimiento(s)"` };
-    [7,9].forEach(c => { // BRUTO $ (facturado), PAGO $
+    [7,9].forEach(c => {
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
@@ -2166,14 +2096,12 @@ function renderTablaClientes(){
 }
 
 // ── EXPORTAR EXCEL: estilo unificado (Arial 7) usado por TODAS las planillas del módulo ──
-// Aplica bordes finos a toda la grilla, encabezado azul con letra blanca, fila TOTAL
-// destacada en rojo, y fuente Arial tamaño 7 en todo (encabezado, datos y total).
 function estilizarHojaExcel(ws, opts){
   const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [], headerRowIndex = 0 } = opts;
   const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
   const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
   const formatoDecimal = '#,##0.00';
-  const totalRowIdx = headerRowIndex + 1 + numDataRows; // fila 0-index de la fila TOTAL
+  const totalRowIdx = headerRowIndex + 1 + numDataRows;
 
   const range = XLSX.utils.decode_range(ws['!ref']);
   for(let R = range.s.r; R <= range.e.r; R++){
@@ -2186,7 +2114,6 @@ function estilizarHojaExcel(ws, opts){
       }
 
       if(R < headerRowIndex){
-        // Fila(s) previas al encabezado (ej. "SALDO ANTERIOR"): destacada en naranja
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: '92400E' } },
           fill: { fgColor: { rgb: 'FEF3C7' } },
@@ -2195,7 +2122,6 @@ function estilizarHojaExcel(ws, opts){
           numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
       } else if(R === headerRowIndex){
-        // Encabezado: negrita, fondo azul, letra blanca, Arial 7
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
           fill: { fgColor: { rgb: '1E3A8A' } },
@@ -2203,7 +2129,6 @@ function estilizarHojaExcel(ws, opts){
           alignment: { horizontal: 'center', vertical: 'center' }
         };
       } else if(R === totalRowIdx){
-        // Fila TOTAL: negrita y destacada en rojo, Arial 7
         ws[addr].s = {
           font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'DC2626' } },
           fill: { fgColor: { rgb: 'FEF2F2' } },
@@ -2212,7 +2137,6 @@ function estilizarHojaExcel(ws, opts){
           numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
         };
       } else {
-        // Filas de datos, Arial 7
         ws[addr].s = {
           font: { sz: 7, name: 'Arial' },
           border: bordeTodo,
@@ -2225,7 +2149,10 @@ function estilizarHojaExcel(ws, opts){
 }
 window.estilizarHojaExcel = estilizarHojaExcel;
 
-// ── EXPORTAR EXCEL ──
+// ── EXPORTAR EXCEL (Listado) ──
+// Se agregó la columna N° FACTURA (entre VALOR USD y ESTADO PAGO) y el filtro por
+// árbol de Año/Mes/Día del Listado (se combina con despachante, mes simple, rango de
+// fechas y "pendiente/cubierta", igual que en la tabla en pantalla).
 window.exportarExcel = function(){
   const filtCorr = document.getElementById('filtro_despachante').value;
   const filtMes  = document.getElementById('filtro_mes').value;
@@ -2237,6 +2164,7 @@ window.exportarExcel = function(){
   if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
   if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
   if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroArbolFechas(ops);
   ops = aplicarFiltroPendiente(ops, filtPendiente);
 
   if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
@@ -2247,6 +2175,17 @@ window.exportarExcel = function(){
   if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
   if(filtDesde) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') >= filtDesde);
   if(filtHasta) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') <= filtHasta);
+  if(listadoFechasSeleccionadas.size){
+    pagosFiltrados = pagosFiltrados.filter(p => {
+      const iso = /^\d{4}-\d{2}-\d{2}/.test(String(p.fecha||'').trim())
+        ? String(p.fecha).trim().slice(0,10)
+        : (() => {
+            const m = String(p.fecha||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+          })();
+      return listadoFechasSeleccionadas.has(iso);
+    });
+  }
 
   const fmtFechaAR = (iso) => {
     if(!iso) return '';
@@ -2254,16 +2193,11 @@ window.exportarExcel = function(){
     return `${d}/${m}/${y}`;
   };
 
-  // Los pagos a veces vienen con fecha ISO (cargados a mano) y a veces en formato
-  // argentino D/M/YYYY o DD/MM/YYYY (los que llegan automáticos desde Caja). Estas dos
-  // funciones normalizan cualquiera de los dos formatos: una para MOSTRAR (siempre
-  // DD/MM/YYYY) y otra para ORDENAR cronológicamente junto con las operaciones (siempre
-  // YYYY-MM-DD, que ordena bien como texto).
   const fmtFechaMostrar = (fecha) => {
     if(!fecha) return '';
     const f = String(fecha).trim();
     if(/^\d{4}-\d{2}-\d{2}/.test(f)) return fmtFechaAR(f.slice(0,10));
-    return f; // ya viene en formato argentino
+    return f;
   };
   const fechaISOparaOrdenar = (fecha) => {
     if(!fecha) return '';
@@ -2274,18 +2208,13 @@ window.exportarExcel = function(){
     return '';
   };
 
-  // Sin redondeo a entero: solo se recorta a 2 decimales (centavos exactos), nada de Math.round a pesos
   const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
 
-  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','ESTADO PAGO','PAGOS','OBSERVAC'];
+  // Se agregó N° FACTURA entre VALOR USD y ESTADO PAGO (nueva columna, índice 11).
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','N° FACTURA','ESTADO PAGO','PAGOS','OBSERVAC'];
 
-  // Mapa de pendiente (mismo criterio "exigible" que Saldos) para la columna ESTADO PAGO
   const pendienteMap = mapaPendientePorOperacion();
 
-  // Cada operación y cada pago se arman como {fechaISO, row} para poder mezclarlos y
-  // ordenarlos juntos cronológicamente en una sola tabla (una fila de PAGO se intercala
-  // en la fecha real en que se hizo, entre las operaciones). Los campos que no se
-  // cargaron para esa fila se dejan como '.' (puntoSiVacio) en vez de quedar en blanco.
   const filasOps = ops.map(o => {
     const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
     const pend = pendienteMap[o.id] || 0;
@@ -2304,6 +2233,7 @@ window.exportarExcel = function(){
         dec2(o.bruto),
         o.tc || '',
         o.totalUsd || '',
+        o.numFactura || '',
         estadoPago,
         '', // PAGOS: vacío en las filas de operación
         obsCompleto
@@ -2322,15 +2252,15 @@ window.exportarExcel = function(){
         p.despachante || '',
         'PAGO',
         '', '', '',
-        '', '', '', '', '', '', // VALOR, IVA, SUB TOTAL, TC, VALOR USD, ESTADO PAGO: vacío en filas de pago
-        dec2(p.monto || 0),     // PAGOS
+        '', '', '', '', '',      // VALOR, IVA, SUB TOTAL, TC, VALOR USD: vacío en filas de pago
+        p.numFactura || '',      // N° FACTURA (referencia, si el pago está atado a una)
+        '',                      // ESTADO PAGO: vacío en filas de pago
+        dec2(p.monto || 0),      // PAGOS
         obsPago
       ].map(puntoSiVacio)
     };
   });
 
-  // Se combinan y se ordenan por fecha (operaciones y pagos mezclados cronológicamente);
-  // a igual fecha, la operación va antes que el pago.
   const filasCombinadas = [...filasOps, ...filasPagos]
     .sort((a,b) => a.fechaISO.localeCompare(b.fechaISO) || (a.row[2]==='PAGO'?1:-1) - (b.row[2]==='PAGO'?1:-1));
   const rows = filasCombinadas.map(f => f.row);
@@ -2340,15 +2270,9 @@ window.exportarExcel = function(){
   const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
   const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
 
-  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', dec2(totPagado), ''].map(puntoSiVacio);
+  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', '', dec2(totPagado), ''].map(puntoSiVacio);
 
-  // ── SALDO ANTERIOR: cuando se filtra por UN despachante puntual y por un período
-  // (mes elegido, o rango de fechas "desde"), se agrega una fila arriba del encabezado
-  // con la deuda que ese despachante ya arrastraba de ANTES del período filtrado. Así,
-  // al pasarle la planilla, la deuda real es "SALDO ANTERIOR" + "SUB TOTAL" del período,
-  // en vez de que el Excel solo muestre lo facturado en ese mes puntual (que hacía que
-  // pareciera que debía menos de lo que realmente debe). Usa la misma cobertura FIFO
-  // "exigible" que ya se usa en la pestaña Saldos, para que el número coincida.
+  // ── SALDO ANTERIOR (igual que antes; OBSERVAC ahora queda en el índice 14, no 13) ──
   let saldoAnteriorRows = [];
   let deudaTotalRows = [];
   let headerRowIndex = 0;
@@ -2364,20 +2288,15 @@ window.exportarExcel = function(){
     const filaSaldo = new Array(header.length).fill('');
     filaSaldo[0] = 'SALDO ANTERIOR';
     filaSaldo[1] = filtCorr;
-    filaSaldo[8] = dec2(saldoAnterior); // misma columna que SUB TOTAL, para sumar visualmente
-    filaSaldo[13] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`;
+    filaSaldo[8] = dec2(saldoAnterior); // SUB TOTAL (no se movió)
+    filaSaldo[14] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`; // OBSERVAC
     saldoAnteriorRows = [filaSaldo.map(puntoSiVacio)];
     headerRowIndex = 1;
 
-    // Fila extra, DESPUÉS de la fila TOTAL, con la suma real: Saldo anterior + Subtotal
-    // del período. Se calcula acá con un valor "de arranque" y más abajo se le pone la
-    // fórmula de Excel (=celda SALDO ANTERIOR + celda SUBTOTAL de la fila TOTAL), para
-    // que si filtrás/ocultás filas en Excel con el autofiltro, este total se recalcule
-    // solo y siga siendo la deuda real actualizada.
     const filaDeudaTotal = new Array(header.length).fill('');
     filaDeudaTotal[0] = 'DEUDA TOTAL A LA FECHA';
     filaDeudaTotal[8] = dec2(saldoAnterior + totBruto);
-    filaDeudaTotal[13] = 'Saldo anterior + Subtotal del período filtrado';
+    filaDeudaTotal[14] = 'Saldo anterior + Subtotal del período filtrado';
     deudaTotalRows = [filaDeudaTotal.map(puntoSiVacio)];
   }
 
@@ -2386,45 +2305,31 @@ window.exportarExcel = function(){
 
   ws['!cols'] = [
     {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
-    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:16},{wch:12},{wch:32}
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:14},{wch:16},{wch:12},{wch:32}
   ];
 
-  // Autofiltro (flechitas de filtro): el rango tiene que cubrir encabezado + TODAS
-  // las filas de datos (sin incluir la fila TOTAL ni las filas de SALDO ANTERIOR /
-  // DEUDA TOTAL, si las hay). Si el rango es solo la fila de encabezado, Excel no sabe
-  // hasta dónde llega la tabla y el SUBTOTAL de abajo no se recalcula bien al filtrar.
-  // Con la columna ESTADO PAGO en la grilla y el autofiltro activo, en Excel también se
-  // puede filtrar manualmente por "PENDIENTE"; y con la columna PAGOS, por "PAGO" en la
-  // columna CLIENTE se puede aislar solo las filas de pago.
   const lastCol = XLSX.utils.encode_col(header.length - 1);
-  const headerRowNum = 1 + headerRowIndex;       // fila Excel (1-indexed) del encabezado
+  const headerRowNum = 1 + headerRowIndex;
   const firstDataRow = headerRowNum + 1;
   const lastDataRow  = headerRowNum + rows.length;
-  const totalRowNum  = lastDataRow + 1;          // fila Excel (1-indexed) de la fila TOTAL
+  const totalRowNum  = lastDataRow + 1;
   ws['!autofilter'] = { ref: `A${headerRowNum}:${lastCol}${lastDataRow}` };
 
-  // ── TOTAL con fórmulas: al filtrar en Excel (autofiltro), estas celdas
-  // recalculan solas y muestran la suma / cantidad SOLO de las filas visibles ──
   {
-    // Cantidad de operaciones visibles (columna B, junto al rótulo TOTAL)
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} fila(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" fila(s)"` };
 
-    [6,7,8,12].forEach(c => { // VALOR, IVA, SUB TOTAL, PAGOS
+    [6,7,8,13].forEach(c => { // VALOR, IVA, SUB TOTAL, PAGOS (PAGOS ahora en índice 13)
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
     });
   }
 
-  // ── DEUDA TOTAL A LA FECHA = celda SALDO ANTERIOR + celda SUB TOTAL de la fila TOTAL,
-  // como fórmula de Excel (no un número fijo), para que quede sumado automáticamente y
-  // se siga recalculando si filtrás filas con el autofiltro. También se le da un estilo
-  // propio (verde) para que se note que es el número final, distinto del TOTAL del período.
   if(hayDeudaAnterior){
-    const deudaRowIdx = totalRowNum; // 0-based: la fila justo después de TOTAL
-    const saldoAnteriorCellAddr = XLSX.utils.encode_cell({ r: 0, c: 8 }); // fila SALDO ANTERIOR, col SUB TOTAL
-    const subtotalCellAddr      = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 8 }); // fila TOTAL, col SUB TOTAL
+    const deudaRowIdx = totalRowNum;
+    const saldoAnteriorCellAddr = XLSX.utils.encode_cell({ r: 0, c: 8 });
+    const subtotalCellAddr      = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 8 });
     const addrValor = XLSX.utils.encode_cell({ r: deudaRowIdx, c: 8 });
     ws[addrValor] = { t:'n', v: dec2(saldoAnterior + totBruto), f: `${saldoAnteriorCellAddr}+${subtotalCellAddr}` };
 
@@ -2443,19 +2348,14 @@ window.exportarExcel = function(){
     }
   }
 
-  // ── Estilo unificado (bordes, encabezado azul, TOTAL en rojo, Arial 7) ──
   estilizarHojaExcel(ws, {
     numCols: header.length,
     numDataRows: rows.length,
-    colsDecimal2: [6,7,8,12],       // VALOR, IVA, SUB TOTAL, PAGOS
-    colsNumericas: [6,7,8,9,10,12], // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGOS
+    colsDecimal2: [6,7,8,13],       // VALOR, IVA, SUB TOTAL, PAGOS
+    colsNumericas: [6,7,8,9,10,13], // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGOS
     headerRowIndex
   });
 
-  // El estilo de la fila DEUDA TOTAL se pisa arriba antes de estilizarHojaExcel para
-  // que quede en verde; como estilizarHojaExcel también recorre esa fila (queda dentro
-  // del rango de la hoja) y la pintaría como fila de datos normal, se la vuelve a
-  // aplicar acá DESPUÉS, para que el verde quede como estilo final.
   if(hayDeudaAnterior){
     const deudaRowIdx = totalRowNum;
     const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
@@ -2477,7 +2377,8 @@ window.exportarExcel = function(){
 
   const rangoNombre = (filtDesde || filtHasta) ? `${filtDesde||'inicio'}_a_${filtHasta||'hoy'}` : (filtMes||'todos');
   const sufijoPendiente = filtPendiente === 'pendiente' ? '_pendientes' : (filtPendiente === 'cubierta' ? '_cubiertas' : '');
-  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}${sufijoPendiente}.xlsx`
+  const sufijoArbol = listadoFechasSeleccionadas.size ? `_${listadoFechasSeleccionadas.size}fechas` : '';
+  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}${sufijoPendiente}${sufijoArbol}.xlsx`
     .replace(/\s+/g,'_');
 
   XLSX.writeFile(wb, nombreArchivo);
@@ -2504,15 +2405,11 @@ window.recalcMudanza = function(){
   const totalGastos = precinto + fiscal + digitalizacion + gastoRamiro + otros;
   const netofinal   = honorNeto - totalGastos;
 
-  // Monto cobrado (pago parcial) — el campo mud_monto_cobrado reemplaza al viejo select
-  // sí/no de "cobrado". Se compara contra el bruto para saber si está sin cobrar,
-  // parcialmente cobrado, o cobrado por completo.
   const montoCobradoInput = document.getElementById('mud_monto_cobrado');
   const montoCobrado = montoCobradoInput ? (parseFloat(montoCobradoInput.value) || 0) : 0;
   const saldoCobro = bruto - montoCobrado;
   const cobradoCompleto = montoCobrado >= (bruto - 0.5);
 
-  // Vista previa del estado de residencia en el formulario (si hay fecha cargada)
   const vencResidencia = document.getElementById('mud_venc_residencia')?.value || '';
   const residenciaCancelada = document.getElementById('mud_residencia_cancelada')?.value === 'si';
   const estRes = estadoResidencia({ vencimientoResidencia: vencResidencia, residenciaCancelada });
@@ -2592,9 +2489,6 @@ window.guardarMudanza = async function(){
     vencimientoResidencia: vals.vencimientoResidencia || '',
     residenciaCancelada: !!vals.residenciaCancelada,
     ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
-    // Monto realmente cobrado (soporta pago parcial). `cobrado` se sigue guardando
-    // como booleano, en true solo cuando ya se cobró el 100% del bruto, para no romper
-    // lo que ya depende de ese campo (ej. habilitar el pago a Ramiro).
     montoCobrado: vals.montoCobrado,
     cobrado: vals.cobrado,
     obs: document.getElementById('mud_obs').value.trim(),
@@ -2659,9 +2553,6 @@ window.editarMudanza = function(id){
   document.getElementById('mud_otros').value       = m.otros || 0;
   document.getElementById('mud_obs').value         = m.obs || '';
   document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
-  // Mudanzas viejas solo tenían el booleano `cobrado` (sin `montoCobrado` guardado):
-  // si estaba marcada como cobrada se asume que se cobró el bruto completo; si no,
-  // que todavía no se cobró nada. Mudanzas nuevas ya traen `montoCobrado` directo.
   const montoCobradoEl = document.getElementById('mud_monto_cobrado');
   if(montoCobradoEl){
     montoCobradoEl.value = (m.montoCobrado !== undefined && m.montoCobrado !== null)
@@ -2672,13 +2563,11 @@ window.editarMudanza = function(id){
   document.getElementById('mud_venc_residencia').value = m.vencimientoResidencia || '';
   document.getElementById('mud_residencia_cancelada').value = m.residenciaCancelada ? 'si' : 'no';
 
-  // Cambiar título y botones del formulario
   document.getElementById('mud-form-titulo').textContent = '✏️ Editando mudanza: ' + m.cliente;
   document.getElementById('mud-btn-guardar').style.display  = 'none';
   document.getElementById('mud-btn-actualizar').style.display = 'inline-flex';
   document.getElementById('mud-btn-cancelar').style.display   = 'inline-flex';
 
-  // Scroll al formulario
   document.getElementById('tab-mudanzas').scrollIntoView({behavior:'smooth'});
   recalcMudanza();
   toast('✏️ Mudanza cargada para editar');
@@ -2787,7 +2676,6 @@ function filtrarMudanzas(){
   if(filtMes)      out = out.filter(m => m.fecha && m.fecha.startsWith(filtMes));
   if(filtDesde)    out = out.filter(m => (m.fecha||'') >= filtDesde);
   if(filtHasta)    out = out.filter(m => (m.fecha||'') <= filtHasta);
-  // Más nueva primero: la última mudanza cargada arriba de todo, y así hacia atrás.
   out.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
   return out;
 }
@@ -2885,10 +2773,6 @@ window.exportarMudanzas = function(){
 
   const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
-  // Los campos que no se cargaron para esa mudanza quedan como '.' (puntoSiVacio) en
-  // vez de quedar en blanco, igual que en la exportación de Operaciones. La columna
-  // COBRADO ahora distingue SI / PARCIAL / NO, y se agregan MONTO COBRADO y SALDO A
-  // COBRAR para poder ver el detalle del pago parcial en la planilla.
   const rows = ordenadas.map(m => {
     const estRes = estadoResidencia(m);
     const ec = estadoCobro(m);
@@ -2926,29 +2810,23 @@ window.exportarMudanzas = function(){
     {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:13},{wch:13},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
   ];
 
-  // Autofiltro: rango completo (encabezado + datos, sin la fila TOTAL) para que
-  // el SUBTOTAL de abajo recalcule bien al filtrar.
   const lastCol = XLSX.utils.encode_col(header.length - 1);
   const firstDataRow = 2;
   const lastDataRow  = 1 + rows.length;
-  const totalRowNum  = 2 + rows.length; // fila Excel (1-indexed) de la fila TOTAL
+  const totalRowNum  = 2 + rows.length;
   ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
 
-  // ── TOTAL con fórmulas: al filtrar en Excel (autofiltro), estas celdas
-  // recalculan solas y muestran la suma / cantidad SOLO de las filas visibles ──
   {
-    // Cantidad de mudanzas visibles (columna B, junto al rótulo TOTAL)
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} mudanza(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mudanza(s)"` };
 
-    [6,7,8,9,10,12,13].forEach(c => { // HONOR. NETO, IVA, BRUTO, GASTOS, NOS QUEDA, MONTO COBRADO, SALDO A COBRAR
+    [6,7,8,9,10,12,13].forEach(c => {
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
     });
   }
 
-  // ── Estilo unificado (bordes, encabezado azul, TOTAL en rojo, Arial 7) ──
   estilizarHojaExcel(ws, {
     numCols: header.length,
     numDataRows: rows.length,
@@ -2968,10 +2846,6 @@ window.exportarMudanzas = function(){
 
 // ══════════════════════════════ CUENTA RAMIRO ══════════════════════════════
 
-// ── Selección de MESES (multi-select) ──
-// Antes había un <select> simple de un solo mes. Ahora es un dropdown con checkboxes
-// que permite tildar varios meses a la vez. Un Set vacío significa "Todos los meses"
-// (mismo comportamiento que el "" del select viejo). Se recuerda entre renders.
 let ramiroMesesSeleccionados = new Set(); // vacío = todos los meses
 let ramiroMesesDisponibles = []; // se recalcula en cada renderRamiro()
 
@@ -2980,7 +2854,6 @@ window.toggleRamiroMesesDropdown = function(){
   dd.classList.toggle('show');
 };
 
-// Cierra el dropdown de meses si se clickea afuera
 document.addEventListener('click', function(e){
   const dd  = document.getElementById('ramiro-meses-dropdown');
   const btn = document.getElementById('ramiro-meses-btn');
@@ -3021,9 +2894,6 @@ function renderRamiroMesesDropdown(){
     `).join('');
   }
 
-  // Badge: si no hay ninguno tildado (o están todos tildados) se interpreta como
-  // "Todos los meses" y no se muestra número; si hay una selección parcial, se
-  // muestra la cantidad de meses elegidos.
   const hayFiltro = ramiroMesesSeleccionados.size > 0 && ramiroMesesSeleccionados.size < ramiroMesesDisponibles.length;
   if(hayFiltro){
     badgeEl.style.display = 'inline-block';
@@ -3033,12 +2903,8 @@ function renderRamiroMesesDropdown(){
   }
 }
 
-// ── Selección de OPERACIONES para el reporte de pago ──
-// Set de keys `${col}_${id}` (col = 'ops' | 'mudanzas') para distinguir entre las dos
-// colecciones que alimentan la Cuenta Ramiro. Se usa tanto para exportar a Excel "lo
-// que se va a pagar" como para el botón de marcar varias como pagadas de una vez.
 let ramiroSeleccionadas = new Set();
-let ramiroItemsPorKey = {}; // se repuebla en cada renderRamiro(): key -> item completo
+let ramiroItemsPorKey = {};
 
 function keyRamiro(col, id){ return col + '_' + id; }
 
@@ -3046,7 +2912,6 @@ window.toggleRamiroItemSeleccion = function(key, checked){
   if(checked) ramiroSeleccionadas.add(key);
   else ramiroSeleccionadas.delete(key);
   actualizarInfoSeleccionRamiro();
-  // Sincroniza el checkbox "tildar todas" sin tener que re-renderizar toda la tabla
   const chkTodas = document.getElementById('ramiro_chk_todas');
   if(chkTodas){
     const keysFiltradas = Object.keys(ramiroItemsPorKey);
@@ -3055,8 +2920,6 @@ window.toggleRamiroItemSeleccion = function(key, checked){
 };
 
 window.toggleRamiroSeleccionTodas = function(checked){
-  // Aplica a TODAS las filas que hoy cumplen el filtro (mes/día/estado), no solo a
-  // las de la página visible, para que sirva de verdad como "armá el reporte completo".
   Object.keys(ramiroItemsPorKey).forEach(k => {
     if(checked) ramiroSeleccionadas.add(k);
     else ramiroSeleccionadas.delete(k);
@@ -3093,16 +2956,13 @@ window.renderRamiro = function(){
       ramiroUsd: o.ramiroDeuda || 30,
       pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
       estado: o.ramiroOPagado || 'no',
-      cobrado: true, // las operaciones normales no dependen de "cobrado", solo las mudanzas
+      cobrado: true,
       id: o.id,
       col: 'ops'
     });
   });
 
   mudanzas.forEach(m => {
-    // El pago a Ramiro por una mudanza se habilita apenas se cobró el 50% o más del
-    // bruto (ver ramiroHabilitado en estadoCobro) — no hace falta esperar a que esté
-    // cobrada al 100%.
     itemsTodos.push({
       tipo: 'Mudanza',
       fecha: m.fecha,
@@ -3119,15 +2979,11 @@ window.renderRamiro = function(){
 
   itemsTodos.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
 
-  // ── Poblar el dropdown de meses (multi-select) en base a todos los registros ──
   ramiroMesesDisponibles = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
-  // Si había meses tildados que ya no existen más (ej. se borró la última operación de
-  // ese mes), se los saca de la selección para no quedar filtrando por algo vacío.
   ramiroMesesSeleccionados = new Set([...ramiroMesesSeleccionados].filter(m => ramiroMesesDisponibles.includes(m)));
   renderRamiroMesesDropdown();
 
   let items = [...itemsTodos];
-  // Set vacío = todos los meses (comportamiento igual al "" del select viejo).
   if(ramiroMesesSeleccionados.size > 0){
     items = items.filter(i => i.fecha && ramiroMesesSeleccionados.has(i.fecha.slice(0,7)));
   }
@@ -3135,12 +2991,8 @@ window.renderRamiro = function(){
 
   const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
 
-  // Mapa key->item de TODO lo filtrado (antes de paginar), para poder tildar "todas las
-  // filtradas" y para poder resolver la selección al exportar/marcar pagado, sin importar
-  // en qué página de la tabla esté cada fila.
   ramiroItemsPorKey = {};
   filtrados.forEach(i => { ramiroItemsPorKey[keyRamiro(i.col, i.id)] = i; });
-  // Limpiar selección de items que ya no están visibles con el filtro actual
   ramiroSeleccionadas = new Set([...ramiroSeleccionadas].filter(k => ramiroItemsPorKey[k]));
 
   const totalUsd      = items.reduce((a,b) => a + b.ramiroUsd, 0);
@@ -3185,7 +3037,6 @@ window.renderRamiro = function(){
     return;
   }
 
-  // filtrados ya viene ordenado del más nuevo al más viejo (itemsTodos se ordena por fecha desc)
   const { pagina, page, totalPaginas } = paginarArray('ramiro', filtrados, PAGE_SIZE_GENERICO);
 
   tbodyRamiro.innerHTML = pagina.map(i => {
@@ -3219,8 +3070,6 @@ window.renderRamiro = function(){
 
   if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'ramiro');
 
-  // Sincronizar checkbox "tildar todas" con el estado real de la selección (sobre
-  // TODO lo filtrado, no solo la página visible)
   const keysFiltradas = Object.keys(ramiroItemsPorKey);
   const chkTodas = document.getElementById('ramiro_chk_todas');
   if(chkTodas) chkTodas.checked = keysFiltradas.length > 0 && keysFiltradas.every(k => ramiroSeleccionadas.has(k));
@@ -3228,7 +3077,6 @@ window.renderRamiro = function(){
   actualizarInfoSeleccionRamiro();
 };
 
-// ── MARCAR LAS SELECCIONADAS COMO PAGADAS ──
 window.marcarPagadasSeleccionRamiro = async function(){
   const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
   if(!seleccionadas.length){ toast('⚠️ No hay operaciones seleccionadas'); return; }
@@ -3236,7 +3084,6 @@ window.marcarPagadasSeleccionRamiro = async function(){
   const pendientes = seleccionadas.filter(i => i.estado !== 'si');
   if(!pendientes.length){ toast('Las seleccionadas ya están todas pagadas'); return; }
 
-  // Mudanzas que todavía no llegaron al 50% cobrado no se pueden marcar como pagadas
   const bloqueadas = pendientes.filter(i => i.col === 'mudanzas' && !i.cobrado);
   const aplicar = pendientes.filter(i => !(i.col === 'mudanzas' && !i.cobrado));
 
@@ -3255,7 +3102,6 @@ window.marcarPagadasSeleccionRamiro = async function(){
   toast(`✅ ${aplicar.length} registro(s) marcados como pagados`);
 };
 
-// ── EXPORTAR EXCEL: reporte de lo que se le va a pagar a Ramiro (seleccionadas) ──
 window.exportarRamiroExcel = function(){
   const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
   if(!seleccionadas.length){
@@ -3265,8 +3111,6 @@ window.exportarRamiroExcel = function(){
 
   const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
 
-  // Orden cronológico, más vieja primero, para que el reporte se lea como un listado
-  // de pago prolijo (igual criterio que las otras exportaciones del módulo).
   const ordenadas = [...seleccionadas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
   const header = ['TIPO','FECHA','CLIENTE','DETALLE','USD RAMIRO','$ (TC)','ESTADO'];
@@ -3298,11 +3142,10 @@ window.exportarRamiroExcel = function(){
   const totalRowNum  = 2 + rows.length;
   ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
 
-  // TOTAL con fórmulas SUBTOTAL: si se filtra en Excel, recalcula solo lo visible
   {
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} operación(es)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" operación(es)"` };
-    [4,5].forEach(c => { // USD RAMIRO, $ (TC)
+    [4,5].forEach(c => {
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
@@ -3325,7 +3168,6 @@ window.exportarRamiroExcel = function(){
   toast('📥 Excel generado: ' + ordenadas.length + ' operación(es) por $' + fmt(totPesos));
 };
 
-// ── EDITAR (revertir a pendiente) un item de Ramiro por si se marcó pagado por error ──
 window.editarRamiroItem = async function(id, col){
   if(!confirm('¿Volver a marcar este pago de Ramiro como PENDIENTE?')) return;
   const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
@@ -3334,9 +3176,6 @@ window.editarRamiroItem = async function(id, col){
   toast('↩️ Revertido a pendiente');
 };
 
-// ── ELIMINAR un item de Ramiro ──
-// Si es Kotinya (col='ops') elimina la operación completa (así se cargó la deuda a Ramiro).
-// Si es Mudanza (col='mudanzas') elimina la mudanza completa.
 window.eliminarRamiroItem = async function(id, col, tipo){
   const msg = tipo === 'Mudanza'
     ? '¿Eliminar esta mudanza? Se borra el registro completo, no solo la deuda de Ramiro.'
@@ -3367,9 +3206,6 @@ window.marcarTodoPagadoRamiro = async function(){
 };
 
 // ── RECIBOS ──
-// Datos de la empresa para el membrete del recibo.
-// ⚠️ No pude confirmar la dirección/CUIT exactos buscando en la web (el sitio no aparece bien
-// indexado). Completá o corregí estos datos si hace falta, quedaron todos juntos acá:
 const EMPRESA_REMITO = {
   nombre: 'GLOBALCOMINT SAS',
   subtitulo: 'Despachante de Aduana',
@@ -3396,13 +3232,11 @@ function poblarSelectRemitoDespachante(){
   sel.value = v;
 }
 
-// ── CONCEPTO OTRO (recibo genérico) ──
 window.onCambiarConceptoGenerico = function(){
   const sel = document.getElementById('recgen_concepto_sel').value;
   document.getElementById('recgen_concepto_otro_wrap').style.display = sel === 'otro' ? '' : 'none';
 };
 
-// ── HTML del recibo genérico (fotocopias, MIC, u otro concepto libre) ──
 function construirHtmlReciboGenerico(numero, de, fecha, concepto, monto){
   return `<!DOCTYPE html>
 <html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero}</title>
@@ -3461,7 +3295,6 @@ function construirHtmlReciboGenerico(numero, de, fecha, concepto, monto){
 </body></html>`;
 }
 
-// ── GENERAR RECIBO GENÉRICO (fotocopias, MIC, u otro concepto libre, monto editable) ──
 window.generarReciboGenerico = async function(){
   const de = document.getElementById('recgen_de').value.trim();
   const fecha = document.getElementById('recgen_fecha').value || fechaLocalISO();
@@ -3520,7 +3353,6 @@ window.renderRemitos = function(){
   if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
   ops = ops.sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
-  // Limpiar selección de operaciones que ya no están visibles con estos filtros
   const idsVisibles = new Set(ops.map(o => o.id));
   [...remitoSeleccionadas].forEach(id => { if(!idsVisibles.has(id)) remitoSeleccionadas.delete(id); });
 
@@ -3580,7 +3412,6 @@ function renderHistorialRemitos(){
     if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  // remitos ya viene ordenado del más nuevo al más viejo (sort por numero desc al cargar)
   const { pagina, page, totalPaginas } = paginarArray('remitosHist', remitos, PAGE_SIZE_GENERICO);
   tbody.innerHTML = pagina.map(r => `
     <tr>
@@ -3692,7 +3523,6 @@ window.generarRemito = async function(){
       numero, despachante, fecha: fechaHoy, ops: opsData, total,
       generadoPor: user.username, ts: Date.now()
     });
-    // Marca cada operación con el N° de recibo emitido
     for(const o of seleccionadas){
       await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: numero });
     }
@@ -3745,3 +3575,4 @@ window.eliminarRecibo = async function(id){
 // ── INIT ──
 recalcularFormulario();
 recalcMudanza();
+renderListadoArbolFechas();
