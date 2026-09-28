@@ -163,6 +163,7 @@ tr:hover td{background:#fafbff;}
     <div class="tab" onclick="showTab('pagadas',this)">✅ Pagadas</div>
     <div class="tab" onclick="showTab('cepas',this)">🌿 CEPAS</div>
     <div class="tab" onclick="showTab('fechasfaltantes',this)">📅 Fechas Faltantes</div>
+    <div class="tab" onclick="showTab('sinretiro',this)">🧾 Sin Retiro AFIP</div>
     <div class="tab" onclick="showTab('historial',this)">📋 Historial</div>
     <div class="tab" onclick="showTab('log',this)">🔍 Log</div>
   </div>
@@ -189,6 +190,23 @@ tr:hover td{background:#fafbff;}
         <div class="section">
           <div class="section-title">Por tipo de operación</div>
           <div id="porTipo"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">
+          Conciliación por mes operativo
+          <select id="concMes" onchange="renderConciliacion()" style="padding:6px 10px;border-radius:8px;border:1.5px solid #e2e8f0;font-size:12px;font-family:'DM Sans',sans-serif"></select>
+        </div>
+        <div style="font-size:11px;color:#888;margin-bottom:8px">
+          Total = Pendientes + Pagadas. Es el número que debe coincidir con el informe de DUX del mismo mes
+          (ANUL por Retiro AFIP; el resto por Bordo si es EXPO / Plaza-Cumplido si no).
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Estado SIM</th><th>Pendientes</th><th>Pagadas</th><th>Total</th></tr></thead>
+            <tbody id="tablaConc"></tbody>
+          </table>
         </div>
       </div>
 
@@ -486,6 +504,34 @@ tr:hover td{background:#fafbff;}
           </table>
         </div>
         <div id="resumenFF" style="margin-top:8px;font-size:12px;color:#666;"></div>
+      </div>
+    </div>
+
+    <!-- SIN RETIRO AFIP -->
+    <div class="page" id="page-sinretiro">
+      <div class="cards">
+        <div class="card"><div class="card-label">Sin Retiro AFIP</div><div class="card-value red" id="srTotal">0</div></div>
+        <div class="card"><div class="card-label">Expo (con Bordo)</div><div class="card-value blue" id="srExpo">0</div></div>
+        <div class="card"><div class="card-label">Impo / ZF (con Plaza)</div><div class="card-value purple" id="srImpo">0</div></div>
+        <div class="card"><div class="card-label">Ya pagadas</div><div class="card-value green" id="srPagadas">0</div></div>
+      </div>
+      <div class="section">
+        <div class="section-title">
+          🧾 Con Bordo / Cumplido pero SIN Retiro de Legajo AFIP
+          <div class="btn-row"><button class="btn btn-success btn-sm" onclick="exportarSinRetiroExcel()">📊 Excel</button></div>
+        </div>
+        <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.5">
+          Operaciones que ya tienen Mercadería a bordo (EXPO) o Plaza/Cumplido (IMPO/ZF) cargado en DUX pero no tienen
+          Retiro de Legajo de AFIP. Sirve para detectar si se nos pasó hacer el retiro. Excluye OFIC y ANUL.
+        </div>
+        <div class="search-bar"><input type="text" id="buscarSR" placeholder="Buscar operación, cliente..." oninput="renderSinRetiro()" /></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Dato cargado</th><th>Fecha</th><th>Días</th><th>Pago</th><th>Acción</th></tr></thead>
+            <tbody id="tablaSR"></tbody>
+          </table>
+        </div>
+        <div id="resumenSR" style="margin-top:8px;font-size:12px;color:#666;"></div>
       </div>
     </div>
 
@@ -992,6 +1038,7 @@ window.showTab=function(name,el) {
   if(name==='pagadas')renderPagadas();
   if(name==='cepas')renderCepas();
   if(name==='fechasfaltantes')renderFechasFaltantes();
+  if(name==='sinretiro')renderSinRetiro();
   if(name==='historial')renderHistorial();
   if(name==='log')renderLog();
 };
@@ -1024,6 +1071,7 @@ async function cargarOperaciones() {
   renderPagadas();
   renderCepas();
   renderFechasFaltantes();
+  renderSinRetiro();
   actualizarSelectVLP();
   } finally { ocultarCarga(); }
 }
@@ -1588,7 +1636,8 @@ function renderDashboard() {
     ${renderBarAnt('+90 días',grupos.a90mas,maxG,'#7c3aed')}`;
 
   const tipos={EXPORTACION:0,IMPORTACION:0,ZONA_FRANCA:0,REVISAR:0};
-  ops.filter(o=>!o.pagada).forEach(o=>{if(tipos[o.tipo_operacion]!==undefined)tipos[o.tipo_operacion]++;else tipos.REVISAR++;});
+  // Mismo criterio que la pestaña Pendientes: solo cuenta las que tienen fecha operativa
+  ops.filter(o=>!o.pagada&&o.fecha_operativa).forEach(o=>{if(tipos[o.tipo_operacion]!==undefined)tipos[o.tipo_operacion]++;else tipos.REVISAR++;});
   document.getElementById('porTipo').innerHTML=Object.entries(tipos).map(([t,n])=>`
     <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f0f4f8;font-size:12px;">
       <span>${badgeTipo(t)} ${t}</span><span style="font-weight:700">${n}</span>
@@ -1598,7 +1647,11 @@ function renderDashboard() {
   if(revisar>0)alertas.push(`⚠️ ${revisar} operaciones con régimen REVISAR — requieren atención manual`);
   if(soloVlp>0)alertas.push(`📋 ${soloVlp} operaciones en VLP sin archivo DUX importado aún`);
   if(grupos.a90mas>0)alertas.push(`🔴 ${grupos.a90mas} operaciones pendientes hace más de 90 días`);
+  const nSinRetiro=opsSinRetiroAFIP().length;
+  if(nSinRetiro>0)alertas.push(`🧾 ${nSinRetiro} operaciones con Bordo/Cumplido y SIN Retiro AFIP — revisar pestaña Sin Retiro AFIP`);
   document.getElementById('alertas').innerHTML=alertas.length?alertas.map(a=>`<div style="padding:6px 0;border-bottom:1px solid #f0f4f8;color:#dc2626;">${a}</div>`).join(''):'<span style="color:#16a34a">✓ Sin alertas críticas</span>';
+
+  renderConciliacion();
 }
 
 function renderBarAnt(label,n,max,color) {
@@ -1609,6 +1662,36 @@ function renderBarAnt(label,n,max,color) {
     <div class="antig-visual"><div class="antig-fill" style="width:${pct}%;background:${color}"></div></div>
   </div>`;
 }
+
+// ====================================================
+// CONCILIACIÓN POR MES (pendientes + pagadas = total)
+// ====================================================
+window.renderConciliacion=function() {
+  const sel=document.getElementById('concMes');
+  if(!sel) return;
+  const meses=[...new Set(allOps.filter(o=>!o.archivada&&o.fecha_operativa&&o.mes_operativo).map(o=>o.mes_operativo))].sort().reverse();
+  const cur=sel.value||calcMesOperativo(hoyLocal());
+  sel.innerHTML=meses.map(m=>`<option value="${m}">${m}</option>`).join('');
+  sel.value=meses.includes(cur)?cur:(meses[0]||'');
+  const mes=sel.value;
+  const base=allOps.filter(o=>!o.archivada&&o.fecha_operativa&&o.mes_operativo===mes);
+  const estados=['AUTO','CANC','SALI','PRES','ANUL'];
+  let tp=0,tg=0;
+  let html=estados.map(e=>{
+    const del=base.filter(o=>o.estado_sim===e);
+    const p=del.filter(o=>!o.pagada).length, g=del.filter(o=>o.pagada).length;
+    tp+=p; tg+=g;
+    return `<tr><td>${badgeSIM(e)}</td><td>${p}</td><td>${g}</td><td><strong>${p+g}</strong></td></tr>`;
+  }).join('');
+  const otros=base.filter(o=>!estados.includes(o.estado_sim));
+  if(otros.length){
+    const p=otros.filter(o=>!o.pagada).length, g=otros.length-p;
+    tp+=p; tg+=g;
+    html+=`<tr><td>Otros / sin estado</td><td>${p}</td><td>${g}</td><td><strong>${otros.length}</strong></td></tr>`;
+  }
+  html+=`<tr style="background:#eff6ff"><td><strong>TOTAL</strong></td><td><strong>${tp}</strong></td><td><strong>${tg}</strong></td><td><strong>${tp+tg}</strong></td></tr>`;
+  document.getElementById('tablaConc').innerHTML=html;
+};
 
 // ====================================================
 // PENDIENTES
@@ -2094,6 +2177,78 @@ window.limpiarFiltrosFF=function(){
   mselSetValues('mselTipoFF',[]);
   document.getElementById('filtroVerDescartadasFF').checked=false;
   renderFechasFaltantes();
+};
+
+// ====================================================
+// SIN RETIRO AFIP
+// ====================================================
+function opsSinRetiroAFIP() {
+  return allOps.filter(o=>{
+    if(o.archivada) return false;
+    if(o.estado_sim==='OFIC'||o.estado_sim==='ANUL') return false;
+    if(!o.tipo_operacion) return false;           // SOLO_VLP: no hay datos de DUX
+    if(o.fecha_retiro_afip) return false;         // ya tiene Retiro AFIP
+    const campo = o.tipo_operacion==='EXPORTACION' ? o.fecha_mer_a_bordo : o.cumplido_plaza;
+    return !!campo;
+  });
+}
+
+window.renderSinRetiro=function() {
+  const buscar=(document.getElementById('buscarSR')?.value||'').toLowerCase();
+  const base=opsSinRetiroAFIP();
+  const hoy=hoyLocal();
+
+  document.getElementById('srTotal').textContent=base.length;
+  document.getElementById('srExpo').textContent=base.filter(o=>o.tipo_operacion==='EXPORTACION').length;
+  document.getElementById('srImpo').textContent=base.filter(o=>o.tipo_operacion!=='EXPORTACION').length;
+  document.getElementById('srPagadas').textContent=base.filter(o=>o.pagada).length;
+
+  let fil=base;
+  if(buscar) fil=fil.filter(o=>(o.operacion+(o.cliente||'')).toLowerCase().includes(buscar));
+  const campoDe=o=>o.tipo_operacion==='EXPORTACION'?o.fecha_mer_a_bordo:o.cumplido_plaza;
+  fil=[...fil].sort((a,b)=>aFechaLocal(campoDe(a))-aFechaLocal(campoDe(b)));
+
+  document.getElementById('tablaSR').innerHTML=fil.map(o=>{
+    const f=aFechaLocal(campoDe(o));
+    const dias=f?diasEntreFechas(f,hoy):null;
+    const nombreCampo=o.tipo_operacion==='EXPORTACION'?'Mercadería a bordo':'Plaza / Cumplido';
+    return `<tr>
+      <td><strong>${o.operacion}</strong></td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||''}">${clienteCorto(o.cliente)}</td>
+      <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
+      <td>${badgeTipo(o.tipo_operacion)}</td>
+      <td>${badgeSIM(o.estado_sim)}</td>
+      <td style="font-size:11px">${nombreCampo}</td>
+      <td style="font-size:11px">${formatFecha(f)}</td>
+      <td>${dias!==null?dias+'d':'-'}</td>
+      <td>${o.pagada?'<span class="badge badge-pagado">Pagada</span>':'<span class="badge badge-pendiente">Pendiente</span>'}</td>
+      <td><button class="btn btn-outline btn-sm" onclick="abrirFicha('${o.id}')">📋</button></td>
+    </tr>`;
+  }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">✓ Todas las operaciones con Bordo/Cumplido tienen Retiro AFIP</td></tr>';
+  document.getElementById('resumenSR').textContent=`📄 ${fil.length} operaciones mostradas`;
+};
+
+window.exportarSinRetiroExcel=function(){
+  const hoy=hoyLocal();
+  const campoDe=o=>o.tipo_operacion==='EXPORTACION'?o.fecha_mer_a_bordo:o.cumplido_plaza;
+  const fil=opsSinRetiroAFIP().sort((a,b)=>aFechaLocal(campoDe(a))-aFechaLocal(campoDe(b)));
+  const header=['Operación','Cliente','Destinación','Régimen','Tipo','Estado SIM','Dato cargado','Fecha','Días','Pago'];
+  const rows=fil.map(o=>{
+    const f=aFechaLocal(campoDe(o));
+    return [o.operacion,o.cliente||'',o.destinacion||'',o.codigo_regimen||'',o.tipo_operacion||'',o.estado_sim||'',
+      o.tipo_operacion==='EXPORTACION'?'Mercadería a bordo':'Plaza / Cumplido',f?formatFecha(f):'',f?diasEntreFechas(f,hoy):null,o.pagada?'Pagada':'Pendiente'];
+  });
+  const totalRow=['TOTAL',rows.length===0?'0 operación(es)':'','','','','','','','',''];
+  const ws=XLSX.utils.aoa_to_sheet([header,...rows,totalRow]);
+  const lastCol=XLSX.utils.encode_col(header.length-1);
+  ws['!autofilter']={ref:`A1:${lastCol}${1+rows.length}`};
+  ws['!cols']=[{wch:12},{wch:32},{wch:16},{wch:8},{wch:14},{wch:10},{wch:20},{wch:12},{wch:8},{wch:12}];
+  estilizarHojaExcel(ws,{numCols:header.length,numDataRows:rows.length,colsDecimal2:[],colsNumericas:[8]});
+  totalVivo(ws,1,0,rows.length,103,rows.length,'0" operación(es)"');
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Sin Retiro AFIP');
+  XLSX.writeFile(wb,'VLP_SinRetiroAFIP_'+todayISO()+'.xlsx');
+  toast(`Excel generado ✓ — ${rows.length} operaciones`,'success');
 };
 
 // ====================================================
