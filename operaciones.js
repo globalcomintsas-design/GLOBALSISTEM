@@ -366,7 +366,7 @@ const TARIFA_IDS = [
   't_mic','t_mic_foja','t_multinota','t_finsem',
   't_apoderado','t_kotinya','t_ramiro_op','t_cam_apod','t_mov_ad','t_adicionales',
   't_prem_vn','t_prem_r','t_prem_cam_vn','t_prem_cam_r',
-  't_pesos_vn','t_pesos_r'
+  't_pesos_vn','t_pesos_r','t_oficio'
 ];
 
 let cargandoTarifas = false; // evita re-guardar mientras se están poblando los campos desde Firestore
@@ -494,7 +494,7 @@ window.onTipoDespachoChange = function(){
 
   // Ocultar/mostrar canal según tipo
   const tipoOpActual = document.getElementById('op_tipo').value;
-  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA' || tipoOpActual === 'ADICIONALES';
+  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA' || tipoOpActual === 'ADICIONALES' || tipoOpActual === 'OFICIO';
   const canalGroup = document.getElementById('op_canal').closest('.form-group');
   const sinCanal = esApoderado || esKotinya || esMICoMultinota;
   canalGroup.style.opacity = sinCanal ? '0.4' : '';
@@ -515,6 +515,7 @@ window.onTipoChange = function(){
   const esMIC       = tipoOp === 'MIC';
   const esMultinota = tipoOp === 'MULTINOTA';
   const esAdicionales = tipoOp === 'ADICIONALES';
+  const esOficio = tipoOp === 'OFICIO';
 
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
@@ -529,7 +530,7 @@ window.onTipoChange = function(){
   destinGroup.style.display = sinDestinacion ? 'none' : '';
   if(sinDestinacion) document.getElementById('op_destinacion').value = '';
 
-  if(esMIC || esMultinota || esAdicionales){
+  if(esMIC || esMultinota || esAdicionales || esOficio){
     canalGroup.style.display = esAdicionales ? 'none' : '';
     canalGroup.style.opacity = '0.3';
     canalGroup.style.pointerEvents = 'none';
@@ -588,6 +589,7 @@ function getTarifas(){
   const esMIC       = tipoOp === 'MIC';
   const esMultinota = tipoOp === 'MULTINOTA';
   const esAdicionales = tipoOp === 'ADICIONALES';
+  const esOficio = tipoOp === 'OFICIO';
   const esPremium   = tipo === 'desp_externo';
   const _esApoderado = tipo === 'apoderado';
   const _esKotinya   = tipo === 'kotinya';
@@ -603,7 +605,9 @@ function getTarifas(){
   const pesos = (p, label) => { items.push({label, usd: 0, pesos: p}); };
 
   // ── Honorarios base ──
-  if(_esApoderado){
+  if(esOficio){
+    usd(parseFloat(document.getElementById('t_oficio').value) || 5, 'Oficio');
+  } else if(_esApoderado){
     usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
   } else if(_esKotinya){
     usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
@@ -628,10 +632,10 @@ function getTarifas(){
     usd(hon_usd, `Honorarios canal ${canal}`);
   }
 
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_sobre').checked)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
 
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_cam').checked){
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked){
     const n = parseInt(document.getElementById('n_cam').value)||1;
     let t;
     if(_esApoderado){
@@ -648,12 +652,12 @@ function getTarifas(){
     usd(t*n, `Camión AD ×${n}`);
   }
 
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_p').checked){
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_p').checked){
     const n = parseInt(document.getElementById('n_senasa_p').value)||1;
     usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA embalaje ×${n}`);
   }
 
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_prod').checked)
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_prod').checked)
     usd(parseFloat(document.getElementById('t_senasa_prod').value), 'SENASA producto');
 
   if(document.getElementById('chk_hojas').checked){
@@ -693,7 +697,7 @@ function getTarifas(){
   const bruto     = totalNeto + iva;
   const totalUsd  = items.reduce((a,b) => a + b.usd, 0);
 
-  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, tcFalta };
+  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, esOficio, tcFalta };
 }
 
 window.recalcularFormulario = function(){
@@ -737,14 +741,14 @@ window.recalcularFormulario = function(){
 
 // ── CONSTRUIR DATOS DEL FORMULARIO (compartido entre crear y actualizar) ──
 function construirDatosOperacion(){
-  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales } = getTarifas();
+  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, esOficio } = getTarifas();
   const tipo = document.getElementById('tipo_desp_global').value;
 
   const adicTags = [];
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
-  if(!esMultinota && !esAdicionales && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
   if(document.getElementById('chk_hojas').checked)      adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
   if(document.getElementById('chk_mic').checked){
     const numMic = document.getElementById('n_mic_num').value.trim() || document.getElementById('op_mic').value.trim() || 's/n';
@@ -752,6 +756,7 @@ function construirDatosOperacion(){
   }
   if(esMultinota) adicTags.push('Multinota');
   if(esAdicionales) adicTags.push('Adicionales');
+  if(esOficio) adicTags.push('Oficio');
   if(document.getElementById('chk_mic_fojas').checked){
     const nFojas = parseInt(document.getElementById('n_mic_fojas').value)||1;
     const cobrarFojas = Math.max(0, nFojas - 1);
@@ -765,7 +770,7 @@ function construirDatosOperacion(){
     despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
     cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
     destinacion: (esAdicionales || esMIC) ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
-    canal: (esMIC || esMultinota || esAdicionales) ? '' : document.getElementById('op_canal').value,
+    canal: (esMIC || esMultinota || esAdicionales || esOficio) ? '' : document.getElementById('op_canal').value,
     zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
     tipo: document.getElementById('op_tipo').value,
     mic: document.getElementById('op_mic').value.trim().toUpperCase(),
@@ -787,6 +792,7 @@ function construirDatosOperacion(){
     esMIC,
     esMultinota,
     esAdicionales,
+    esOficio,
     tipoDespGlobal: tipo,
     opTcInput: document.getElementById('op_tc').value,
     adicionalesPesos: parseFloat(document.getElementById('op_adicionales_pesos').value) || 0,
@@ -1405,7 +1411,7 @@ function renderTabla(){
       <td class="mono">${o.destinacion||''}</td>
       <td class="mono">${o.mic||'-'}</td>
       <td style="font-size:11px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${o.toma||''}">${o.toma||'-'}</td>
-      <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
+      <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
       <td class="mono">${o.tc||''}</td>
       <td class="mono">${o.totalUsd||''}</td>
       <td style="color:#1e3a8a;font-weight:600;">$${fmt2(o.neto)}</td>
@@ -1974,7 +1980,7 @@ window.exportarSaldosExcel = function(){
       fechaMostrar: fmtFechaMostrar(o.fecha),
       cliente: o.cliente || '',
       detalle: [o.destinacion, o.mic ? 'MIC:'+o.mic : ''].filter(Boolean).join(' ') || '-',
-      canal: (o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='ADICIONALES') ? '' : (o.canal||''),
+      canal: (o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO'||o.tipo==='ADICIONALES') ? '' : (o.canal||''),
       neto: o.neto||0,
       iva: o.iva||0,
       bruto: o.bruto||0,
@@ -3366,7 +3372,7 @@ window.renderRemitos = function(){
         <td>${o.fecha||''}</td>
         <td>${o.cliente||'-'}</td>
         <td class="mono">${o.destinacion||'-'}</td>
-        <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='ADICIONALES') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
+        <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO'||o.tipo==='ADICIONALES') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
         <td style="font-weight:700;color:#059669;">$${fmt2(o.bruto)}</td>
         <td>${o.numRemito ? `<span class="tag" style="background:#fef9c3;color:#92400e;">N° ${o.numRemito}</span>` : '<span class="tag" style="background:#f1f5f9;color:#64748b;">Sin recibo</span>'}</td>
       </tr>
