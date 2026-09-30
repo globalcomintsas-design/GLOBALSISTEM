@@ -534,7 +534,7 @@ window.onTipoChange = function(){
     canalGroup.style.display = esAdicionales ? 'none' : '';
     canalGroup.style.opacity = '0.3';
     canalGroup.style.pointerEvents = 'none';
-    document.getElementById('chk-sobre-wrap').style.display = 'none';
+    document.getElementById('chk-sobre-wrap').style.display = esOficio ? '' : 'none';
     document.getElementById('chk-cam-wrap').style.display = 'none';
     document.getElementById('chk-senasa-p-wrap').style.display = 'none';
     document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
@@ -632,7 +632,7 @@ function getTarifas(){
     usd(hon_usd, `Honorarios canal ${canal}`);
   }
 
-  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_sobre').checked)
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)
     usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
 
   if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked){
@@ -745,7 +745,7 @@ function construirDatosOperacion(){
   const tipo = document.getElementById('tipo_desp_global').value;
 
   const adicTags = [];
-  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
   if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
   if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
   if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
