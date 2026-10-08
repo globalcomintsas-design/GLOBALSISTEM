@@ -244,7 +244,7 @@ tr:hover td{background:#fafbff;}
             <input type="file" id="fileVLP" accept=".xlsx,.xls" onchange="procesarVLP(this)" />
             <div class="upload-icon">💳</div>
             <div class="upload-text">Arrastrá o hacé clic para subir</div>
-            <div class="upload-sub">Archivo VLP · Excel (.xlsx)</div>
+            <div class="upload-sub">Archivo VLP · Excel (.xlsx) — formato nuevo (CVLP + Factura A) o viejo</div>
           </div>
           <div style="margin-top:10px;font-size:11px;color:#888;">
             ✓ Concilia automáticamente · ✓ Crea SOLO_VLP si no hay DUX · ✓ Historial completo
@@ -1168,9 +1168,9 @@ function leerArchivoExcel(file,tipo) {
       const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
       setTimeout(()=>procesarDatosExcelDUX(raw,file.name,ws['!ref']),50);
     } else {
-      const wb=XLSX.read(e.target.result,{type:'array',cellDates:true});
+      const wb=XLSX.read(e.target.result,{type:'array'});
       const ws=wb.Sheets[wb.SheetNames[0]];
-      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false,dateNF:'yyyy-mm-dd'});
+      const raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:true});
       procesarDatosExcelVLP(raw,file.name);
     }
   };
@@ -1426,6 +1426,89 @@ async function procesarDatosExcelDUX(raw, nombreArchivo, ref) {
 // ====================================================
 // IMPORTACION VLP
 // ====================================================
+// ---- Fin de mes a partir del texto del título o del nombre del archivo ----
+// ("... septiembre 2026" o "VLP_SEPTIEMBRE_26.xlsx" -> 30/09/2026)
+function finDeMesDesdeTexto(txt) {
+  const t=String(txt||'').toLowerCase();
+  const meses=[['enero',1],['febrero',2],['marzo',3],['abril',4],['mayo',5],['junio',6],['julio',7],
+               ['agosto',8],['septiembre',9],['setiembre',9],['octubre',10],['noviembre',11],['diciembre',12]];
+  const m=meses.find(x=>t.includes(x[0]));
+  if(!m) return null;
+  let anio=null;
+  const a4=t.match(/(20\d{2})/);
+  if(a4) anio=parseInt(a4[1],10);
+  else { const a2=t.match(/(?:^|[^0-9])(\d{2})(?:[^0-9]|$)/); if(a2) anio=2000+parseInt(a2[1],10); }
+  if(!anio) return null;
+  return fechaLocal(anio, m[1]+1, 0); // día 0 del mes siguiente = último día de este mes
+}
+
+// ---- Parser PURO (no toca Firestore): devuelve las filas ya normalizadas ----
+function parsearPlanillaVLP(raw, nombreArchivo) {
+  const hIdx=raw.findIndex((r,i)=>i<15&&r&&r.some(c=>c!==null&&c!==undefined&&String(c).trim()==='Operación'));
+  if(hIdx<0) return {error:'No se encontró la columna "Operación" en las primeras filas'};
+  const headers=raw[hIdx];
+  const col={};
+  headers.forEach((h,i)=>{if(h!==null&&h!==undefined&&String(h).trim()!=='')col[String(h).trim()]=i;});
+  const esNuevo=col['Importe CVLP']!==undefined||col['Factura A']!==undefined;
+  const num=v=>{
+    if(v===null||v===undefined||v==='')return 0;
+    if(typeof v==='number')return isNaN(v)?0:v;
+    const n=parseFloat(String(v).replace(/\./g,'').replace(',','.'));
+    return isNaN(n)?0:n;
+  };
+  const opValida=v=>{const n=normOp(v);return (n&&n!=='0'&&n!=='NaN')?n:null;}; // descarta "TOTALES"
+  const titulo=raw[0]&&raw[0][0]?String(raw[0][0]).trim():'';
+  const filas=[];
+
+  if(esNuevo) {
+    const nombreVLP=String(nombreArchivo||'VLP').replace(/\.xlsx?$/i,'');
+    const finMes=fechaValidaODefault(finDeMesDesdeTexto(titulo)||finDeMesDesdeTexto(nombreArchivo),null);
+    const C={op:col['Operación'],cli:col['Cliente'],dest:col['Destinación'],tipo:col['Tipo'],
+      fact:col['Factura (CyO)'],cvlp:col['Importe CVLP'],facA:col['Factura A'],
+      estado:col['Estado'],obs:col['Observación'],conc:col['Concepto factura A']};
+    const porOp={};
+    raw.slice(hIdx+1).forEach(r=>{
+      if(!r)return;
+      const opNorm=opValida(r[C.op]);
+      if(!opNorm)return;
+      const cvlp=num(r[C.cvlp]), facA=num(r[C.facA]);
+      const g=porOp[opNorm]||(porOp[opNorm]={opNorm,cvlp:0,facA:0,cliente:'',destinacion:'',tipoPlanilla:'',
+        factura:'',estado:'',obs:'',concepto:'',repetida:0});
+      if(g.repetida===0){
+        g.cliente=String(r[C.cli]||'');g.destinacion=String(r[C.dest]||'');g.tipoPlanilla=String(r[C.tipo]||'');
+        g.factura=String(r[C.fact]||'');g.estado=String(r[C.estado]||'');
+        g.obs=String(r[C.obs]||'');g.concepto=String(r[C.conc]||'');
+      }
+      g.cvlp+=cvlp; g.facA+=facA; g.repetida++;
+    });
+    Object.values(porOp).forEach(g=>{
+      g.cvlp=Math.round(g.cvlp*100)/100; g.facA=Math.round(g.facA*100)/100;
+      g.total=Math.round((g.cvlp+g.facA)*100)/100;
+      g.origenPago=g.cvlp>0?'VLP':'FACTURA_PROPIA';
+      g.vlpPago=g.cvlp>0?nombreVLP:('FACTURA A · '+nombreVLP);
+      g.fechaPago=finMes;
+      filas.push(g);
+    });
+    return {formato:'NUEVO',nombreVLP,finMes,filas,sinImporte:filas.filter(g=>g.total<=0).length};
+  }
+
+  // ---- Formato VIEJO (Fecha / Número documento / Razón social cli. / Importe) ----
+  const nombreVLP=titulo||nombreArchivo;
+  const C={op:col['Operación']??9,fecha:col['Fecha']??0,ndoc:col['Número documento']??3,
+           razon:col['Razón social cli.']??5,imp:col['Importe']??10};
+  raw.slice(hIdx+1).forEach(r=>{
+    if(!r)return;
+    const opNorm=opValida(r[C.op]);
+    if(!opNorm)return;
+    let fp=r[C.fecha]?parseExcelDate(r[C.fecha]):null;
+    filas.push({opNorm,cvlp:num(r[C.imp]),facA:0,total:num(r[C.imp]),cliente:String(r[C.razon]||''),
+      destinacion:'',tipoPlanilla:'',factura:String(r[C.ndoc]||''),estado:'',obs:'',concepto:'',
+      origenPago:'VLP',vlpPago:nombreVLP,fechaPago:fechaValidaODefault(fp,null)});
+  });
+  return {formato:'VIEJO',nombreVLP,finMes:null,filas,sinImporte:0};
+}
+
+// ---- Importación a Firestore ----
 async function procesarDatosExcelVLP(raw, nombreArchivo) {
   document.getElementById('progresoVLP').style.display='';
   document.getElementById('resultadoVLP').innerHTML='';
@@ -1433,61 +1516,77 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
     document.getElementById('barVLP').style.width=p+'%';
     document.getElementById('statusVLP').textContent=msg;
   };
+  const abortar=msg=>{toast(msg,'error');document.getElementById('progresoVLP').style.display='none';};
   setBar(5,'Leyendo archivo...');
 
-  const nombreVLP=raw[0]&&raw[0][0]?String(raw[0][0]).trim():nombreArchivo;
+  const P=parsearPlanillaVLP(raw,nombreArchivo);
+  if(P.error){abortar('Archivo VLP inválido: '+P.error);return;}
+  const nombreVLP=P.nombreVLP;
+  const filas=P.filas;
+  if(!filas.length){abortar('El archivo no tiene operaciones para importar');return;}
+  setBar(10,`${filas.length} operaciones encontradas (formato ${P.formato})`);
 
-  const headers=raw[2];
-  if(!headers){toast('Archivo VLP inválido','error');document.getElementById('progresoVLP').style.display='none';return;}
-
-  const col={};
-  headers.forEach((h,i)=>{if(h)col[String(h).trim()]=i;});
-
-  const COL_OP=col['Operación']??9;
-  const COL_FECHA=col['Fecha']??0;
-  const COL_NDOC=col['Número documento']??3;
-  const COL_RAZON=col['Razón social cli.']??5;
-  const COL_IMP=col['Importe']??10;
-
-  const datos=raw.slice(3).filter(r=>r&&r[COL_OP]&&String(r[COL_OP]).trim()!=='');
-  setBar(10,`${datos.length} registros encontrados`);
-
-  setBar(15,'Preparando datos...');
+  const ahora=ahoraLocal();
   const existentes={};
   allOps.forEach(o=>{existentes[o.id]=o;});
 
-  setBar(25,'Preparando datos...');
-  const ahora=ahoraLocal();
-  let conciliadas=0,sinDux=0;
-  const logItems=[];
-  const BATCH_SIZE=490;
-
-  const operaciones=[];
-  for(const r of datos) {
-    const opNorm=normOp(r[COL_OP]);
-    if(!opNorm)continue;
-    let fechaPago=r[COL_FECHA]?parseExcelDate(r[COL_FECHA]):ahora;
-    fechaPago=fechaValidaODefault(fechaPago,ahora);
-    const vlpData={pagada:true,fecha_pago:fechaPago,vlp_pago:nombreVLP,
-      numero_doc_vlp:String(r[COL_NDOC]||''),razon_social_vlp:String(r[COL_RAZON]||''),
-      importe_vlp:parseFloat(r[COL_IMP])||null,origen_pago:'VLP',ts_actualizacion:ahora};
-    operaciones.push({opNorm,vlpData,imp:r[COL_IMP]});
+  // Operaciones que no están cargadas en memoria (p. ej. pagadas de años anteriores): se consultan
+  // para no pisarlas como si fueran nuevas.
+  setBar(15,'Verificando operaciones ya existentes...');
+  const desconocidos=filas.map(f=>f.opNorm).filter(id=>!existentes[id]);
+  for(let i=0;i<desconocidos.length;i+=30) {
+    const chunk=desconocidos.slice(i,i+30);
+    const snap=await getDocs(query(collection(db,'operaciones_vlp'),where(documentId(),'in',chunk)));
+    snap.docs.forEach(d=>{existentes[d.id]={id:d.id,...d.data()};});
   }
 
-  setBar(35,'Escribiendo en Firestore...');
-  for(let i=0;i<operaciones.length;i+=BATCH_SIZE) {
-    const chunk=operaciones.slice(i,i+BATCH_SIZE);
+  let conciliadas=0,sinDux=0,yaPagadas=0,porCVLP=0,porFacA=0,ambos=0,aRevisar=0,sinImporte=0;
+  let totCVLP=0,totFacA=0;
+  const logItems=[];
+  const BATCH_SIZE=240; // cada op puede escribir 2 documentos (operación + log)
+
+  setBar(25,'Escribiendo en Firestore...');
+  for(let i=0;i<filas.length;i+=BATCH_SIZE) {
+    const chunk=filas.slice(i,i+BATCH_SIZE);
     const batch=writeBatch(db);
-    for(const {opNorm,vlpData,imp} of chunk) {
-      const ref=doc(db,'operaciones_vlp',opNorm);
-      const existente=existentes[opNorm];
+    for(const f of chunk) {
+      const ref=doc(db,'operaciones_vlp',f.opNorm);
+      const existente=existentes[f.opNorm];
+      const fechaPago=fechaValidaODefault(f.fechaPago,ahora);
+
+      // Re-importar el mismo archivo no vuelve a tocar lo que ya quedó pagado con este mismo VLP
+      if(existente&&existente.pagada&&existente.vlp_pago===f.vlpPago){ yaPagadas++; continue; }
+
+      if(f.total<=0){ sinImporte++; continue; } // fila sin importe: no se marca pagada
+
+      const vlpData={
+        pagada:true,fecha_pago:fechaPago,vlp_pago:f.vlpPago,
+        numero_doc_vlp:f.factura,razon_social_vlp:f.cliente,
+        importe_vlp:f.total||null,origen_pago:f.origenPago,ts_actualizacion:ahora
+      };
+      if(P.formato==='NUEVO') {
+        vlpData.importe_cvlp=f.cvlp;
+        vlpData.importe_factura_a=f.facA;
+        vlpData.vlp_estado=f.estado;
+        vlpData.vlp_observacion=f.obs;
+        vlpData.vlp_concepto_factura_a=f.concepto;
+        vlpData.vlp_tipo_planilla=f.tipoPlanilla;
+      }
+      if(f.cvlp>0&&f.facA>0) ambos++; else if(f.cvlp>0) porCVLP++; else porFacA++;
+      totCVLP+=f.cvlp; totFacA+=f.facA;
+      if(/investigar|corregir|de más|menos/i.test(f.estado)) aRevisar++;
+
+      const desc=`${f.origenPago==='VLP'?'Pagada por CVLP':'Pagada por Factura A'}. ${nombreVLP}. `+
+                 `CVLP: $${f.cvlp} · Factura A: $${f.facA}`+(f.estado?` · Estado: ${f.estado}`:'');
       if(existente) {
         batch.update(ref,{...vlpData,origen:existente.origen==='SOLO_DUX'?'COMPLETO':existente.origen,archivada:false});
-        logItems.push({tipo:'VLP_PAGADO',op:opNorm,desc:`Marcada PAGADA. VLP: ${nombreVLP}. Importe: $${imp||0}`,vlp:nombreVLP});
+        logItems.push({tipo:'VLP_PAGADO',op:f.opNorm,desc,vlp:nombreVLP});
         conciliadas++;
       } else {
-        batch.set(ref,{operacion:opNorm,operacion_raw:opNorm,cliente:'',destinacion:'',
-          aduana:'038',codigo_regimen:'',tipo_operacion:'',mercaderia:'',estado_sim:'',
+        const cod=f.destinacion.length>=9?f.destinacion.substring(5,9):'';
+        batch.set(ref,{operacion:f.opNorm,operacion_raw:f.opNorm,cliente:'',destinacion:f.destinacion,
+          aduana:'038',codigo_regimen:cod,tipo_operacion:REGIMENES[cod]||'',mercaderia:'',
+          estado_sim:f.tipoPlanilla==='Anulada'?'ANUL':'',
           situacion:'',estado:'',fecha_oficializacion:null,fecha_mer_a_bordo:null,
           cumplido_plaza:null,fecha_operativa:null,mes_operativo:null,fecha_operativa_manual:false,
           fecha_operativa_provisional:false,...vlpData,
@@ -1495,20 +1594,18 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
           cepas_observaciones:'',cepas_liquidado:false,cepas_fecha_retiro:null,
           cepas_fecha_liquid:null,observaciones:'',archivada:false,ts_creacion:ahora,
           importado_por:currentUser.nombre,dux_archivo:'',reporte_fecha_descartado:false});
-        logItems.push({tipo:'VLP_SIN_DUX',op:opNorm,desc:`VLP antes que DUX. SOLO_VLP. VLP: ${nombreVLP}`,vlp:nombreVLP});
+        logItems.push({tipo:'VLP_SIN_DUX',op:f.opNorm,desc:'VLP antes que DUX (SOLO_VLP). '+desc,vlp:nombreVLP});
         sinDux++;
       }
     }
     try {
       await batch.commit();
     } catch(err) {
-      console.error('Error en batch VLP:', err, chunk);
-      toast('Error al guardar un lote VLP. Revisá la consola.', 'error');
-      setBar(0,'Error al guardar. Ver consola.');
-      document.getElementById('progresoVLP').style.display='none';
+      console.error('Error en batch VLP:',err,chunk);
+      abortar('Error al guardar un lote VLP. Revisá la consola.');
       return;
     }
-    setBar(35+Math.round(((i+chunk.length)/operaciones.length)*50),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(operaciones.length/BATCH_SIZE)} guardado...`);
+    setBar(25+Math.round(((i+chunk.length)/filas.length)*60),`Lote ${Math.ceil((i+1)/BATCH_SIZE)}/${Math.ceil(filas.length/BATCH_SIZE)} guardado...`);
   }
 
   setBar(88,'Guardando log...');
@@ -1527,18 +1624,28 @@ async function procesarDatosExcelVLP(raw, nombreArchivo) {
   setBar(96,'Registrando importación...');
   await addDoc(collection(db,'vlp_importados'),{
     nombre_archivo:nombreVLP,fecha_importacion:ahora,
-    usuario:currentUser.nombre,total_registros:datos.length,
+    usuario:currentUser.nombre,total_registros:filas.length,
     conciliadas,sin_dux:sinDux
   });
 
   setBar(100,'Completado');
   document.getElementById('progresoVLP').style.display='none';
+  const fmt=n=>'$'+n.toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2});
   document.getElementById('resultadoVLP').innerHTML=`
     <div class="resultado-box">
       <div class="resultado-row"><span>VLP importado</span><span>${nombreVLP}</span></div>
-      <div class="resultado-row"><span>Total registros</span><span>${datos.length}</span></div>
-      <div class="resultado-row"><span>Operaciones conciliadas</span><span style="color:#16a34a">${conciliadas}</span></div>
+      <div class="resultado-row"><span>Operaciones en la planilla</span><span>${filas.length}</span></div>
+      <div class="resultado-row"><span>Conciliadas (pendiente → pagada)</span><span style="color:#16a34a">${conciliadas}</span></div>
       <div class="resultado-row"><span>Sin DUX (creadas como SOLO_VLP)</span><span style="color:#d97706">${sinDux}</span></div>
+      <div class="resultado-row"><span>Ya estaban pagadas con este VLP (sin cambios)</span><span style="color:#888">${yaPagadas}</span></div>
+      ${P.formato==='NUEVO'?`
+      <div class="resultado-row"><span>Pagadas solo por CVLP</span><span>${porCVLP}</span></div>
+      <div class="resultado-row"><span>Pagadas solo por Factura A</span><span>${porFacA}</span></div>
+      <div class="resultado-row"><span>Con CVLP + Factura A</span><span>${ambos}</span></div>
+      <div class="resultado-row"><span>Con diferencias a revisar (col. Estado)</span><span style="color:#dc2626">${aRevisar}</span></div>
+      <div class="resultado-row"><span>Sin importe (no se marcaron)</span><span>${sinImporte}</span></div>
+      <div class="resultado-row"><span>Total CVLP</span><span>${fmt(totCVLP)}</span></div>
+      <div class="resultado-row"><span>Total Factura A</span><span>${fmt(totFacA)}</span></div>`:''}
     </div>`;
   await cargarOperaciones();
   await cargarHistorial();
@@ -2385,6 +2492,9 @@ window.abrirFicha=function(id) {
     <div class="ficha-item"><div class="ficha-label">Fecha Pago</div><div class="ficha-val">${formatFecha(fp)}</div></div>
     <div class="ficha-item"><div class="ficha-label">VLP / Factura</div><div class="ficha-val" style="font-size:11px">${o.vlp_pago||'-'}</div></div>
     <div class="ficha-item"><div class="ficha-label">Importe</div><div class="ficha-val">${o.importe_vlp?'$'+Number(o.importe_vlp).toLocaleString('es-AR',{minimumFractionDigits:2}):'-'}</div></div>
+    ${o.importe_cvlp!=null?`<div class="ficha-item"><div class="ficha-label">Importe CVLP</div><div class="ficha-val">${'$'+Number(o.importe_cvlp).toLocaleString('es-AR',{minimumFractionDigits:2})}</div></div>`:''}
+    ${o.importe_factura_a?`<div class="ficha-item"><div class="ficha-label">Factura A (Global Comint)</div><div class="ficha-val">${'$'+Number(o.importe_factura_a).toLocaleString('es-AR',{minimumFractionDigits:2})}</div></div>`:''}
+    ${o.vlp_estado?`<div class="ficha-item full"><div class="ficha-label">Estado planilla VLP</div><div class="ficha-val" style="font-size:12px">${o.vlp_estado}${o.vlp_observacion?' — '+o.vlp_observacion:''}</div></div>`:''}
     <div class="ficha-item full"><div class="ficha-label">Mercadería</div><div class="ficha-val" style="font-size:12px">${o.mercaderia||'-'}</div></div>`;
 
   document.getElementById('fichaAvisoProvisoria').style.display = o.fecha_operativa_provisional ? '' : 'none';
