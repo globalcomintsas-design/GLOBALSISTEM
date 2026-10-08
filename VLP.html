@@ -514,6 +514,7 @@ tr:hover td{background:#fafbff;}
         <div class="card"><div class="card-label">Expo (con Bordo)</div><div class="card-value blue" id="srExpo">0</div></div>
         <div class="card"><div class="card-label">Impo / ZF (con Plaza)</div><div class="card-value purple" id="srImpo">0</div></div>
         <div class="card"><div class="card-label">Ya pagadas</div><div class="card-value green" id="srPagadas">0</div></div>
+        <div class="card"><div class="card-label">Quitadas de la lista</div><div class="card-value" style="color:#888" id="srDescartadas">0</div></div>
       </div>
       <div class="section">
         <div class="section-title">
@@ -525,9 +526,23 @@ tr:hover td{background:#fafbff;}
           Retiro de Legajo de AFIP. Sirve para detectar si se nos pasó hacer el retiro. Excluye OFIC y ANUL.
         </div>
         <div class="search-bar"><input type="text" id="buscarSR" placeholder="Buscar operación, cliente..." oninput="renderSinRetiro()" /></div>
+        <div class="filtros">
+          <div><label>Año de la fecha</label><select id="filtroAnioSR" onchange="renderSinRetiro()"><option value="">Todos</option></select></div>
+          <div style="display:flex;align-items:center;gap:6px;padding-bottom:6px">
+            <input type="checkbox" id="filtroVerDescartadasSR" onchange="renderSinRetiro()" style="width:auto" />
+            <label style="margin:0;font-size:11px">Ver quitadas</label>
+          </div>
+          <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosSR()" style="width:100%">✕ Limpiar</button></div>
+        </div>
+        <div id="barraMasivaSR" style="display:none;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:12px;align-items:center;gap:12px;flex-wrap:wrap">
+          <span id="selCountSR" style="font-size:13px;font-weight:600;color:#1e3a8a">0 seleccionadas</span>
+          <button class="btn btn-danger btn-sm" id="btnQuitarSR" onclick="cambiarDescarteSR(null,true)">🗑 Quitar de la lista</button>
+          <button class="btn btn-primary btn-sm" id="btnRestaurarSR" onclick="cambiarDescarteSR(null,false)" style="display:none">↩ Restaurar a la lista</button>
+          <button class="btn btn-outline btn-sm" onclick="deseleccionarSR()">✕ Limpiar selección</button>
+        </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Dato cargado</th><th>Fecha</th><th>Días</th><th>Pago</th><th>Acción</th></tr></thead>
+            <thead><tr><th><input type="checkbox" id="checkTodosSR" onchange="toggleTodosSR(this.checked)" title="Seleccionar todos los mostrados" /></th><th>Operación</th><th>Cliente</th><th>Régimen</th><th>Tipo</th><th>Estado SIM</th><th>Dato cargado</th><th>Fecha</th><th>Días</th><th>Pago</th><th>Acción</th></tr></thead>
             <tbody id="tablaSR"></tbody>
           </table>
         </div>
@@ -565,7 +580,7 @@ tr:hover td{background:#fafbff;}
         <div class="section-title">Log de Conciliaciones</div>
         <div class="filtros">
           <div><label>Operación</label><input type="text" id="filtroLogOp" placeholder="Número..." oninput="renderLog()" /></div>
-          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>FECHA_OPERATIVA_CONFIRMADA</option><option>REPORTE_FECHA_DESCARTADO</option><option>OPERACION_ARCHIVADA</option></select></div>
+          <div><label>Tipo evento</label><select id="filtroLogTipo" onchange="renderLog()"><option value="">Todos</option><option>DUX_IMPORTADO_NUEVO</option><option>DUX_ACTUALIZADO</option><option>VLP_PAGADO</option><option>VLP_SIN_DUX</option><option>RECONCILIACION_AUTO</option><option>FACTURA_PAGO_MANUAL</option><option>CEPAS_ACTUALIZADO</option><option>FECHA_OPERATIVA_EDITADA</option><option>FECHA_OPERATIVA_CONFIRMADA</option><option>REPORTE_FECHA_DESCARTADO</option><option>OPERACION_ARCHIVADA</option><option>SIN_RETIRO_DESCARTADO</option><option>SIN_RETIRO_RESTAURADO</option></select></div>
           <div style="display:flex;align-items:flex-end"><button class="btn btn-outline btn-sm" onclick="limpiarFiltrosLog()" style="width:100%">✕ Limpiar</button></div>
         </div>
         <div id="logContainer" style="max-height:500px;overflow-y:auto;"></div>
@@ -2182,50 +2197,137 @@ window.limpiarFiltrosFF=function(){
 // ====================================================
 // SIN RETIRO AFIP
 // ====================================================
-function opsSinRetiroAFIP() {
-  return allOps.filter(o=>{
+function campoSR(o){ return o.tipo_operacion==='EXPORTACION' ? o.fecha_mer_a_bordo : o.cumplido_plaza; }
+
+function opsSinRetiroAFIP(modo) {
+  return allOps.filter(function(o){
     if(o.archivada) return false;
     if(o.estado_sim==='OFIC'||o.estado_sim==='ANUL') return false;
     if(!o.tipo_operacion) return false;           // SOLO_VLP: no hay datos de DUX
     if(o.fecha_retiro_afip) return false;         // ya tiene Retiro AFIP
-    const campo = o.tipo_operacion==='EXPORTACION' ? o.fecha_mer_a_bordo : o.cumplido_plaza;
-    return !!campo;
+    if(!campoSR(o)) return false;
+    return modo==='descartadas' ? !!o.sin_retiro_descartado : !o.sin_retiro_descartado;
   });
 }
 
 window.renderSinRetiro=function() {
-  const buscar=(document.getElementById('buscarSR')?.value||'').toLowerCase();
-  const base=opsSinRetiroAFIP();
-  const hoy=hoyLocal();
+  var buscar=(document.getElementById('buscarSR')?.value||'').toLowerCase();
+  var verDesc=document.getElementById('filtroVerDescartadasSR')?.checked||false;
+  var hoy=hoyLocal();
+  var activas=opsSinRetiroAFIP();
+  var descartadas=opsSinRetiroAFIP('descartadas');
 
-  document.getElementById('srTotal').textContent=base.length;
-  document.getElementById('srExpo').textContent=base.filter(o=>o.tipo_operacion==='EXPORTACION').length;
-  document.getElementById('srImpo').textContent=base.filter(o=>o.tipo_operacion!=='EXPORTACION').length;
-  document.getElementById('srPagadas').textContent=base.filter(o=>o.pagada).length;
+  document.getElementById('srTotal').textContent=activas.length;
+  document.getElementById('srExpo').textContent=activas.filter(function(o){return o.tipo_operacion==='EXPORTACION';}).length;
+  document.getElementById('srImpo').textContent=activas.filter(function(o){return o.tipo_operacion!=='EXPORTACION';}).length;
+  document.getElementById('srPagadas').textContent=activas.filter(function(o){return o.pagada;}).length;
+  document.getElementById('srDescartadas').textContent=descartadas.length;
 
-  let fil=base;
-  if(buscar) fil=fil.filter(o=>(o.operacion+(o.cliente||'')).toLowerCase().includes(buscar));
-  const campoDe=o=>o.tipo_operacion==='EXPORTACION'?o.fecha_mer_a_bordo:o.cumplido_plaza;
-  fil=[...fil].sort((a,b)=>aFechaLocal(campoDe(a))-aFechaLocal(campoDe(b)));
+  var fuente=verDesc?descartadas:activas;
 
-  document.getElementById('tablaSR').innerHTML=fil.map(o=>{
-    const f=aFechaLocal(campoDe(o));
-    const dias=f?diasEntreFechas(f,hoy):null;
-    const nombreCampo=o.tipo_operacion==='EXPORTACION'?'Mercadería a bordo':'Plaza / Cumplido';
-    return `<tr>
-      <td><strong>${o.operacion}</strong></td>
-      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${o.cliente||''}">${clienteCorto(o.cliente)}</td>
-      <td><span style="font-family:monospace;font-size:11px">${o.destinacion||o.codigo_regimen||'-'}</span></td>
-      <td>${badgeTipo(o.tipo_operacion)}</td>
-      <td>${badgeSIM(o.estado_sim)}</td>
-      <td style="font-size:11px">${nombreCampo}</td>
-      <td style="font-size:11px">${formatFecha(f)}</td>
-      <td>${dias!==null?dias+'d':'-'}</td>
-      <td>${o.pagada?'<span class="badge badge-pagado">Pagada</span>':'<span class="badge badge-pendiente">Pendiente</span>'}</td>
-      <td><button class="btn btn-outline btn-sm" onclick="abrirFicha('${o.id}')">📋</button></td>
-    </tr>`;
-  }).join('')||'<tr><td colspan="10" style="text-align:center;color:#888;padding:20px">✓ Todas las operaciones con Bordo/Cumplido tienen Retiro AFIP</td></tr>';
-  document.getElementById('resumenSR').textContent=`📄 ${fil.length} operaciones mostradas`;
+  // Selector de año (según la fecha del dato cargado)
+  var selAnio=document.getElementById('filtroAnioSR');
+  var anios=[...new Set(fuente.map(function(o){var f=aFechaLocal(campoSR(o));return f?f.getFullYear():null;}).filter(Boolean))].sort().reverse();
+  var cur=selAnio.value;
+  selAnio.innerHTML='<option value="">Todos</option><option value="ANTERIORES">Años anteriores</option>'+anios.map(function(a){return '<option value="'+a+'">'+a+'</option>';}).join('');
+  selAnio.value=(cur==='ANTERIORES'||anios.map(String).includes(cur))?cur:'';
+  var anioSel=selAnio.value;
+
+  var fil=fuente;
+  if(buscar) fil=fil.filter(function(o){return (o.operacion+(o.cliente||'')).toLowerCase().includes(buscar);});
+  if(anioSel) fil=fil.filter(function(o){
+    var f=aFechaLocal(campoSR(o));
+    if(!f) return false;
+    return anioSel==='ANTERIORES' ? f.getFullYear()<hoy.getFullYear() : String(f.getFullYear())===anioSel;
+  });
+  fil=[...fil].sort(function(a,b){return aFechaLocal(campoSR(a))-aFechaLocal(campoSR(b));});
+
+  document.getElementById('btnQuitarSR').style.display=verDesc?'none':'';
+  document.getElementById('btnRestaurarSR').style.display=verDesc?'':'none';
+
+  document.getElementById('tablaSR').innerHTML=fil.map(function(o){
+    var f=aFechaLocal(campoSR(o));
+    var dias=f?diasEntreFechas(f,hoy):null;
+    var nombreCampo=o.tipo_operacion==='EXPORTACION'?'Mercadería a bordo':'Plaza / Cumplido';
+    return '<tr>'+
+      '<td><input type="checkbox" class="chkSR" value="'+o.id+'" onchange="actualizarSelSR()" /></td>'+
+      '<td><strong>'+o.operacion+'</strong></td>'+
+      '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(o.cliente||'')+'">'+clienteCorto(o.cliente)+'</td>'+
+      '<td><span style="font-family:monospace;font-size:11px">'+(o.destinacion||o.codigo_regimen||'-')+'</span></td>'+
+      '<td>'+badgeTipo(o.tipo_operacion)+'</td>'+
+      '<td>'+badgeSIM(o.estado_sim)+'</td>'+
+      '<td style="font-size:11px">'+nombreCampo+'</td>'+
+      '<td style="font-size:11px">'+formatFecha(f)+'</td>'+
+      '<td>'+(dias!==null?dias+'d':'-')+'</td>'+
+      '<td>'+(o.pagada?'<span class="badge badge-pagado">Pagada</span>':'<span class="badge badge-pendiente">Pendiente</span>')+'</td>'+
+      '<td><div style="display:flex;gap:4px"><button class="btn btn-outline btn-sm" onclick="abrirFicha(\''+o.id+'\')">📋</button>'+
+      (verDesc
+        ? '<button class="btn btn-primary btn-sm" title="Restaurar a la lista" onclick="cambiarDescarteSR([\''+o.id+'\'],false)">↩</button>'
+        : '<button class="btn btn-danger btn-sm" title="Quitar de la lista" onclick="cambiarDescarteSR([\''+o.id+'\'],true)">✕</button>')+
+      '</div></td>'+
+    '</tr>';
+  }).join('')||'<tr><td colspan="11" style="text-align:center;color:#888;padding:20px">'+(verDesc?'Sin operaciones quitadas':'✓ Todas las operaciones con Bordo/Cumplido tienen Retiro AFIP')+'</td></tr>';
+  document.getElementById('resumenSR').textContent='📄 '+fil.length+' operaciones mostradas';
+  actualizarSelSR();
+};
+
+window.actualizarSelSR=function() {
+  var checks=document.querySelectorAll('.chkSR:checked');
+  var todos=document.querySelectorAll('.chkSR');
+  document.getElementById('selCountSR').textContent=checks.length+' seleccionadas';
+  document.getElementById('barraMasivaSR').style.display=checks.length>0?'flex':'none';
+  var ct=document.getElementById('checkTodosSR');
+  ct.indeterminate=checks.length>0&&checks.length<todos.length;
+  ct.checked=checks.length===todos.length&&todos.length>0;
+};
+window.toggleTodosSR=function(checked) {
+  document.querySelectorAll('.chkSR').forEach(function(c){c.checked=checked;});
+  actualizarSelSR();
+};
+window.deseleccionarSR=function() { toggleTodosSR(false); };
+window.limpiarFiltrosSR=function() {
+  document.getElementById('buscarSR').value='';
+  document.getElementById('filtroAnioSR').value='';
+  document.getElementById('filtroVerDescartadasSR').checked=false;
+  renderSinRetiro();
+};
+
+// Quitar de la lista / restaurar (no borra la operación: sigue en Pendientes/Pagadas y el reimport DUX no la vuelve a traer a esta lista)
+window.cambiarDescarteSR=async function(idsPar, descartar) {
+  var ids=Array.isArray(idsPar)?idsPar:[...document.querySelectorAll('.chkSR:checked')].map(function(c){return c.value;});
+  if(!ids.length){toast('No hay operaciones seleccionadas','error');return;}
+  var msg=descartar
+    ? '¿Quitar '+ids.length+' operación(es) de la lista Sin Retiro AFIP? (no se borran del sistema)'
+    : '¿Restaurar '+ids.length+' operación(es) a la lista Sin Retiro AFIP?';
+  if(!confirm(msg)) return;
+  mostrarCarga();
+  try {
+    var ahora=ahoraLocal();
+    var BATCH=240;
+    for(var i=0;i<ids.length;i+=BATCH) {
+      var batch=writeBatch(db);
+      ids.slice(i,i+BATCH).forEach(function(id){
+        var o=allOps.find(function(x){return x.id===id;});
+        if(!o) return;
+        batch.update(doc(db,'operaciones_vlp',id),{sin_retiro_descartado:descartar,ts_actualizacion:ahora});
+        batch.set(doc(collection(db,'log_conciliaciones')),{
+          tipo_evento:descartar?'SIN_RETIRO_DESCARTADO':'SIN_RETIRO_RESTAURADO',
+          operacion:o.operacion,
+          descripcion:descartar?'Operación quitada de la lista Sin Retiro AFIP':'Operación restaurada a la lista Sin Retiro AFIP',
+          vlp_archivo:'',dux_archivo:'',fecha_evento:ahora,usuario:currentUser.nombre,
+          datos_antes:{sin_retiro_descartado:!descartar},datos_despues:{sin_retiro_descartado:descartar}
+        });
+      });
+      await batch.commit();
+    }
+    ids.forEach(function(id){var o=allOps.find(function(x){return x.id===id;}); if(o) o.sin_retiro_descartado=descartar;});
+    renderSinRetiro();
+    renderDashboard();
+    toast(ids.length+(descartar?' operación(es) quitadas de la lista ✓':' operación(es) restauradas ✓'),'success');
+  } catch(e) {
+    console.error(e);
+    toast('Error al guardar. Intentá de nuevo.','error');
+  } finally { ocultarCarga(); }
 };
 
 window.exportarSinRetiroExcel=function(){
