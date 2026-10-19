@@ -2958,7 +2958,8 @@ window.renderRamiro = function(){
       tipo: 'Kotinya',
       fecha: o.fecha,
       cliente: o.cliente || '',
-      detalle: o.destinacion || '',
+      destinacion: o.destinacion || '',
+      detalle: o.obs || '',
       ramiroUsd: o.ramiroDeuda || 30,
       pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
       estado: o.ramiroOPagado || 'no',
@@ -2973,6 +2974,7 @@ window.renderRamiro = function(){
       tipo: 'Mudanza',
       fecha: m.fecha,
       cliente: m.cliente || '',
+      destinacion: m.destinacion || '',
       detalle: m.obs || '',
       ramiroUsd: m.ramiroUsd || 190,
       pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
@@ -3035,7 +3037,7 @@ window.renderRamiro = function(){
   const ramiroPaginacionEl = document.getElementById('ramiro-paginacion');
 
   if(!filtrados.length){
-    tbodyRamiro.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+    tbodyRamiro.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
     if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = '';
     actualizarInfoSeleccionRamiro();
     const chkTodasVacio = document.getElementById('ramiro_chk_todas');
@@ -3054,6 +3056,7 @@ window.renderRamiro = function(){
         <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
         <td>${i.fecha||''}</td>
         <td><strong>${i.cliente}</strong></td>
+        <td class="mono">${i.destinacion||'-'}</td>
         <td style="font-size:12px;color:#64748b;">${i.detalle}</td>
         <td style="font-weight:700;color:#dc2626;">USD ${i.ramiroUsd}</td>
         <td>$${fmt(i.pesos)}</td>
@@ -3119,12 +3122,13 @@ window.exportarRamiroExcel = function(){
 
   const ordenadas = [...seleccionadas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
 
-  const header = ['TIPO','FECHA','CLIENTE','DETALLE','USD RAMIRO','$ (TC)','ESTADO'];
+  const header = ['TIPO','FECHA','CLIENTE','DESTINACIÓN','DETALLE','USD RAMIRO','$ (TC)','ESTADO'];
 
   const rows = ordenadas.map(i => [
     i.tipo,
     i.fecha || '',
     i.cliente || '',
+    i.destinacion || '',
     i.detalle || '',
     dec2(i.ramiroUsd),
     dec2(i.pesos),
@@ -3133,13 +3137,13 @@ window.exportarRamiroExcel = function(){
 
   const totUsd   = ordenadas.reduce((a,b) => a + (b.ramiroUsd||0), 0);
   const totPesos = ordenadas.reduce((a,b) => a + (b.pesos||0), 0);
-  const totalRow = ['TOTAL', `${ordenadas.length} operación(es)`, '', '', dec2(totUsd), dec2(totPesos), ''].map(puntoSiVacio);
+  const totalRow = ['TOTAL', `${ordenadas.length} operación(es)`, '', '', '', dec2(totUsd), dec2(totPesos), ''].map(puntoSiVacio);
 
   const aoa = [header, ...rows, totalRow];
   const ws  = XLSX.utils.aoa_to_sheet(aoa);
 
   ws['!cols'] = [
-    {wch:10},{wch:11},{wch:20},{wch:26},{wch:12},{wch:12},{wch:11}
+    {wch:10},{wch:11},{wch:20},{wch:18},{wch:26},{wch:12},{wch:12},{wch:11}
   ];
 
   const lastCol = XLSX.utils.encode_col(header.length - 1);
@@ -3151,7 +3155,7 @@ window.exportarRamiroExcel = function(){
   {
     const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
     ws[addrCant] = { t:'str', v: `${rows.length} operación(es)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" operación(es)"` };
-    [4,5].forEach(c => {
+    [5,6].forEach(c => {
       const colLetter = XLSX.utils.encode_col(c);
       const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
       ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
@@ -3161,8 +3165,8 @@ window.exportarRamiroExcel = function(){
   estilizarHojaExcel(ws, {
     numCols: header.length,
     numDataRows: rows.length,
-    colsDecimal2: [4,5],
-    colsNumericas: [4,5]
+    colsDecimal2: [5,6],
+    colsNumericas: [5,6]
   });
 
   const wb = XLSX.utils.book_new();
