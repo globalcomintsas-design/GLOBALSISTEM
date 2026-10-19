@@ -1688,17 +1688,18 @@ window.renderDashboard = function(){
   const deudaTotalHoy = deudaHoyDesp + mudPendienteHoy;
 
   const etiquetaPeriodo = filtMes || 'histórico';
+  const incMudMonto = (x) => incluirMudEnTotales ? `<span style="color:#1e3a8a;font-weight:600;">📦 incluye mudanzas: $${fmt2(x)}</span>` : '<span style="color:#92400e;font-weight:600;">sin mudanzas</span>';
   const incMud = incluirMudEnTotales ? '<span style="color:#1e3a8a;font-weight:600;">📦 incluye mudanzas</span>' : '<span style="color:#92400e;font-weight:600;">sin mudanzas</span>';
   const kpiIniCierre = filtMes ? `
     <div class="kpi" style="border-color:#fde68a;background:#fffbeb;">
       <div class="kpi-label">📂 Deuda al inicio (1/${filtMes.slice(5,7)})</div>
       <div class="kpi-val" style="color:#b45309;">$${fmt2(deudaIni)}</div>
-      <div class="kpi-sub">Lo que quedaba por cobrar antes de ${filtMes} · ${incMud}</div>
+      <div class="kpi-sub">Lo que quedaba por cobrar antes de ${filtMes} · ${incMudMonto(mudIni)}</div>
     </div>
     <div class="kpi" style="border-color:${deudaCierre>0.005?'#fca5a5':'#86efac'};background:${deudaCierre>0.005?'#fef2f2':'#f0fdf4'};">
       <div class="kpi-label">📕 Deuda al cierre de ${filtMes}</div>
       <div class="kpi-val" style="color:${deudaCierre>0.005?'#dc2626':'#059669'};">$${fmt2(deudaCierre)}</div>
-      <div class="kpi-sub">Inicio + exigible del mes − cobrado del mes · ${incMud}</div>
+      <div class="kpi-sub">Inicio + exigible del mes − cobrado del mes · ${incMudMonto(mudCierre)}</div>
     </div>` : '';
 
   document.getElementById('kpis-wrap').innerHTML = `
@@ -1710,18 +1711,18 @@ window.renderDashboard = function(){
     <div class="kpi">
       <div class="kpi-label">🧾 Facturado (${etiquetaPeriodo})</div>
       <div class="kpi-val">$${fmt2(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt2(totNeto)} · trabajo hecho en el período · ${incMud}</div>
+      <div class="kpi-sub">Neto: $${fmt2(totNeto)} · trabajo hecho en el período · ${incMudMonto(totBrutoMud)}</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
       <div class="kpi-label">💰 Cobrado (${etiquetaPeriodo}) — plata que entró</div>
       <div class="kpi-val" style="color:#059669;">$${fmt2(totCobrado)}</div>
-      <div class="kpi-sub">Despachantes: $${fmt2(cobradoDesp)} (${nPagosPeriodo} pago${nPagosPeriodo===1?'':'s'})${incluirMudEnTotales?` · Mudanzas: $${fmt2(cobradoMudPeriodo)}`:''} · ${incMud}</div>
+      <div class="kpi-sub">Despachantes: $${fmt2(cobradoDesp)} (${nPagosPeriodo} pago${nPagosPeriodo===1?'':'s'}) · ${incMudMonto(cobradoMudPeriodo)}</div>
     </div>
     ${kpiIniCierre}
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
       <div class="kpi-val" style="color:#dc2626;font-size:30px;">$${fmt2(deudaTotalHoy)}</div>
-      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaHoyDesp)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}${aFavorHoy>0.005?` · A favor: $${fmt2(aFavorHoy)}`:''} · ${incMud}</div>
+      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaHoyDesp)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}${aFavorHoy>0.005?` · A favor: $${fmt2(aFavorHoy)}`:''} · ${incMudMonto(mudPendienteHoy)}</div>
     </div>
     ${!incluirMudEnTotales && mudFiltradas.length ? `
     <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
