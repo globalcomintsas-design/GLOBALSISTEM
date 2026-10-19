@@ -23,6 +23,7 @@ document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 let operaciones = [];
 let clientes = [];
 let mudanzas = [];
+let mudanzasCobros = []; // historial de cobros de mudanzas (con fecha real de cobro)
 let pagos = [];
 let despachantesNombres = [];
 let clientesNombres = [];
@@ -474,6 +475,13 @@ onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc'
   if(tabActivo.includes('Dashboard')) renderDashboard();
   if(tabActivo.includes('Ramiro'))   renderRamiro();
   if(tabActivo.includes('Clientes')) renderTablaClientesFinales();
+});
+
+// Cobros de mudanzas (historial con fecha real de cobro) — alimenta el "Cobrado del mes" del Dashboard
+onSnapshot(collection(db,'corresponsales_mudanzas_cobros'), snap => {
+  mudanzasCobros = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
 });
 
 // ── CAMBIO TIPO DESPACHO (select global) ──
@@ -1512,17 +1520,113 @@ function renderFiltros(){
   });
 }
 
-// ── RENDER DASHBOARD ──
+// ══════════════════════════════ HELPERS DE FECHA Y CORTES (Dashboard como cuenta corriente) ══════════════════════════════
+
+// Normaliza una fecha (ISO o dd/mm/yyyy) a 'YYYY-MM-DD'
+function fechaISO(f){
+  if(!f) return '';
+  const s = String(f).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+}
+window.fechaISO = fechaISO;
+
+function inicioDeMes(mes){ return mes + '-01'; }
+function inicioMesSiguiente(mes){
+  let [y,m] = mes.split('-').map(Number);
+  m++; if(m > 12){ m = 1; y++; }
+  return `${y}-${String(m).padStart(2,'0')}-01`;
+}
+
+// Saldo de un despachante ANTES de una fecha (excluye esa fecha): exigible acumulado − pagos acumulados.
+// Sin FIFO: es una cuenta corriente simple, por eso Saldo inicial + Exigible − Cobrado = Saldo final siempre cuadra.
+function saldoAntesDeFecha(nombre, fechaExclusiva){
+  const exigible = operaciones
+    .filter(o => o.despachante === nombre && (o.fecha||'') < fechaExclusiva)
+    .reduce((a,o) => a + montoExigible(o), 0);
+  const pagado = pagos
+    .filter(p => p.despachante === nombre && fechaISO(p.fecha) < fechaExclusiva)
+    .reduce((a,p) => a + (p.monto||0), 0);
+  return exigible - pagado;
+}
+window.saldoAntesDeFecha = saldoAntesDeFecha;
+
+// ── COBROS DE MUDANZAS CON FECHA ──
+// Devuelve [{fecha, monto, mudanzaId, legacy}]. Usa el historial (corresponsales_mudanzas_cobros)
+// y, para lo que ya figuraba como cobrado en la mudanza pero no tiene historial (datos viejos),
+// lo atribuye a la fecha de la mudanza. Nunca supera lo que dice montoCobrado de cada mudanza.
+function listarCobrosMudanzas(){
+  const out = [];
+  mudanzas.forEach(m => {
+    const cobradoTotal = estadoCobro(m).cobrado;
+    if(cobradoTotal <= 0.005) return;
+    const cobrosM = mudanzasCobros
+      .filter(c => c.mudanzaId === m.id)
+      .map(c => ({ fecha: fechaISO(c.fecha), monto: c.monto||0 }))
+      .sort((a,b) => a.fecha.localeCompare(b.fecha));
+    let acum = 0;
+    cobrosM.forEach(c => {
+      const tomar = Math.min(c.monto, cobradoTotal - acum);
+      if(tomar > 0.005){ out.push({ fecha:c.fecha, monto:tomar, mudanzaId:m.id, legacy:false }); acum += tomar; }
+    });
+    const resto = cobradoTotal - acum;
+    if(resto > 0.005) out.push({ fecha: fechaISO(m.fecha), monto: resto, mudanzaId: m.id, legacy: true });
+  });
+  return out;
+}
+window.listarCobrosMudanzas = listarCobrosMudanzas;
+
+// Saldo de mudanzas antes de una fecha: facturado (bruto) − cobrado, acumulado
+function saldoMudanzasAntesDeFecha(fechaExclusiva, cobros){
+  const facturado = mudanzas.filter(m => (m.fecha||'') < fechaExclusiva).reduce((a,m) => a + (m.bruto||0), 0);
+  const cobrado   = cobros.filter(c => c.fecha < fechaExclusiva).reduce((a,c) => a + c.monto, 0);
+  return facturado - cobrado;
+}
+
+// ── REGISTRAR COBRO DE UNA MUDANZA (con fecha real) ──
+window.registrarCobroMudanza = async function(id){
+  const m = mudanzas.find(x => x.id === id);
+  if(!m) return;
+  const est = estadoCobro(m);
+  const saldo = Math.max(0, est.saldo);
+  const montoTxt = prompt(`Cobro de la mudanza de ${m.cliente||''}${m.clienteFinal ? ' / '+m.clienteFinal : ''}\nBruto: $${fmt2(m.bruto)} · Cobrado: $${fmt2(est.cobrado)} · Saldo: $${fmt2(saldo)}\n\nMonto cobrado ahora ($):`, saldo > 0 ? String(Math.round(saldo*100)/100) : '');
+  if(montoTxt === null) return;
+  const monto = parseFloat(String(montoTxt).replace(',','.'));
+  if(!monto || monto <= 0){ toast('⚠️ Monto inválido'); return; }
+  if(monto > saldo + 0.5 && !confirm(`El monto ($${fmt2(monto)}) supera el saldo pendiente ($${fmt2(saldo)}). ¿Registrar igual?`)) return;
+  const fecha = prompt('Fecha del cobro (AAAA-MM-DD):', fechaLocalISO());
+  if(fecha === null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())){ toast('⚠️ Fecha inválida, usá AAAA-MM-DD'); return; }
+
+  try {
+    await addDoc(collection(db,'corresponsales_mudanzas_cobros'), {
+      mudanzaId: id, fecha: fecha.trim(), monto,
+      cargadoPor: user.username, ts: Date.now()
+    });
+    const nuevoCobrado = est.cobrado + monto;
+    await updateDoc(doc(db,'corresponsales_mudanzas', id), {
+      montoCobrado: nuevoCobrado,
+      cobrado: nuevoCobrado >= (m.bruto||0) - 0.5
+    });
+    toast('✅ Cobro registrado: $' + fmt(monto));
+  } catch(e){
+    toast('❌ Error al registrar el cobro: ' + e.message);
+  }
+};
+
+// ── RENDER DASHBOARD (estado de cuenta: Saldo inicial + Exigible − Cobrado = Saldo final) ──
 window.renderDashboard = function(){
   const filtMes  = document.getElementById('dash_mes')?.value || '';
   const filtCorr = document.getElementById('dash_despachante')?.value || '';
   let ops = [...operaciones];
-  if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
+  if(filtMes)  ops = ops.filter(o => mesDeFecha(o.fecha) === filtMes);
   if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
 
-  const mudFiltradas = mudanzas.filter(m => !filtMes || m.fecha?.startsWith(filtMes));
+  const mudFiltradas = mudanzas.filter(m => !filtMes || mesDeFecha(m.fecha) === filtMes);
   const incluirMudEnTotales = !filtCorr;
 
+  // ── Facturado del período (trabajo hecho) ──
   const totBrutoOps = ops.reduce((a,b) => a+(b.bruto||0), 0);
   const totNetoOps  = ops.reduce((a,b) => a+(b.neto||0), 0);
   const totUsdOps   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
@@ -1538,30 +1642,63 @@ window.renderDashboard = function(){
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
-  // Mudanzas: se limita cobrado a bruto y el saldo a >= 0, para que un exceso
-  // en una mudanza no tape lo que se debe en otras.
-  const cobradoMud = m => Math.min(estadoCobro(m).cobrado, m.bruto || 0);
-  const saldoMud   = m => Math.max(0, estadoCobro(m).saldo);
-  const mudPagado    = mudFiltradas.reduce((a,b) => a + cobradoMud(b), 0);
-  const mudPendiente = mudFiltradas.reduce((a,b) => a + saldoMud(b), 0);
+  // ── Estado de cuenta por despachante ──
+  // Cortes: inicio = fechas < 1° del mes; cierre = inicio + exigible del mes − pagos del mes.
+  const corteIni = filtMes ? inicioDeMes(filtMes) : '';
+  const nombresBase = filtCorr
+    ? [filtCorr]
+    : [...new Set([
+        ...clientes.map(c => c.nombre),
+        ...operaciones.map(o => o.despachante),
+        ...pagos.map(p => p.despachante)
+      ].filter(Boolean))].sort();
 
-  // Despachantes: mismo cálculo que la pestaña Saldos (exigible + FIFO),
-  // por mes si hay mes elegido, o histórico si no.
-  const despFiltrados = filtCorr ? [filtCorr] : [...new Set(ops.map(o => o.despachante).filter(Boolean))];
-  let cobradoDesp = 0, pendienteDesp = 0;
-  despFiltrados.forEach(n => {
-    const r = calcularSaldoDespachante(n, filtMes);
-    cobradoDesp   += r.pagado;
-    pendienteDesp += Math.max(0, r.saldo);
+  const estadoDesp = nombresBase.map(n => {
+    const opsMes = operaciones.filter(o => o.despachante === n && (!filtMes || mesDeFecha(o.fecha) === filtMes));
+    const pagosMes = pagos.filter(p => p.despachante === n && (!filtMes || mesDeFecha(p.fecha) === filtMes));
+    const ini    = filtMes ? saldoAntesDeFecha(n, corteIni) : 0;
+    const exig   = opsMes.reduce((a,o) => a + montoExigible(o), 0);
+    const bruto  = opsMes.reduce((a,o) => a + (o.bruto||0), 0);
+    const cob    = pagosMes.reduce((a,p) => a + (p.monto||0), 0);
+    const cierre = ini + exig - cob;
+    const hoy    = calcularSaldoDespachante(n).saldo;
+    return { nombre:n, ops:opsMes.length, ini, exig, bruto, cob, cierre, hoy, nPagos: pagosMes.length };
   });
 
-  const totCobradoPeriodo   = cobradoDesp   + (incluirMudEnTotales ? mudPagado    : 0);
-  const totPendientePeriodo = pendienteDesp + (incluirMudEnTotales ? mudPendiente : 0);
+  const cobradoDesp   = estadoDesp.reduce((a,e) => a + e.cob, 0);
+  const nPagosPeriodo = estadoDesp.reduce((a,e) => a + e.nPagos, 0);
+  const deudaIniDesp    = estadoDesp.reduce((a,e) => a + Math.max(0, e.ini), 0);
+  const deudaCierreDesp = estadoDesp.reduce((a,e) => a + Math.max(0, e.cierre), 0);
+  const deudaHoyDesp    = estadoDesp.reduce((a,e) => a + Math.max(0, e.hoy), 0);
+  const aFavorHoy       = estadoDesp.reduce((a,e) => a + Math.max(0, -e.hoy), 0);
 
-  const nombresParaDeuda = filtCorr ? [filtCorr] : [...new Set(clientes.map(c => c.nombre))];
-  const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + Math.max(0, calcularSaldoDespachante(n).saldo), 0);
+  // ── Mudanzas: cobrado por FECHA REAL de cobro ──
+  const cobrosMud = listarCobrosMudanzas();
+  const cobradoMudPeriodo = cobrosMud
+    .filter(c => !filtMes || c.fecha.slice(0,7) === filtMes)
+    .reduce((a,c) => a + c.monto, 0);
+  const saldoMud = m => Math.max(0, estadoCobro(m).saldo);
   const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + saldoMud(b), 0);
-  const deudaTotalHoy = deudaDespachantesHoy + mudPendienteHoy;
+  const mudIni    = (filtMes && !filtCorr) ? Math.max(0, saldoMudanzasAntesDeFecha(corteIni, cobrosMud)) : 0;
+  const mudCierre = (filtMes && !filtCorr) ? Math.max(0, saldoMudanzasAntesDeFecha(inicioMesSiguiente(filtMes), cobrosMud)) : 0;
+
+  const totCobrado = cobradoDesp + (incluirMudEnTotales ? cobradoMudPeriodo : 0);
+  const deudaIni    = deudaIniDesp    + (incluirMudEnTotales ? mudIni    : 0);
+  const deudaCierre = deudaCierreDesp + (incluirMudEnTotales ? mudCierre : 0);
+  const deudaTotalHoy = deudaHoyDesp + mudPendienteHoy;
+
+  const etiquetaPeriodo = filtMes || 'histórico';
+  const kpiIniCierre = filtMes ? `
+    <div class="kpi" style="border-color:#fde68a;background:#fffbeb;">
+      <div class="kpi-label">📂 Deuda al inicio (1/${filtMes.slice(5,7)})</div>
+      <div class="kpi-val" style="color:#b45309;">$${fmt2(deudaIni)}</div>
+      <div class="kpi-sub">Lo que quedaba por cobrar antes de ${filtMes}</div>
+    </div>
+    <div class="kpi" style="border-color:${deudaCierre>0.005?'#fca5a5':'#86efac'};background:${deudaCierre>0.005?'#fef2f2':'#f0fdf4'};">
+      <div class="kpi-label">📕 Deuda al cierre de ${filtMes}</div>
+      <div class="kpi-val" style="color:${deudaCierre>0.005?'#dc2626':'#059669'};">$${fmt2(deudaCierre)}</div>
+      <div class="kpi-sub">Inicio + exigible del mes − cobrado del mes</div>
+    </div>` : '';
 
   document.getElementById('kpis-wrap').innerHTML = `
     <div class="kpi accent">
@@ -1570,24 +1707,20 @@ window.renderDashboard = function(){
       <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}${incluirMudEnTotales?` · Mudanzas: ${mudFiltradas.length}`:''}</div>
     </div>
     <div class="kpi">
-      <div class="kpi-label">Facturado (este período)</div>
+      <div class="kpi-label">🧾 Facturado (${etiquetaPeriodo})</div>
       <div class="kpi-val">$${fmt2(totBruto)}</div>
-      <div class="kpi-sub">Neto: $${fmt2(totNeto)}${incluirMudEnTotales&&mudFiltradas.length?` (incl. mudanzas)`:''}</div>
+      <div class="kpi-sub">Neto: $${fmt2(totNeto)} · trabajo hecho en el período</div>
     </div>
     <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
-      <div class="kpi-label">💰 Cobrado (este período)</div>
-      <div class="kpi-val" style="color:#059669;">$${fmt2(totCobradoPeriodo)}</div>
-      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas cobradas: $${fmt2(mudPagado)}`:''}</div>
+      <div class="kpi-label">💰 Cobrado (${etiquetaPeriodo}) — plata que entró</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt2(totCobrado)}</div>
+      <div class="kpi-sub">Despachantes: $${fmt2(cobradoDesp)} (${nPagosPeriodo} pago${nPagosPeriodo===1?'':'s'})${incluirMudEnTotales?` · Mudanzas: $${fmt2(cobradoMudPeriodo)}`:''}</div>
     </div>
-    <div class="kpi" style="border-color:${totPendientePeriodo>0.005?'#fca5a5':'#86efac'};background:${totPendientePeriodo>0.005?'#fef2f2':'#f0fdf4'};">
-      <div class="kpi-label">⚖️ Pendiente (este período)</div>
-      <div class="kpi-val" style="color:${totPendientePeriodo>0.005?'#dc2626':'#059669'};">$${fmt2(totPendientePeriodo)}</div>
-      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas sin cobrar: $${fmt2(mudPendiente)}`:'Exigible − cobertura (igual que Saldos)'}</div>
-    </div>
-    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;grid-column:span 1;">
+    ${kpiIniCierre}
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
       <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
       <div class="kpi-val" style="color:#dc2626;font-size:30px;">$${fmt2(deudaTotalHoy)}</div>
-      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaDespachantesHoy)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}</div>
+      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaHoyDesp)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}${aFavorHoy>0.005?` · A favor: $${fmt2(aFavorHoy)}`:''}</div>
     </div>
     ${!incluirMudEnTotales && mudFiltradas.length ? `
     <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
@@ -1597,22 +1730,65 @@ window.renderDashboard = function(){
     </div>` : ''}
   `;
 
-  const _mesActualDash = mesLocalISO();
-  const mesTablaDesp = filtMes || _mesActualDash;
-  const opsMesTabla = operaciones.filter(o => mesDeFecha(o.fecha) === mesTablaDesp && (!filtCorr || o.despachante === filtCorr));
+  // ── Tabla: estado de cuenta por despachante ──
+  const filasEstado = estadoDesp
+    .filter(e => filtCorr || e.ops || e.nPagos || Math.abs(e.ini) > 0.005 || Math.abs(e.cierre) > 0.005)
+    .sort((a,b) => b.cierre - a.cierre);
 
-  const byCorr = {};
-  opsMesTabla.forEach(o => {
-    if(!byCorr[o.despachante]) byCorr[o.despachante] = {ops:0, bruto:0};
-    byCorr[o.despachante].ops++;
-    byCorr[o.despachante].bruto += o.bruto||0;
-  });
-  pagos.filter(p => mesDeFecha(p.fecha) === mesTablaDesp && (!filtCorr || p.despachante === filtCorr)).forEach(p => {
-    if(!byCorr[p.despachante]) byCorr[p.despachante] = {ops:0, bruto:0};
-  });
-  if(!filtCorr){
-    despachantesNombres.forEach(n => { if(!byCorr[n]) byCorr[n] = {ops:0, bruto:0}; });
-  }
+  const totIni = filasEstado.reduce((a,e) => a + e.ini, 0);
+  const totExig = filasEstado.reduce((a,e) => a + e.exig, 0);
+  const totCob = filasEstado.reduce((a,e) => a + e.cob, 0);
+  const totCierre = filasEstado.reduce((a,e) => a + e.cierre, 0);
+  const totOpsTabla = filasEstado.reduce((a,e) => a + e.ops, 0);
+
+  const colorSaldo = s => s > 0.005 ? '#dc2626' : (s < -0.005 ? '#059669' : '#64748b');
+  const th = 'padding:5px 6px;text-align:right;';
+
+  const tituloDespachantes = filtMes
+    ? `📒 Estado de cuenta — ${filtMes}${filtCorr ? ' · ' + filtCorr : ''}`
+    : `📒 Estado de cuenta — histórico${filtCorr ? ' · ' + filtCorr : ''}`;
+
+  const cardDespachantes = `
+    <div class="section-card" style="margin:0;grid-column:1 / -1;">
+      <h3>${tituloDespachantes}</h3>
+      <div style="overflow-x:auto;">
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;">
+          <th style="padding:5px 6px;text-align:left;">Despachante</th>
+          <th style="${th}">Saldo anterior $</th>
+          <th style="${th}">Ops</th>
+          <th style="${th}">Exigible del mes $</th>
+          <th style="${th}">Pagó en el mes $</th>
+          <th style="${th}">Saldo al cierre $</th>
+          <th style="${th}">Saldo HOY $</th>
+        </tr></thead>
+        <tbody>
+          ${filasEstado.map(e => `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:5px 6px;"><strong>${e.nombre}</strong></td>
+              <td style="${th}color:${colorSaldo(e.ini)};">$${fmt2(e.ini)}</td>
+              <td style="${th}">${e.ops}</td>
+              <td style="${th}font-weight:600;color:#1e3a8a;">$${fmt2(e.exig)}</td>
+              <td style="${th}color:#059669;">$${fmt2(e.cob)}</td>
+              <td style="${th}font-weight:700;color:${colorSaldo(e.cierre)};">$${fmt2(e.cierre)}</td>
+              <td style="${th}color:${colorSaldo(e.hoy)};">$${fmt2(e.hoy)}</td>
+            </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:12px;">Sin movimientos en ${etiquetaPeriodo}</td></tr>`}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+            <td style="padding:6px;">TOTAL</td>
+            <td style="${th}">$${fmt2(totIni)}</td>
+            <td style="${th}">${totOpsTabla}</td>
+            <td style="${th}color:#1e3a8a;">$${fmt2(totExig)}</td>
+            <td style="${th}color:#059669;">$${fmt2(totCob)}</td>
+            <td style="${th}color:${colorSaldo(totCierre)};">$${fmt2(totCierre)}</td>
+            <td style="${th}"></td>
+          </tr>
+        </tfoot>
+      </table>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 Cada fila cuadra: <strong>Saldo anterior + Exigible del mes − Pagó en el mes = Saldo al cierre</strong>. "Pagó en el mes" son los pagos con <strong>fecha de pago</strong> dentro del mes (aunque correspondan a operaciones de meses anteriores). "Exigible" es el Neto de las operaciones sin N° de factura y el Neto+IVA de las ya facturadas (igual que en Saldos). Los saldos son una cuenta corriente acumulada, sin reparto FIFO; el detalle de qué operación puntual quedó impaga está en el Listado. Si no elegís mes, se muestra todo el histórico.</div>
+    </div>`;
 
   const byClienteMud = {};
   mudFiltradas.forEach(m => {
@@ -1626,28 +1802,6 @@ window.renderDashboard = function(){
     .map(m => ({ ...m, _est: estadoResidencia(m) }))
     .filter(m => m._est.clase !== 'ok')
     .sort((a,b) => (a.vencimientoResidencia||'').localeCompare(b.vencimientoResidencia||''));
-
-  const esMesActualTabla = mesTablaDesp === _mesActualDash;
-  const tituloDespachantes = filtCorr
-    ? `Despachante seleccionado: ${filtCorr} — ${esMesActualTabla ? 'mes en curso' : 'mes'} (${mesTablaDesp})`
-    : `Despachantes — ${esMesActualTabla ? 'mes en curso' : 'mes'} (${mesTablaDesp})`;
-
-  const cardDespachantes = `
-    <div class="section-card" style="margin:0;">
-      <h3>${tituloDespachantes}</h3>
-      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
-        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Despachante</th><th style="padding:5px 6px;text-align:right;">Ops</th><th style="padding:5px 6px;text-align:right;">Total $</th><th style="padding:5px 6px;text-align:right;">Pagado $</th><th style="padding:5px 6px;text-align:right;">Saldo $</th></tr></thead>
-        <tbody>
-          ${Object.entries(byCorr).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) => {
-            const pagadoMes = pagos.filter(p => p.despachante === k && mesDeFecha(p.fecha) === mesTablaDesp).reduce((a,b)=>a+(b.monto||0),0);
-            const { saldo } = calcularSaldoDespachante(k);
-            const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
-            return `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;">${k}</td><td style="padding:5px 6px;text-align:right;">${v.ops}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td><td style="padding:5px 6px;text-align:right;color:#059669;">$${fmt2(pagadoMes)}</td><td style="padding:5px 6px;text-align:right;font-weight:700;color:${colorSaldo};">$${fmt2(saldo)}</td></tr>`;
-          }).join('') || `<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:12px;">${filtCorr ? 'Sin operaciones ni pagos de este despachante en ' + mesTablaDesp : 'Sin operaciones, pagos ni despachantes registrados en ' + mesTablaDesp}</td></tr>`}
-        </tbody>
-      </table>
-      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 "Ops" y "Total" son operaciones cargadas en <strong>${mesTablaDesp}</strong> (el mes que elegiste arriba en el filtro; si no elegís ninguno, muestra el mes calendario actual). "Pagado" es lo que ese despachante pagó en ese mismo mes. "Saldo" es el saldo histórico real (Neto de operaciones sin factura + Neto+IVA de operaciones ya facturadas, menos todos los pagos), igual al que ves en la pestaña Saldos — no se limita al mes de arriba.</div>
-    </div>`;
 
   const cardResidencia = `
     <div class="section-card" style="margin:0;">
@@ -2515,7 +2669,14 @@ window.guardarMudanza = async function(){
   };
 
   try {
-    await addDoc(collection(db,'corresponsales_mudanzas'), mud);
+    const ref = await addDoc(collection(db,'corresponsales_mudanzas'), mud);
+    // Si ya se carga con un monto cobrado, queda registrado como cobro de la fecha de la mudanza
+    if(vals.montoCobrado > 0){
+      await addDoc(collection(db,'corresponsales_mudanzas_cobros'), {
+        mudanzaId: ref.id, fecha, monto: vals.montoCobrado,
+        cargadoPor: user.username, ts: Date.now()
+      });
+    }
     toast('✅ Mudanza guardada');
     limpiarMudanza();
   } catch(e){
@@ -2547,6 +2708,10 @@ window.limpiarMudanza = function(){
 window.eliminarMudanza = async function(id){
   if(!confirm('¿Eliminar esta mudanza?')) return;
   await deleteDoc(doc(db,'corresponsales_mudanzas',id));
+  // También se borran sus cobros registrados, para que no queden huérfanos
+  for(const c of mudanzasCobros.filter(x => x.mudanzaId === id)){
+    await deleteDoc(doc(db,'corresponsales_mudanzas_cobros', c.id));
+  }
   toast('Mudanza eliminada');
 };
 
@@ -2741,6 +2906,7 @@ function renderMudanzas(){
       <td><span class="tag" style="background:${estRes.bg};color:${estRes.color};">${m.vencimientoResidencia ? m.vencimientoResidencia+' · ' : ''}${estRes.label}</span></td>
       <td style="font-size:11px;color:#64748b;">${m.obs||''}</td>
       <td style="display:flex;gap:6px;">
+        ${estCobro.estado !== 'si' ? `<button class="btn-success" style="padding:4px 10px;font-size:12px;" title="Registrar un cobro con su fecha" onclick="registrarCobroMudanza('${m.id}')">💰 Cobro</button>` : ''}
         <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarMudanza('${m.id}')">✏️ Editar</button>
         <button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button>
       </td>
@@ -3205,6 +3371,11 @@ window.eliminarRamiroItem = async function(id, col, tipo){
   if(!confirm(msg)) return;
   const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
   await deleteDoc(doc(db, colName, id));
+  if(col === 'mudanzas'){
+    for(const c of mudanzasCobros.filter(x => x.mudanzaId === id)){
+      await deleteDoc(doc(db,'corresponsales_mudanzas_cobros', c.id));
+    }
+  }
   toast('Registro eliminado');
 };
 
