@@ -334,11 +334,13 @@ function generarNumOp(){
 }
 
 // ── FIRESTORE listeners ──
-// Ops: tiempo real pero solo año en curso (fecha es string YYYY-MM-DD)
+// Ops: tiempo real, TODAS las operaciones (sin filtro de año). Antes se cargaba solo el
+// año en curso mientras los pagos se cargaban de todos los años, y eso desbalanceaba
+// los saldos del Dashboard (pagos viejos restando contra operaciones nuevas).
 const _anioActual = new Date().getFullYear();
-const _fechaDesde = _anioActual + '-01-01';
+const _fechaDesde = _anioActual + '-01-01'; // ya no se usa en las queries; se deja por compatibilidad
 
-onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=',_fechaDesde), orderBy('fecha','asc')), snap => {
+onSnapshot(query(collection(db,'despachantees_ops'), orderBy('fecha','asc')), snap => {
   operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
   datosCargados = true;
   renderFiltros();
@@ -358,6 +360,8 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
   pagos = snap.docs.map(d => ({id:d.id, ...d.data()}));
   window.pagos = pagos;
   renderSaldos();
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
 });
 
 // ── TARIFAS: persistencia en Firestore ──
@@ -462,11 +466,12 @@ onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
   renderTablaClientesFinales();
 });
 
-// Mudanzas: tiempo real, solo año en curso
-onSnapshot(query(collection(db,'corresponsales_mudanzas'), where('fecha','>=',_fechaDesde), orderBy('fecha','asc')), snap => {
+// Mudanzas: tiempo real, TODAS (sin filtro de año)
+onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
   mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
   renderMudanzas();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
   if(tabActivo.includes('Ramiro'))   renderRamiro();
   if(tabActivo.includes('Clientes')) renderTablaClientesFinales();
 });
@@ -1533,22 +1538,29 @@ window.renderDashboard = function(){
   const canales  = {V:0,N:0,R:0};
   ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
 
-  const despFiltrados = [...new Set(ops.map(o => o.despachante).filter(Boolean))];
-  let totCobradoPeriodo = pagos
-    .filter(p => despFiltrados.includes(p.despachante) && (!filtCorr || p.despachante === filtCorr) && (!filtMes || mesDeFecha(p.fecha) === filtMes))
-    .reduce((a,b) => a + (b.monto||0), 0);
+  // Mudanzas: se limita cobrado a bruto y el saldo a >= 0, para que un exceso
+  // en una mudanza no tape lo que se debe en otras.
+  const cobradoMud = m => Math.min(estadoCobro(m).cobrado, m.bruto || 0);
+  const saldoMud   = m => Math.max(0, estadoCobro(m).saldo);
+  const mudPagado    = mudFiltradas.reduce((a,b) => a + cobradoMud(b), 0);
+  const mudPendiente = mudFiltradas.reduce((a,b) => a + saldoMud(b), 0);
 
-  const mudPagado    = mudFiltradas.reduce((a,b) => a + estadoCobro(b).cobrado, 0);
-  const mudPendiente = mudFiltradas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
-  if(incluirMudEnTotales){
-    totCobradoPeriodo += mudPagado;
-  }
+  // Despachantes: mismo cálculo que la pestaña Saldos (exigible + FIFO),
+  // por mes si hay mes elegido, o histórico si no.
+  const despFiltrados = filtCorr ? [filtCorr] : [...new Set(ops.map(o => o.despachante).filter(Boolean))];
+  let cobradoDesp = 0, pendienteDesp = 0;
+  despFiltrados.forEach(n => {
+    const r = calcularSaldoDespachante(n, filtMes);
+    cobradoDesp   += r.pagado;
+    pendienteDesp += Math.max(0, r.saldo);
+  });
 
-  const totPendientePeriodo = totBruto - totCobradoPeriodo;
+  const totCobradoPeriodo   = cobradoDesp   + (incluirMudEnTotales ? mudPagado    : 0);
+  const totPendientePeriodo = pendienteDesp + (incluirMudEnTotales ? mudPendiente : 0);
 
   const nombresParaDeuda = filtCorr ? [filtCorr] : [...new Set(clientes.map(c => c.nombre))];
-  const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + calcularSaldoDespachante(n).saldo, 0);
-  const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
+  const deudaDespachantesHoy = nombresParaDeuda.reduce((a,n) => a + Math.max(0, calcularSaldoDespachante(n).saldo), 0);
+  const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + saldoMud(b), 0);
   const deudaTotalHoy = deudaDespachantesHoy + mudPendienteHoy;
 
   document.getElementById('kpis-wrap').innerHTML = `
@@ -1570,7 +1582,7 @@ window.renderDashboard = function(){
     <div class="kpi" style="border-color:${totPendientePeriodo>0.005?'#fca5a5':'#86efac'};background:${totPendientePeriodo>0.005?'#fef2f2':'#f0fdf4'};">
       <div class="kpi-label">⚖️ Pendiente (este período)</div>
       <div class="kpi-val" style="color:${totPendientePeriodo>0.005?'#dc2626':'#059669'};">$${fmt2(totPendientePeriodo)}</div>
-      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas sin cobrar: $${fmt2(mudPendiente)}`:'Facturado − cobrado del período'}</div>
+      <div class="kpi-sub">${incluirMudEnTotales&&mudFiltradas.length?`Incl. mudanzas sin cobrar: $${fmt2(mudPendiente)}`:'Exigible − cobertura (igual que Saldos)'}</div>
     </div>
     <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;grid-column:span 1;">
       <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
@@ -1736,7 +1748,7 @@ function calcularCoberturaExigibleFIFO(nombre){
   const pagosGenericos  = pagosDesp.filter(p => !(p.numFactura && String(p.numFactura).trim()));
 
   const ops = operaciones.filter(o => o.despachante === nombre)
-    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(a.ts||0))
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(b.ts||0))
     .map(o => ({ ...o, exigible: montoExigible(o), cubierto: 0 }));
 
   let poolGenerico = pagosGenericos.reduce((a,b) => a + (b.monto||0), 0);
