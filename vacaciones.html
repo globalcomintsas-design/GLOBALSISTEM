@@ -186,6 +186,7 @@ tr:hover td{background:#fafbff;}
           <div class="field"><label>Días (calculado)</label><input type="text" id="vacDias" readonly style="background:#f0fdf4;font-weight:700;color:#16a34a" placeholder="—" /></div>
           <div class="field full"><label>Observaciones (opcional)</label><input type="text" id="vacObs" placeholder="Ej: vacaciones anuales, día por estudio, etc." /></div>
         </div>
+        <div id="vacNota" style="font-size:11px;color:#d97706;margin:-4px 0 10px;"></div>
         <button class="btn btn-primary" onclick="guardarVacacion()">💾 Guardar vacaciones</button>
       </div>
     </div>
@@ -228,9 +229,24 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
+    <!-- Feriados del año -->
+    <div class="destinos-card" id="cardFeriados">
+      <div class="destinos-card-header" onclick="toggleCard('cardFeriados')">
+        <div class="destinos-card-header-left">
+          <div class="destinos-card-icon">🇦🇷</div>
+          <div>
+            <div class="destinos-card-title">Feriados del año</div>
+            <div class="destinos-card-sub" id="feriadosSub">—</div>
+          </div>
+        </div>
+        <div class="destinos-card-toggle">▾</div>
+      </div>
+      <div class="destinos-card-body" id="feriadosBody"></div>
+    </div>
+
     <!-- Resumen por empleado -->
     <div class="section">
-      <div class="section-title">Resumen por Empleado (año <span id="anioResumen">—</span>)</div>
+      <div class="section-title">Resumen por Empleado (año <select id="selAnioVac" onchange="cambiarAnioVac(this.value)" style="padding:4px 8px;border-radius:6px;border:1.5px solid #bfdbfe;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;color:#1e3a8a;background:#fff;"></select>)</div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Empleado</th><th>Días tomados</th><th>Tope base</th><th>Acumulado</th><th>Tope total</th><th>Disponibles</th><th>Estado</th></tr></thead>
@@ -280,6 +296,28 @@ let currentUser = null;
 let allVac = [];           // todos los registros de vacaciones (cargados UNA vez, actualizados localmente después)
 let topePorEmpleado = {};  // { 'Bruno Cola': 14, 'María Angeles': 10, ... }
 const TOPE_DEFAULT = 14;   // tope por defecto si no hay config
+let anioSel = null;        // año elegido en el selector del resumen (null = año actual)
+
+// Feriados nacionales (Ley 27.399 + puentes por decreto). Para agregar uno nuevo
+// (ej. puentes turísticos 2027 cuando salga el decreto) sumá una línea 'AAAA-MM-DD':'Nombre'.
+const FERIADOS = {
+  '2026-01-01':'Año Nuevo','2026-02-16':'Carnaval','2026-02-17':'Carnaval',
+  '2026-03-23':'Puente turístico','2026-03-24':'Día de la Memoria','2026-04-02':'Día de Malvinas',
+  '2026-04-03':'Viernes Santo','2026-05-01':'Día del Trabajador','2026-05-25':'Revolución de Mayo',
+  '2026-06-15':'Paso a la Inmortalidad de Güemes (trasladado)','2026-06-20':'Día de la Bandera',
+  '2026-07-09':'Día de la Independencia','2026-07-10':'Puente turístico',
+  '2026-08-17':'Paso a la Inmortalidad de San Martín','2026-10-12':'Respeto a la Diversidad Cultural',
+  '2026-11-23':'Soberanía Nacional (trasladado)','2026-12-07':'Puente turístico',
+  '2026-12-08':'Inmaculada Concepción','2026-12-25':'Navidad',
+  '2027-01-01':'Año Nuevo','2027-02-08':'Carnaval','2027-02-09':'Carnaval',
+  '2027-03-24':'Día de la Memoria','2027-03-26':'Viernes Santo','2027-04-02':'Día de Malvinas',
+  '2027-05-01':'Día del Trabajador','2027-05-25':'Revolución de Mayo',
+  '2027-06-20':'Día de la Bandera','2027-06-21':'Paso a la Inmortalidad de Güemes (trasladado)',
+  '2027-07-09':'Día de la Independencia','2027-08-16':'Paso a la Inmortalidad de San Martín (trasladado)',
+  '2027-10-11':'Respeto a la Diversidad Cultural (trasladado)',
+  '2027-11-20':'Soberanía Nacional (cae sábado, traslado a confirmar)',
+  '2027-12-08':'Inmaculada Concepción','2027-12-25':'Navidad'
+};
 
 // ── HELPERS ──────────────────────────────────────────────
 function fmtMoney(n){ return '$ '+Number(n||0).toLocaleString('es-AR'); }
@@ -474,6 +512,65 @@ function refrescarSelectsEmpleados(){
 }
 
 // ── CÁLCULO DE DÍAS ──────────────────────────────────────
+function isoLocal(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+// Días de vacaciones a descontar: días corridos del rango MENOS los lunes feriados
+// (cuando el feriado cae lunes, el conteo sigue desde el día siguiente).
+function diasVacaciones(desde, hasta){
+  const total = diasEntre(desde, hasta);
+  const lunes = [];
+  if(total>0){
+    const d = new Date(desde+'T00:00:00');
+    for(let i=0;i<total;i++){
+      if(d.getDay()===1){
+        const k = isoLocal(d);
+        if(FERIADOS[k]) lunes.push({fecha:k, nombre:FERIADOS[k]});
+      }
+      d.setDate(d.getDate()+1);
+    }
+  }
+  return { total, dias: total-lunes.length, lunes };
+}
+
+// Años disponibles en el selector: el actual, el siguiente a partir de octubre,
+// y cualquier año que ya tenga registros.
+function anioOpciones(){
+  const hoy = new Date();
+  const a = hoy.getFullYear();
+  const set = new Set([a]);
+  if(hoy.getMonth()>=9) set.add(a+1);
+  allVac.forEach(v=>{ if(v.desde) set.add(parseInt(v.desde.substring(0,4))); });
+  return [...set].filter(x=>!isNaN(x)).sort((x,y)=>x-y);
+}
+function anioSelec(){
+  return (anioSel && anioOpciones().includes(anioSel)) ? anioSel : new Date().getFullYear();
+}
+function poblarSelectorAnio(sel){
+  const el = document.getElementById('selAnioVac');
+  if(!el) return;
+  el.innerHTML = anioOpciones().map(a=>`<option value="${a}" ${a===sel?'selected':''}>${a}</option>`).join('');
+}
+window.cambiarAnioVac = function(v){ anioSel = parseInt(v); renderVacaciones(); };
+
+function renderFeriados(anio){
+  const body = document.getElementById('feriadosBody');
+  const sub = document.getElementById('feriadosSub');
+  if(!body) return;
+  const nombres = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const lista = Object.keys(FERIADOS).filter(k=>k.startsWith(anio+'-')).sort();
+  let lun = 0;
+  const filas = lista.map(k=>{
+    const d = new Date(k+'T00:00:00');
+    const esL = d.getDay()===1;
+    if(esL) lun++;
+    return `<tr><td>${k.split('-').reverse().join('/')}</td><td>${nombres[d.getDay()]}</td><td>${FERIADOS[k]}</td><td>${esL?'<span style="color:#d97706;font-weight:600">Lunes: no se cuenta</span>':''}</td></tr>`;
+  }).join('');
+  body.innerHTML = lista.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Día</th><th>Feriado</th><th>Vacaciones</th></tr></thead><tbody>${filas}</tbody></table></div>`
+    : `<div style="color:#888;padding:8px">No hay feriados cargados para ${anio}.</div>`;
+  if(sub) sub.textContent = `${anio}: ${lista.length} feriados · ${lun} caen lunes (no se cuentan en vacaciones)`;
+}
 // Días naturales entre dos fechas (inclusivo). Ej: 2024-06-10 a 2024-06-14 = 5 días.
 function diasEntre(desde, hasta){
   if(!desde || !hasta) return 0;
@@ -487,9 +584,16 @@ function diasEntre(desde, hasta){
 window.calcularDiasVac=function(){
   const desde=document.getElementById('vacDesde')?.value||'';
   const hasta=document.getElementById('vacHasta')?.value||'';
-  const dias=diasEntre(desde,hasta);
+  const r=diasVacaciones(desde,hasta);
+  const dias=r.dias;
   const el=document.getElementById('vacDias');
   if(el) el.value=dias>0?dias+' día'+(dias===1?'':'s'):'';
+  const nota=document.getElementById('vacNota');
+  if(nota){
+    nota.textContent = r.lunes.length
+      ? '📌 '+r.total+' días corridos − '+r.lunes.length+' lunes feriado'+(r.lunes.length===1?'':'s')+' (no se cuenta'+(r.lunes.length===1?'':'n')+'): '+r.lunes.map(x=>x.fecha.split('-').reverse().join('/')+' '+x.nombre).join(', ')
+      : '';
+  }
 };
 
 // ── GUARDAR / ELIMINAR ───────────────────────────────────
@@ -500,10 +604,12 @@ window.guardarVacacion=async function(){
   const hasta=document.getElementById('vacHasta').value;
   const obs=document.getElementById('vacObs').value.trim();
   if(!empleado||!desde||!hasta){toast('Completá empleado, fecha desde y fecha hasta','error');return;}
-  const dias=diasEntre(desde,hasta);
-  if(dias<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
+  const calc=diasVacaciones(desde,hasta);
+  if(calc.total<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
+  const dias=calc.dias;
+  if(dias<=0){toast('El período solo incluye lunes feriados: no suma días','error');return;}
   // Aviso (no bloqueante) si se pasa del tope anual efectivo (base + acumulado de años anteriores)
-  const anioActual=new Date().getFullYear();
+  const anioActual=new Date(desde+'T00:00:00').getFullYear();  // año al que pertenece este período
   const yaTomados=allVac
     .filter(v=>v.empleado===empleado)
     .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
@@ -516,6 +622,7 @@ window.guardarVacacion=async function(){
   }
   try {
     const nuevo={ empleado, desde, hasta, dias, obs, creadoPor:currentUser.nombre, ts:Date.now() };
+    if(calc.lunes.length) nuevo.lunesFeriados = calc.lunes.map(x=>x.fecha);
     const ref = await addDoc(collection(db,'vacaciones'), nuevo);
     nuevo.id = ref.id;
     // Actualiza el array local en vez de releer toda la colección
@@ -524,6 +631,7 @@ window.guardarVacacion=async function(){
     document.getElementById('vacHasta').value='';
     document.getElementById('vacObs').value='';
     document.getElementById('vacDias').value='';
+    const _n=document.getElementById('vacNota'); if(_n) _n.textContent='';
     renderVacaciones();
     toast('Vacaciones guardadas ✓','success');
   } catch(e){ toast('Error: '+e.message,'error'); }
@@ -543,8 +651,9 @@ window.renderVacaciones=function(){
   const hoy=new Date();
   const mes=hoy.getMonth();
   const anio=hoy.getFullYear();
-  const anioActual=anio;
-  document.getElementById('anioResumen').textContent=anioActual;
+  const anioActual=anioSelec();
+  poblarSelectorAnio(anioActual);
+  renderFeriados(anioActual);
 
   // Vista: 'mes' (solo registros que tocan el mes actual) o 'historico' (todos)
   const vista = window.vistaVac || 'mes';
@@ -577,11 +686,13 @@ window.renderVacaciones=function(){
     .filter(v=>{ if(!v.desde) return false; const d=new Date(v.desde+'T00:00:00'); return d.getFullYear()===anioActual; })
     .reduce((s,v)=>s+Number(v.dias||0),0);
   document.getElementById('totDiasAnio').textContent=diasAnio;
+  document.getElementById('totDiasAnio').previousElementSibling.textContent='Días tomados en '+anioActual;
 
   // Días disponibles = suma de topes efectivos (base + acumulado) - díasAnio
   const sumaTopes = EMPLEADOS.reduce((s,e)=>s+topeEfectivo(e.nombre, anioActual),0);
   const diasDisp=Math.max(0, sumaTopes - diasAnio);
   document.getElementById('totDiasDisp').textContent=diasDisp;
+  document.getElementById('totDiasDisp').previousElementSibling.textContent='Días disponibles '+anioActual+' (tope)';
 
   // En vacaciones ahora (registros cuyo rango incluye hoy)
   const hoyStr=hoy.toISOString().substring(0,10);
@@ -688,7 +799,7 @@ window.exportarVacExcel=function(ev){
   XLSX.utils.book_append_sheet(wb,ws,'Vacaciones');
 
   // Segunda hoja: resumen por empleado
-  const anioActual=new Date().getFullYear();
+  const anioActual=anioSelec();
   const mapa={};
   EMPLEADOS.forEach(e=>{ mapa[e.nombre]={dias:0}; });
   allVac.forEach(v=>{
