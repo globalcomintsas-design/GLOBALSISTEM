@@ -32,6 +32,13 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .tab{padding:10px 16px;color:#93c5fd;cursor:pointer;font-size:12px;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap;transition:all .15s;}
 .tab.active{color:#fff;border-bottom-color:#fff;}
 .tab:hover{color:#fff;}
+.rep-menu{display:none;position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.2);z-index:150;min-width:270px;padding:6px 0;}
+.rep-menu.open{display:block;}
+.rep-menu-item{padding:10px 18px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer;text-transform:uppercase;letter-spacing:.02em;}
+.rep-menu-item:hover{background:#eff6ff;color:#1e3a8a;}
+#page-reportes .section{scroll-margin-top:70px;}
+@keyframes repFlash{0%{box-shadow:0 0 0 3px #60a5fa}100%{box-shadow:0 1px 4px rgba(0,0,0,.06)}}
+.rep-flash{animation:repFlash 1.3s ease-out;}
 .container{padding:16px;max-width:1100px;margin:0 auto;}
 .page{display:none;}.page.active{display:block;}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px;}
@@ -179,11 +186,12 @@ tr:hover td{background:#fafbff;}
   <div class="tabs">
     <div class="tab active" onclick="showTab('movimientos',this)">💰 Movimientos</div>
     <div class="tab" onclick="showTab('cheques',this)">📄 Cheques</div>
-    <div class="tab" onclick="showTab('reportes',this)">📊 Reportes</div>
+    <div class="tab" id="tabReportes" onclick="showTab('reportes',this)" onmouseenter="repMenuHover(true,this)" onmouseleave="repMenuHover(false)">📊 Reportes ▾</div>
     <div class="tab" onclick="showTab('vencimientos',this)">⏰ Vencimientos</div>
     <div class="tab" onclick="showTab('boletas',this)">🧾 Boletas</div>
     <div class="tab" onclick="showTab('usuarios',this)" id="tabUsuarios" style="display:none">👥 Usuarios</div>
   </div>
+  <div id="repMenu" class="rep-menu" onmouseenter="repMenuHover(true)" onmouseleave="repMenuHover(false)"><div class="rep-menu-item" onclick="irSeccionReportes('rep-informe')">Informe anual</div><div class="rep-menu-item" onclick="irSeccionReportes('seccionCierre')">Cierre de ejercicio</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-cuenta')">Resumen por cuenta</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-cliente')">Resumen por cliente</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-personal')">Costo de personal</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-top')">Top clientes por ingreso</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-creditos')">Créditos a nuestro favor</div><div class="rep-menu-item" onclick="irSeccionReportes('rep-exportar')">Exportar por rango de fechas</div></div>
 
   <div class="container">
 
@@ -340,7 +348,7 @@ tr:hover td{background:#fafbff;}
 
     <!-- REPORTES (unificado: incluye Cta. Corriente) -->
     <div class="page" id="page-reportes">
-      <div class="section">
+      <div class="section" id="rep-informe">
         <div class="section-title">
           Informe Anual
           <div class="btn-row">
@@ -402,7 +410,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-cuenta">
         <div class="section-title">Resumen por Cuenta (año seleccionado)</div>
         <div class="table-wrap">
           <table>
@@ -412,7 +420,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-cliente">
         <div class="section-title">Resumen por Cliente (año seleccionado) <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
         <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Cada cliente aparece una sola vez, con el total de Ingresos y Egresos del año en pesos sumados. Los movimientos en Dólares se resumen aparte, en la tabla de abajo, para que no se mezclen los importes.</p>
         <div class="search-bar"><input type="text" id="buscarCC" placeholder="Buscar cliente..." oninput="renderCC()" /></div>
@@ -434,7 +442,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-personal">
         <div class="section-title">👥 Costo de Personal (del año seleccionado)</div>
         <div class="cards">
           <div class="card">
@@ -475,7 +483,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-top">
         <div class="section-title">Top Clientes por Ingreso (histórico completo)</div>
         <div class="table-wrap">
           <table>
@@ -485,7 +493,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-creditos">
         <div class="section-title">
           🔀 Créditos a Nuestro Favor (Cheques Endosados)
         </div>
@@ -505,7 +513,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section">
+      <div class="section" id="rep-exportar">
         <div class="section-title">Exportar por rango de fechas</div>
         <div class="form-grid">
           <div class="field"><label>Desde</label><input type="date" id="repDesde" /></div>
@@ -2225,6 +2233,31 @@ window.renderVencimientos=function(){
 };
 window.marcarPagado=async function(id){await updateDoc(doc(db,'vencimientos',id),{pagado:true});toast('Marcado como pagado ✓','success');};
 window.eliminarVenc=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'vencimientos',id));};
+
+// ── Menú desplegable de Reportes ──
+let repMenuTimer=null;
+window.repMenuHover=function(on,tabEl){
+  clearTimeout(repMenuTimer);
+  const m=document.getElementById('repMenu'); if(!m) return;
+  if(on){
+    const t=tabEl||document.getElementById('tabReportes'), r=t.getBoundingClientRect();
+    m.style.left=Math.max(4,Math.min(r.left,window.innerWidth-m.offsetWidth-4))+'px'; m.style.top=r.bottom+'px';
+    m.classList.add('open');
+  } else repMenuTimer=setTimeout(()=>m.classList.remove('open'),200);
+};
+window.irSeccionReportes=function(id){
+  document.getElementById('repMenu').classList.remove('open');
+  if(!document.getElementById('page-reportes').classList.contains('active')) showTab('reportes',document.getElementById('tabReportes'));
+  setTimeout(()=>{
+    const el=document.getElementById(id); if(!el) return;
+    el.scrollIntoView({behavior:'smooth',block:'start'});
+    el.classList.remove('rep-flash'); void el.offsetWidth; el.classList.add('rep-flash');
+  },60);
+};
+document.addEventListener('click',e=>{
+  const m=document.getElementById('repMenu');
+  if(m && !m.contains(e.target) && !(e.target.closest && e.target.closest('#tabReportes'))) m.classList.remove('open');
+});
 
 // ── Cierre de ejercicio: facturado + sueldos vs. sin factura ──
 let cierreAnioAplicado = null;
