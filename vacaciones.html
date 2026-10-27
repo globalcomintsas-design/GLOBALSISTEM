@@ -150,7 +150,11 @@ tr:hover td{background:#fafbff;}
       </div>
       <div class="destinos-card-body">
         <div style="background:#eff6ff;padding:10px 12px;border-radius:10px;border:1px solid #bfdbfe;margin-bottom:12px;font-size:12px;color:#1e3a8a;">
-          💡 Seteá el tope de días de vacaciones que le corresponde a cada empleado por año. Si cambiás un tope, tocá <strong>💾 Guardar</strong> abajo para que persista.
+          💡 Seteá el tope de días de vacaciones que le corresponde a cada empleado por año. Si cambiás un tope, tocá <strong>💾 Guardar</strong> abajo para que persista. <strong>Cada año tiene sus propios topes</strong>: al cambiar uno no se modifican los de los otros años.
+        </div>
+        <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:#1e3a8a;font-weight:600;">Topes del año:</label>
+          <select id="selAnioTopes" onchange="cambiarAnioTopes(this.value)" style="padding:6px 10px;border-radius:8px;border:1.5px solid #bfdbfe;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;color:#1e3a8a;background:#fff;"></select>
         </div>
         <div class="table-wrap">
           <table>
@@ -294,7 +298,10 @@ let EMPLEADOS = [
 // Estado en memoria
 let currentUser = null;
 let allVac = [];           // todos los registros de vacaciones (cargados UNA vez, actualizados localmente después)
-let topePorEmpleado = {};  // { 'Bruno Cola': 14, 'María Angeles': 10, ... }
+let topePorEmpleado = {};  // topes "viejos" (sin año): { 'Bruno Cola': 14, ... }. Se interpretan como los de 2026 y anteriores.
+let topesPorAnio = {};     // topes por año: { 2026:{...}, 2027:{...} }. Cada año tiene los suyos y no pisa a los demás.
+const ANIO_BASE_TOPES = 2026; // año en que se armó el sistema (los topes viejos son los días que quedaban en ese año)
+let anioTopesSel = null;   // año que se está editando en la card de topes
 const TOPE_DEFAULT = 14;   // tope por defecto si no hay config
 let anioSel = null;        // año elegido en el selector del resumen (null = año actual)
 
@@ -331,10 +338,21 @@ function toast(msg,type=''){
 }
 
 // Devuelve el tope base de un empleado (de topePorEmpleado o TOPE_DEFAULT si no está seteado)
-function topeDe(empleado){
-  const v = topePorEmpleado[empleado];
-  if(v === undefined || v === null || isNaN(v)) return TOPE_DEFAULT;
-  return Number(v);
+function topeDe(empleado, anio){
+  anio = anio || new Date().getFullYear();
+  // 1) tope propio de ese año
+  const delAnio = topesPorAnio[anio];
+  if(delAnio && typeof delAnio==='object'){
+    const v = delAnio[empleado];
+    if(v !== undefined && v !== null && !isNaN(v)) return Number(v);
+  }
+  // 2) para 2026 y anteriores: los topes viejos (lo que le quedaba a cada uno al armar el sistema)
+  if(anio <= ANIO_BASE_TOPES){
+    const v = topePorEmpleado[empleado];
+    if(v !== undefined && v !== null && !isNaN(v)) return Number(v);
+  }
+  // 3) sin dato: por defecto
+  return TOPE_DEFAULT;
 }
 
 // Días de vacaciones tomados por un empleado en un año específico
@@ -366,7 +384,7 @@ function saldoAcumulado(empleado, anioActual){
   // Sumar saldos no negativos de cada año desde primerAnio hasta anioActual-1
   let saldo=0;
   for(let a=primerAnio; a<anioActual; a++){
-    const topeAnio = topeDe(empleado);  // mismo tope para todos los años (no guardamos histórico de topes)
+    const topeAnio = topeDe(empleado, a);  // tope propio de cada año
     const tomados = diasTomadosEnAnio(empleado, a);
     const saldoAnio = topeAnio - tomados;
     if(saldoAnio>0) saldo += saldoAnio;
@@ -377,7 +395,7 @@ function saldoAcumulado(empleado, anioActual){
 
 // Tope efectivo del año = tope base + saldo acumulado de años anteriores
 function topeEfectivo(empleado, anioActual){
-  return topeDe(empleado) + saldoAcumulado(empleado, anioActual);
+  return topeDe(empleado, anioActual) + saldoAcumulado(empleado, anioActual);
 }
 
 function mostrarSistema(user){
@@ -415,8 +433,10 @@ async function initFirestore(){
     if(snap.exists()){
       const data=snap.data();
       topePorEmpleado = data.topes && typeof data.topes==='object' ? data.topes : {};
+      topesPorAnio = data.topesPorAnio && typeof data.topesPorAnio==='object' ? data.topesPorAnio : {};
     } else {
       topePorEmpleado = {};
+      topesPorAnio = {};
     }
     renderTopes();
     renderVacaciones();
@@ -451,11 +471,20 @@ async function cargarVacaciones(){
 }
 
 // Render de la tabla de topes (en la card de configuración)
+function anioTopes(){
+  return (anioTopesSel && anioOpciones().includes(anioTopesSel)) ? anioTopesSel : anioSelec();
+}
+window.cambiarAnioTopes=function(v){ anioTopesSel=parseInt(v); renderTopes(); };
 window.renderTopes=function(){
   const tbody=document.getElementById('topesGrid');
   if(!tbody) return;
+  const selA=document.getElementById('selAnioTopes');
+  if(selA){
+    const aT=anioTopes();
+    selA.innerHTML=anioOpciones().map(a=>`<option value="${a}" ${a===aT?'selected':''}>${a}</option>`).join('');
+  }
   tbody.innerHTML = EMPLEADOS.map((e,i)=>{
-    const t = topeDe(e.nombre);
+    const t = topeDe(e.nombre, anioTopes());
     return `<tr>
       <td><strong>${e.nombre}</strong></td>
       <td>${e.esSocio?'Socio':'Empleado'}</td>
@@ -473,13 +502,16 @@ window.guardarTopes=async function(){
     const v=parseInt(el?.value);
     topes[e.nombre]=isNaN(v)?TOPE_DEFAULT:Math.max(0,Math.min(60,v));
   });
+  const anioG=anioTopes();
+  if(!confirm('¿Guardar los topes de '+anioG+'? No modifica los topes de otros años.')) return;
   try {
     await setDoc(doc(db,'config','topes-vacaciones'),{
-      topes,
+      topes: topePorEmpleado,                              // topes viejos: se conservan tal cual
+      topesPorAnio: { ...topesPorAnio, [anioG]: topes },   // solo se escribe el año elegido
       updatedAt:new Date().toISOString(),
       updatedBy:currentUser?.nombre||'unknown'
     });
-    toast('Topes guardados ✓','success');
+    toast('Topes de '+anioG+' guardados ✓','success');
   } catch(e){ toast('Error: '+e.message,'error'); }
 };
 
@@ -613,7 +645,7 @@ window.guardarVacacion=async function(){
   const yaTomados=allVac
     .filter(v=>v.empleado===empleado)
     .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
-  const topeBase = topeDe(empleado);
+  const topeBase = topeDe(empleado, anioActual);
   const acum = saldoAcumulado(empleado, anioActual);
   const topeEmp = topeBase + acum;  // tope efectivo = base + saldo acumulado
   const msgAcum = acum>0 ? ` (base ${topeBase} + ${acum} acumulados de años anteriores)` : '';
@@ -757,7 +789,7 @@ window.renderVacaciones=function(){
   });
   document.getElementById('tablaVacResumen').innerHTML=EMPLEADOS.map(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const topeBase = topeDe(e.nombre);
+    const topeBase = topeDe(e.nombre, anioActual);
     const acum = saldoAcumulado(e.nombre, anioActual);
     const topeTotal = topeBase + acum;
     const disp=topeTotal-m.dias;
@@ -812,7 +844,7 @@ window.exportarVacExcel=function(ev){
   const resu=[['Empleado','Días tomados','Tope base','Acumulado','Tope total','Disponibles','Estado']];
   EMPLEADOS.forEach(e=>{
     const m=mapa[e.nombre]||{dias:0};
-    const topeBase = topeDe(e.nombre);
+    const topeBase = topeDe(e.nombre, anioActual);
     const acum = saldoAcumulado(e.nombre, anioActual);
     const topeTotal = topeBase + acum;
     const disp=topeTotal-m.dias;
