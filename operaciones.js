@@ -530,6 +530,10 @@ window.onTipoChange = function(){
   const esAdicionales = tipoOp === 'ADICIONALES';
   const esOficio = tipoOp === 'OFICIO';
 
+  const impresoWrap = document.getElementById('chk-impreso-wrap');
+  if(impresoWrap) impresoWrap.style.display = esMIC ? '' : 'none';
+  if(!esMIC) document.getElementById('chk_impreso').checked = false;
+
   if(esMIC){
     document.getElementById('chk_mic').checked = true;
   } else {
@@ -678,10 +682,12 @@ function getTarifas(){
     usd(parseFloat(document.getElementById('t_hoja').value)*n, `Hojas adicionales ×${n}`);
   }
 
-  if(document.getElementById('chk_mic').checked)
+  const impresoOk = !esMIC || document.getElementById('chk_impreso').checked;
+
+  if(document.getElementById('chk_mic').checked && impresoOk)
     usd(parseFloat(document.getElementById('t_mic').value), 'MIC base');
 
-  if(document.getElementById('chk_mic_fojas').checked){
+  if(document.getElementById('chk_mic_fojas').checked && impresoOk){
     const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
     const cobrarFojas = Math.max(0, n - 1);
     if(cobrarFojas > 0){
@@ -767,6 +773,7 @@ function construirDatosOperacion(){
     const numMic = document.getElementById('n_mic_num').value.trim() || document.getElementById('op_mic').value.trim() || 's/n';
     adicTags.push(`MIC:${numMic}`);
   }
+  if(esMIC && !document.getElementById('chk_impreso').checked) adicTags.push('Sin liberar (no cobra)');
   if(esMultinota) adicTags.push('Multinota');
   if(esAdicionales) adicTags.push('Adicionales');
   if(esOficio) adicTags.push('Oficio');
@@ -777,6 +784,7 @@ function construirDatosOperacion(){
   }
   if(document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
   if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
+  if(esMIC && document.getElementById('chk_impreso').checked) adicTags.push('Impreso');
 
   return {
     fecha: document.getElementById('op_fecha').value,
@@ -823,7 +831,8 @@ function construirDatosOperacion(){
     chk_mic_fojas: document.getElementById('chk_mic_fojas').checked,
     n_mic_fojas: document.getElementById('n_mic_fojas').value,
     chk_finsem: document.getElementById('chk_finsem').checked,
-    chk_mov_ad: document.getElementById('chk_mov_ad').checked
+    chk_mov_ad: document.getElementById('chk_mov_ad').checked,
+    impreso: document.getElementById('chk_impreso').checked
   };
 }
 
@@ -962,6 +971,7 @@ window.editarOperacion = function(id){
   document.getElementById('n_mic_fojas').value       = o.n_mic_fojas || 1;
   document.getElementById('chk_finsem').checked      = !!o.chk_finsem;
   document.getElementById('chk_mov_ad').checked      = !!o.chk_mov_ad;
+  document.getElementById('chk_impreso').checked     = !!o.impreso;
 
   recalcularFormulario();
 
