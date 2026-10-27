@@ -123,11 +123,12 @@ function puntoSiVacio(v){
 }
 window.puntoSiVacio = puntoSiVacio;
 
-function toast(msg){
+function toast(msg, isError){
   const t = document.getElementById('toast');
   t.textContent = msg;
+  t.style.background = isError ? '#dc2626' : '';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000);
 }
 window.toast = toast;
 
@@ -836,6 +837,100 @@ function construirDatosOperacion(){
   };
 }
 
+// ── VALIDACIÓN: DESTINACIÓN Y N° MIC (obligatorios y sin duplicados) ──
+function normClave(v){ return String(v||'').toUpperCase().replace(/\s+/g,' ').trim(); }
+
+function mostrarErrorCampo(inputId, msg){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  let err = document.getElementById('err_' + inputId);
+  if(!msg){
+    if(err) err.remove();
+    input.style.borderColor = '';
+    input.style.background  = '';
+    return;
+  }
+  if(!err){
+    err = document.createElement('div');
+    err.id = 'err_' + inputId;
+    err.style.cssText = 'color:#dc2626;font-size:11px;font-weight:700;margin-top:4px;';
+    input.insertAdjacentElement('afterend', err);
+  }
+  err.textContent = msg;
+  input.style.borderColor = '#dc2626';
+  input.style.background  = '#fef2f2';
+}
+
+function buscarDuplicado(campo, valor, excluirId){
+  const clave = normClave(valor);
+  if(!clave) return null;
+  return operaciones.find(o => o.id !== excluirId && normClave(o[campo]) === clave) || null;
+}
+
+function descripcionOp(o){
+  return `Op #${o.numOp || '-'} · ${o.despachante || '-'} · ${o.fecha || '-'}`;
+}
+
+// Devuelve true si se puede guardar. Marca en rojo el campo con problema.
+function validarDestinacionYMic(excluirId, soloDuplicados){
+  const tipoOp = document.getElementById('op_tipo').value;
+  const esMICTipo = tipoOp === 'MIC';
+  const esAdicionalesTipo = tipoOp === 'ADICIONALES';
+  const chkMic = document.getElementById('chk_mic').checked;
+  const destinacion = document.getElementById('op_destinacion').value.trim();
+  const mic = document.getElementById('op_mic').value.trim() || document.getElementById('n_mic_num').value.trim();
+  let ok = true;
+
+  // Destinación
+  mostrarErrorCampo('op_destinacion', '');
+  if(!esAdicionalesTipo && !esMICTipo){
+    if(!destinacion){
+      if(!soloDuplicados){
+        mostrarErrorCampo('op_destinacion', '⛔ Falta cargar la destinación / permiso');
+        toast('⛔ Falta cargar la destinación / permiso', true);
+        ok = false;
+      }
+    } else {
+      const dup = buscarDuplicado('destinacion', destinacion, excluirId);
+      if(dup){
+        const msg = `⛔ La destinación ${normClave(destinacion)} YA ESTÁ CARGADA (${descripcionOp(dup)})`;
+        mostrarErrorCampo('op_destinacion', msg);
+        if(!soloDuplicados) toast(msg, true);
+        ok = false;
+      }
+    }
+  }
+
+  // N° MIC
+  mostrarErrorCampo('op_mic', '');
+  if(esMICTipo || chkMic){
+    if(!mic){
+      if(!soloDuplicados){
+        mostrarErrorCampo('op_mic', '⛔ Falta cargar el N° de MIC');
+        toast('⛔ Falta cargar el N° de MIC', true);
+        ok = false;
+      }
+    } else {
+      const dup = buscarDuplicado('mic', mic, excluirId);
+      if(dup){
+        const msg = `⛔ El MIC ${normClave(mic)} YA ESTÁ CARGADO (${descripcionOp(dup)})`;
+        mostrarErrorCampo('op_mic', msg);
+        if(!soloDuplicados) toast(msg, true);
+        ok = false;
+      }
+    }
+  }
+  return ok;
+}
+window.validarDestinacionYMic = validarDestinacionYMic;
+
+// Aviso en vivo mientras se escribe (solo duplicados; lo obligatorio se controla al guardar)
+['op_destinacion','op_mic','n_mic_num'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', () => validarDestinacionYMic(opEditandoId, true));
+});
+document.getElementById('op_tipo')?.addEventListener('change', () => validarDestinacionYMic(opEditandoId, true));
+document.getElementById('chk_mic')?.addEventListener('change', () => validarDestinacionYMic(opEditandoId, true));
+
 // ── GUARDAR OPERACIÓN (nueva) ──
 let guardandoOperacion = false;
 window.guardarOperacion = async function(){
@@ -853,7 +948,7 @@ window.guardarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!esAdicionalesTipo && !esMICTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!validarDestinacionYMic(null)) return;
 
   const datos = construirDatosOperacion();
   const op = {
@@ -901,7 +996,7 @@ window.actualizarOperacion = async function(){
     return;
   }
   if(!despachante){ toast('Seleccioná un despachante'); return; }
-  if(!esAdicionalesTipo && !esMICTipo && !destinacion){ toast('Ingresá la destinación/permiso'); return; }
+  if(!validarDestinacionYMic(opEditandoId)) return;
 
   const datos = construirDatosOperacion();
 
@@ -1006,6 +1101,8 @@ window.eliminarOp = async function(id){
 
 // ── LIMPIAR FORM ──
 window.limpiarFormulario = function(){
+  mostrarErrorCampo('op_destinacion', '');
+  mostrarErrorCampo('op_mic', '');
   document.getElementById('op_despachante').value = '';
   document.getElementById('op_destinacion').value = '';
   document.getElementById('op_cliente').value = '';
