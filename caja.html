@@ -366,6 +366,42 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
+      <div class="section" id="seccionCierre">
+        <div class="section-title">
+          🔒 Cierre de Ejercicio (facturado vs. sin factura)
+          <div class="btn-row"><button class="btn btn-success btn-sm" onclick="exportarCierreExcel()">📊 Excel del cierre</button></div>
+        </div>
+        <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Separa los movimientos que tienen N° de factura de los que no. Por defecto toma el año elegido arriba; si tu ejercicio cierra en otro mes, cambiá las fechas. Los sueldos y el costo de personal se descuentan aunque no tengan factura. Los movimientos en Dólares quedan afuera. Los importes son los cargados en Caja (con IVA incluido si la factura lo tiene).</p>
+        <div class="filtros">
+          <div><label>Desde</label><input type="date" id="cierreDesde" onchange="renderCierre()" /></div>
+          <div><label>Hasta</label><input type="date" id="cierreHasta" onchange="renderCierre()" /></div>
+          <div><label>Ver detalle de</label><select id="cierreDetalleTipo" onchange="renderCierre()"><option value="Ingreso">Ingresos sin factura</option><option value="Egreso">Otros egresos sin factura</option><option value="Personal">Sueldos y personal (lo que se descuenta)</option></select></div>
+          <div><label>Cuenta (detalle)</label><select id="cierreCuenta" onchange="renderCierre()"><option value="">Todas</option><option>Caja</option><option>Banco</option><option>Cheque</option><option>Mercado Pago</option></select></div>
+        </div>
+        <div id="cierreAviso" style="display:none;background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:10px 12px;font-size:12px;margin-bottom:12px;"></div>
+        <div class="cards">
+          <div class="card"><div class="card-label">Ingresos facturados</div><div class="card-value green" id="cierreIngF">$ 0</div></div>
+          <div class="card"><div class="card-label">Egresos facturados</div><div class="card-value red" id="cierreEgrF">$ 0</div></div>
+          <div class="card"><div class="card-label">Sueldos y personal</div><div class="card-value red" id="cierreEgrP">$ 0</div></div>
+          <div class="card"><div class="card-label">Ganancia del ejercicio</div><div class="card-value" id="cierreGanF">$ 0</div></div>
+          <div class="card"><div class="card-label">Ingresos sin factura</div><div class="card-value orange" id="cierreIngS">$ 0</div></div>
+          <div class="card"><div class="card-label">Ganancia total real</div><div class="card-value" id="cierreGanT">$ 0</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Concepto</th><th>Importe</th></tr></thead>
+            <tbody id="tablaCierre"></tbody>
+          </table>
+        </div>
+        <div style="font-size:12px;font-weight:700;color:#1e3a8a;margin:16px 0 8px;" id="cierreDetalleTitulo"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Fecha</th><th>Cuenta</th><th>Cliente / Proveedor</th><th>Detalle</th><th>Monto</th></tr></thead>
+            <tbody id="tablaCierreDetalle"></tbody>
+          </table>
+        </div>
+      </div>
+
       <div class="section">
         <div class="section-title">Resumen por Cuenta (año seleccionado)</div>
         <div class="table-wrap">
@@ -2190,6 +2226,119 @@ window.renderVencimientos=function(){
 window.marcarPagado=async function(id){await updateDoc(doc(db,'vencimientos',id),{pagado:true});toast('Marcado como pagado ✓','success');};
 window.eliminarVenc=async function(id){if(!confirm('¿Eliminar?'))return;await deleteDoc(doc(db,'vencimientos',id));};
 
+// ── Cierre de ejercicio: facturado + sueldos vs. sin factura ──
+let cierreAnioAplicado = null;
+function tieneFactura(m){
+  const f=(m.factura||'').trim();
+  return !!f && !/^(s\/?f|sin\s*factura|s\/?n|n\/?a|-+|0+)$/i.test(f);
+}
+// Sueldos y costo de personal: se descuentan para la ganancia aunque no tengan factura.
+// Detecta los pagos con desglose (conceptoSueldoNeto, autónomo, etc.), los adelantos de
+// sueldo, los egresos a los empleados y, para lo viejo sin desglose, palabras en el detalle.
+const PERSONAL_RX=/sueldo|haberes|aguinaldo|aut[oó]nomo|adelanto|jornal|movilidad|fin de semana/i;
+function esPersonal(m){
+  if(m.tipo!=='Egreso') return false;
+  if(m.conceptoSueldoNeto!==undefined||m.conceptoAutonomo||m.conceptoMovilidad||m.conceptoFinDeSemana||m.origenAdelanto||m.conceptoSueldos) return true;
+  if(EMPLEADOS.includes((m.cliente||'').trim().toUpperCase())) return true;
+  return PERSONAL_RX.test((m.detalle||'')+' '+(m.cliente||''));
+}
+function categoriaCierre(m){
+  if(m.tipo==='Ingreso') return tieneFactura(m)?'Ingreso con factura':'Ingreso sin factura';
+  if(esPersonal(m)) return 'Sueldos y personal';
+  return tieneFactura(m)?'Egreso con factura':'Egreso sin factura';
+}
+function fechaMov(m){
+  const p=(m.fecha||'').split('/');
+  return p.length===3 ? new Date(+p[2],+p[1]-1,+p[0]) : null;
+}
+function inicializarCierre(){
+  if(cierreAnioAplicado===repAnioSeleccionado) return;
+  cierreAnioAplicado=repAnioSeleccionado;
+  document.getElementById('cierreDesde').value=repAnioSeleccionado+'-01-01';
+  document.getElementById('cierreHasta').value=repAnioSeleccionado+'-12-31';
+}
+function calcCierre(){
+  const d=document.getElementById('cierreDesde').value, h=document.getElementById('cierreHasta').value;
+  if(!d||!h) return null;
+  const [dy,dm,dd]=d.split('-').map(Number), [hy,hm,hd]=h.split('-').map(Number);
+  const ini=new Date(dy,dm-1,dd), fin=new Date(hy,hm-1,hd);
+  const movs=allMovimientos.filter(m=>{const f=fechaMov(m);return f&&f>=ini&&f<=fin;});
+  const pesos=movs.filter(m=>m.cuenta!=='Dólares');
+  const suma=cat=>pesos.filter(m=>categoriaCierre(m)===cat).reduce((s,m)=>s+(Number(m.importe)||0),0);
+  return {ini,fin,movs,pesos,
+    iF:suma('Ingreso con factura'), iS:suma('Ingreso sin factura'),
+    eF:suma('Egreso con factura'), eP:suma('Sueldos y personal'), eS:suma('Egreso sin factura')};
+}
+window.renderCierre=function(){
+  if(!document.getElementById('cierreDesde')) return;
+  const c=calcCierre(); if(!c) return;
+  const {iF,iS,eF,eP,eS}=c;
+  const gC=iF-eF-eP, gT=iF+iS-eF-eP-eS;
+  const set=(id,v,signo)=>{const el=document.getElementById(id);el.textContent=fmtMoney(v);if(signo)el.className='card-value '+(v>=0?'green':'red');};
+  set('cierreIngF',iF); set('cierreEgrF',eF); set('cierreEgrP',eP); set('cierreGanF',gC,true); set('cierreIngS',iS); set('cierreGanT',gT,true);
+  const fila=(txt,v,color,fuerte,fondo)=>`<tr${fondo?' style="background:#f8fafc"':''}><td>${fuerte?'<strong>'+txt+'</strong>':txt}</td><td style="color:${color}">${fuerte?'<strong>'+fmtMoney(v)+'</strong>':fmtMoney(v)}</td></tr>`;
+  const cG=v=>v>=0?'#16a34a':'#dc2626';
+  const pctS=(iF+iS)>0 ? (iS/(iF+iS)*100).toFixed(1) : '0';
+  document.getElementById('tablaCierre').innerHTML=
+    fila('Ingresos con factura',iF,'#16a34a')+
+    fila('− Egresos con factura',eF,'#dc2626')+
+    fila('− Sueldos y personal (sin factura, pero se descuentan)',eP,'#dc2626')+
+    fila('Ganancia del ejercicio (facturado − sueldos)',gC,cG(gC),true,true)+
+    fila('+ Ingresos sin factura (plata que entró sin facturar)',iS,'#d97706')+
+    fila('− Otros egresos sin factura',eS,'#dc2626')+
+    fila('Ganancia total real',gT,cG(gT),true,true)+
+    `<tr><td colspan="2" style="font-size:11px;color:#94a3b8">${pctS}% de los ingresos del período no tiene factura asociada.</td></tr>`;
+
+  const conDatos=new Set(c.movs.map(m=>{const f=fechaMov(m);return f.getFullYear()+'-'+f.getMonth();}));
+  const sinDatos=[]; let total=0;
+  for(let y=c.ini.getFullYear(),mo=c.ini.getMonth(); y<c.fin.getFullYear()||(y===c.fin.getFullYear()&&mo<=c.fin.getMonth());){
+    total++; if(!conDatos.has(y+'-'+mo)) sinDatos.push(CIERRE_MESES[mo]+' '+y);
+    if(++mo>11){mo=0;y++;}
+  }
+  const av=document.getElementById('cierreAviso');
+  if(sinDatos.length){
+    av.style.display='block';
+    av.innerHTML=`⚠️ <strong>Período incompleto:</strong> hay datos en ${total-sinDatos.length} de ${total} meses. Sin movimientos: ${sinDatos.join(', ')}. El resultado de arriba es solo de lo cargado.`;
+  } else av.style.display='none';
+
+  const tipo=document.getElementById('cierreDetalleTipo').value, cta=document.getElementById('cierreCuenta').value;
+  const catDet={Ingreso:'Ingreso sin factura',Egreso:'Egreso sin factura',Personal:'Sueldos y personal'}[tipo];
+  const tit={Ingreso:'Ingresos sin factura',Egreso:'Otros egresos sin factura',Personal:'Sueldos y personal'}[tipo];
+  const det=c.pesos.filter(m=>categoriaCierre(m)===catDet&&(!cta||m.cuenta===cta)).sort((a,b)=>(fechaMov(b)-fechaMov(a))||((b.ts||0)-(a.ts||0)));
+  const totDet=det.reduce((s,m)=>s+(Number(m.importe)||0),0);
+  document.getElementById('cierreDetalleTitulo').textContent=`${tit}${cta?' · '+cta:''}: ${det.length} movimientos · ${fmtMoney(totDet)}`;
+  document.getElementById('tablaCierreDetalle').innerHTML=det.slice(0,300).map(m=>`<tr><td>${m.fecha}</td><td>${m.cuenta}</td><td><strong>${m.cliente||'-'}</strong></td><td>${m.detalle||'-'}</td><td><strong>${fmtMoney(m.importe)}</strong></td></tr>`).join('')
+    || '<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">Sin movimientos para este filtro</td></tr>';
+};
+window.exportarCierreExcel=function(){
+  const c=calcCierre(); if(!c){ toast('Elegí las fechas del período','error'); return; }
+  const r2=n=>Math.round((Number(n)||0)*100)/100;
+  const {iF,iS,eF,eP,eS}=c;
+  const resumen=[
+    ['Cierre de ejercicio', c.ini.toLocaleDateString('es-AR')+' al '+c.fin.toLocaleDateString('es-AR')],
+    ['Solo pesos (Dólares excluidos)'],
+    [],
+    ['Concepto','Importe'],
+    ['Ingresos con factura',r2(iF)],
+    ['Egresos con factura',r2(-eF)],
+    ['Sueldos y personal',r2(-eP)],
+    ['GANANCIA DEL EJERCICIO (facturado - sueldos)',r2(iF-eF-eP)],
+    [],
+    ['Ingresos sin factura',r2(iS)],
+    ['Otros egresos sin factura',r2(-eS)],
+    ['GANANCIA TOTAL REAL',r2(iF+iS-eF-eP-eS)]
+  ];
+  const det=c.pesos.filter(m=>{const k=categoriaCierre(m);return k!=='Ingreso con factura'&&k!=='Egreso con factura';}).sort((a,b)=>fechaMov(a)-fechaMov(b));
+  const detalle=[['Fecha','Categoría','Cuenta','Cliente / Proveedor','Detalle','Monto'],...det.map(m=>[m.fecha,categoriaCierre(m),m.cuenta,m.cliente||'',m.detalle||'',r2(m.importe)])];
+  const wb=XLSX.utils.book_new();
+  const w1=XLSX.utils.aoa_to_sheet(resumen); w1['!cols']=[{wch:48},{wch:18}];
+  const w2=XLSX.utils.aoa_to_sheet(detalle); w2['!cols']=[{wch:12},{wch:22},{wch:14},{wch:32},{wch:46},{wch:16}];
+  XLSX.utils.book_append_sheet(wb,w1,'Cierre');
+  XLSX.utils.book_append_sheet(wb,w2,'Sin factura y sueldos');
+  XLSX.writeFile(wb,'CierreEjercicio_'+today().replace(/\//g,'-')+'.xlsx');
+};
+const CIERRE_MESES=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
 // Render principal de Reportes (unificado: cards del año + mensual + por
 // cuenta + por cliente + costo de personal + créditos), todo colgado del
 // mismo repAnioSeleccionado. Ya no hay cards "del mes" (quedaban rotas,
@@ -2246,6 +2395,8 @@ window.renderReportes=function(){
 
   renderCreditosCheques();
   renderCC();
+  inicializarCierre();
+  renderCierre();
 };
 
 function fechaOrdenable(fechaAR){
