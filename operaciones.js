@@ -1141,7 +1141,9 @@ window.limpiarFormulario = function(){
   recalcularFormulario();
 };
 
-// ── GUARDAR CLIENTE (despachante) ──
+// ── GUARDAR CLIENTE (despachante) — alta o edición ──
+let clienteEditandoId = null;
+
 window.guardarCliente = async function(){
   const nombre = document.getElementById('cli_nombre').value.trim().toUpperCase();
   if(!nombre){ toast('Ingresá el nombre'); return; }
@@ -1152,6 +1154,15 @@ window.guardarCliente = async function(){
     tieneFactura: document.getElementById('cli_tiene_factura').value,
     cuit: document.getElementById('cli_cuit').value.trim()
   };
+  if(clienteEditandoId){
+    // Edición: el nombre queda fijo (las operaciones y pagos se vinculan por nombre)
+    await updateDoc(doc(db,'corresponsales_clientes', clienteEditandoId), {
+      tipo: cli.tipo, factura: cli.factura, tieneFactura: cli.tieneFactura, cuit: cli.cuit
+    });
+    cancelarEdicionCliente();
+    toast('✅ Despachante actualizado');
+    return;
+  }
   const id = nombre.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
   await setDoc(doc(db,'corresponsales_clientes', id), cli);
   document.getElementById('cli_nombre').value = '';
@@ -1159,9 +1170,40 @@ window.guardarCliente = async function(){
   toast('✅ Despachante guardado');
 };
 
+window.editarCliente = function(id){
+  const c = clientes.find(x => x.id === id);
+  if(!c){ toast('No se encontró el despachante'); return; }
+  clienteEditandoId = id;
+  const nom = document.getElementById('cli_nombre');
+  nom.value = c.nombre || '';
+  nom.disabled = true; // el nombre no se edita: las operaciones y pagos están vinculados por nombre
+  document.getElementById('cli_tipo').value = c.tipo || 'despachante';
+  document.getElementById('cli_factura').value = c.factura || 'mensual';
+  document.getElementById('cli_tiene_factura').value = c.tieneFactura === 'no' ? 'no' : 'si';
+  document.getElementById('cli_cuit').value = c.cuit || '';
+  document.getElementById('cli-btn-guardar').textContent = '💾 Guardar cambios';
+  document.getElementById('cli-btn-cancelar').style.display = 'inline-flex';
+  nom.closest('.section-card').scrollIntoView({ behavior:'smooth', block:'start' });
+  toast('✏️ Editando: ' + (c.nombre || ''));
+};
+
+window.cancelarEdicionCliente = function(){
+  clienteEditandoId = null;
+  const nom = document.getElementById('cli_nombre');
+  nom.disabled = false;
+  nom.value = '';
+  document.getElementById('cli_tipo').value = 'despachante';
+  document.getElementById('cli_factura').value = 'mensual';
+  document.getElementById('cli_tiene_factura').value = 'si';
+  document.getElementById('cli_cuit').value = '';
+  document.getElementById('cli-btn-guardar').textContent = 'Agregar despachante';
+  document.getElementById('cli-btn-cancelar').style.display = 'none';
+};
+
 window.eliminarCliente = async function(id){
   if(!confirm('¿Eliminar despachante?')) return;
   await deleteDoc(doc(db,'corresponsales_clientes',id));
+  if(clienteEditandoId === id) cancelarEdicionCliente();
   toast('Despachante eliminado');
 };
 
@@ -2434,7 +2476,7 @@ function renderTablaClientes(){
       <td>${c.tieneFactura === 'no' ? '❌ No' : '✅ Sí'}</td>
       <td class="mono">${c.cuit||'-'}</td>
       <td style="text-align:center;">${opsCount}</td>
-      <td><button class="btn-danger" onclick="eliminarCliente('${c.id}')">✕</button></td>
+      <td style="white-space:nowrap;"><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarCliente('${c.id}')">✏️ Editar</button> <button class="btn-danger" onclick="eliminarCliente('${c.id}')">✕</button></td>
     </tr>`;
   }).join('');
   if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesDesp');
