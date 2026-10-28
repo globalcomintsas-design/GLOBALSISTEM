@@ -1232,24 +1232,69 @@ window.eliminarClienteFinal = async function(id){
   }
 };
 
+function normalizarBusqueda(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+window.buscarClienteFinal = function(){
+  paginaGenerica['clientesFinales'] = 1;
+  renderTablaClientesFinales();
+};
+window.limpiarBusquedaClienteFinal = function(){
+  const el = document.getElementById('clifinal_buscar');
+  if(el) el.value = '';
+  buscarClienteFinal();
+};
+
 function renderTablaClientesFinales(){
   const tbody = document.getElementById('tbody-clientes-finales');
   const paginacionEl = document.getElementById('clientesfinales-paginacion');
   if(!tbody) return;
-  if(!clientesFinalesDocs.length){
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>';
+  const q = normalizarBusqueda(document.getElementById('clifinal_buscar')?.value);
+
+  // Despachante(s) de cada cliente final: salen de las operaciones (cliente → despachante)
+  const despPorCliente = new Map(); // cliente -> Map(despachante -> cantidad de ops)
+  operaciones.forEach(o => {
+    if(!o.cliente || !o.despachante) return;
+    if(!despPorCliente.has(o.cliente)) despPorCliente.set(o.cliente, new Map());
+    const m = despPorCliente.get(o.cliente);
+    m.set(o.despachante, (m.get(o.despachante)||0) + 1);
+  });
+
+  // Lista base: clientes finales cargados. Al buscar, también se incluyen los que solo figuran en operaciones/mudanzas.
+  let lista = clientesFinalesDocs.map(c => ({ id:c.id, nombre:c.nombre }));
+  if(q){
+    const yaEstan = new Set(lista.map(c => c.nombre));
+    const extra = new Set([...despPorCliente.keys(), ...mudanzas.map(m => m.cliente).filter(Boolean)]);
+    extra.forEach(n => { if(!yaEstan.has(n)) lista.push({ id:null, nombre:n }); });
+  }
+
+  const conDesp = lista.map(c => {
+    const m = despPorCliente.get(c.nombre);
+    const desps = m ? [...m.entries()].sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0])) : [];
+    return { ...c, desps };
+  });
+  const filtrados = q
+    ? conDesp.filter(c => normalizarBusqueda(c.nombre).includes(q) || c.desps.some(([d]) => normalizarBusqueda(d).includes(q)))
+    : conDesp;
+
+  if(!filtrados.length){
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px;">${q ? 'Sin resultados para esa búsqueda' : 'Sin clientes cargados'}</td></tr>`;
     if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  const ordenados = [...clientesFinalesDocs].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  const ordenados = [...filtrados].sort((a,b) => a.nombre.localeCompare(b.nombre));
   const { pagina, page, totalPaginas } = paginarArray('clientesFinales', ordenados, PAGE_SIZE_GENERICO);
   tbody.innerHTML = pagina.map(c => {
     const cantOps  = operaciones.filter(o => o.cliente === c.nombre).length;
     const cantMud  = mudanzas.filter(m => m.cliente === c.nombre).length;
+    const despHtml = c.desps.length
+      ? c.desps.map(([d,n]) => `<span class="tag" style="background:#dbeafe;color:#1e3a8a;margin:1px 4px 1px 0;">${d}${c.desps.length>1?` (${n})`:''}</span>`).join('')
+      : '<span style="color:#94a3b8;">—</span>';
     return `<tr>
-      <td><strong>${c.nombre}</strong></td>
+      <td><strong>${c.nombre}</strong>${c.id ? '' : ' <span class="tag" style="background:#f1f5f9;color:#64748b;">solo en ops</span>'}</td>
+      <td>${despHtml}</td>
       <td style="text-align:center;">${cantOps} op${cantOps===1?'':'s'} · ${cantMud} mud.</td>
-      <td><button class="btn-danger" onclick="eliminarClienteFinal('${c.id}')">✕</button></td>
+      <td>${c.id ? `<button class="btn-danger" onclick="eliminarClienteFinal('${c.id}')">✕</button>` : ''}</td>
     </tr>`;
   }).join('');
   if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesFinales');
