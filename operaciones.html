@@ -689,17 +689,27 @@
           <button class="btn-primary" onclick="guardarClienteFinal()">Agregar cliente</button>
         </div>
       </div>
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group" style="flex:1;min-width:260px;">
+          <label>🔎 Buscar cliente final (o despachante)</label>
+          <input type="text" id="clifinal_buscar" placeholder="Escribí parte del nombre para ver a qué despachante pertenece..." oninput="buscarClienteFinal()">
+        </div>
+        <div class="form-group" style="align-self:end;">
+          <button class="btn-outline" onclick="limpiarBusquedaClienteFinal()">✕ Limpiar</button>
+        </div>
+      </div>
       <div class="tabla-wrap">
         <table>
           <thead>
             <tr>
               <th>Nombre</th>
+              <th>Despachante(s)</th>
               <th>Ops / Mudanzas</th>
               <th></th>
             </tr>
           </thead>
           <tbody id="tbody-clientes-finales">
-            <tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>
+            <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>
           </tbody>
         </table>
       </div>
