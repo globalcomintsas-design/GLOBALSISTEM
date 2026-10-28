@@ -653,7 +653,8 @@
           <input type="text" id="cli_cuit" placeholder="20-XXXXXXXX-X">
         </div>
         <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" onclick="guardarCliente()">Agregar despachante</button>
+          <button class="btn-primary" id="cli-btn-guardar" onclick="guardarCliente()">Agregar despachante</button>
+          <button class="btn-outline" id="cli-btn-cancelar" onclick="cancelarEdicionCliente()" style="display:none;">✕ Cancelar edición</button>
         </div>
       </div>
       <div class="tabla-wrap">
