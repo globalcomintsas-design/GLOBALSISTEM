@@ -2214,6 +2214,43 @@ function renderSaldos(){
 }
 window.renderSaldos = renderSaldos;
 
+// ── Menú desplegable de Saldos ──
+const SALDOS_SECCIONES = {
+  pago:  { id:'saldos-sec-pago',  nombre:'Registrar pago' },
+  saldo: { id:'saldos-sec-saldo', nombre:'Saldo por despachante' },
+  hist:  { id:'saldos-sec-hist',  nombre:'Historial de pagos' },
+  vinc:  { id:'saldos-sec-vinc',  nombre:'Vinculaciones automáticas desde Caja' }
+};
+window.toggleMenuSaldos = function(ev){
+  if(ev) ev.stopPropagation();
+  document.getElementById('saldos-menu')?.classList.toggle('abierto');
+};
+window.seleccionarSeccionSaldos = function(key){
+  const sel = SALDOS_SECCIONES[key] || SALDOS_SECCIONES.saldo;
+  if(!SALDOS_SECCIONES[key]) key = 'saldo';
+  Object.entries(SALDOS_SECCIONES).forEach(([k, s]) => {
+    const el = document.getElementById(s.id);
+    if(el) el.style.display = (k===key) ? '' : 'none';
+  });
+  document.querySelectorAll('#saldos-menu .saldos-menu-item[data-sec]').forEach(b => {
+    b.classList.toggle('activo', b.dataset.sec === key);
+  });
+  const lbl = document.getElementById('saldos-menu-actual');
+  if(lbl) lbl.textContent = sel.nombre;
+  document.getElementById('saldos-menu')?.classList.remove('abierto');
+};
+window.exportarDesdeMenuSaldos = function(){
+  // El filtro de despachante vive en "Saldo por despachante": se muestra esa sección antes de exportar
+  const visible = document.getElementById('saldos-sec-saldo')?.style.display !== 'none';
+  if(!visible) seleccionarSeccionSaldos('saldo');
+  else document.getElementById('saldos-menu')?.classList.remove('abierto');
+  exportarSaldosExcel();
+};
+document.addEventListener('click', e => {
+  const m = document.getElementById('saldos-menu');
+  if(m && !m.contains(e.target)) m.classList.remove('abierto');
+});
+
 // ── EXPORTAR MOVIMIENTOS DE UN DESPACHANTE (pestaña Saldos) ──
 window.exportarSaldosExcel = function(){
   const despachante = document.getElementById('saldos_filtro_despachante')?.value || '';
