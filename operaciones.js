@@ -136,7 +136,8 @@ window.toast = toast;
 function etiquetaTipoDespachante(tipo){
   switch(tipo){
     case 'desp_externo': return { txt:'Externo ⭐', style:'background:#fef3c7;color:#92400e' };
-    case 'apoderado':    return { txt:'Apoderado',  style:'background:#ede9fe;color:#5b21b6' };
+    case 'apoderado_basico': return { txt:'Apoderado', style:'background:#ede9fe;color:#5b21b6' };
+    case 'apoderado':    return { txt:'Apoderado premium',  style:'background:#ede9fe;color:#5b21b6' };
     case 'kotinya':      return { txt:'Kotinya/Ramiro', style:'background:#fef9c3;color:#92400e' };
     case 'despachante_pesos': return { txt:'Tarifa en $', style:'background:#e0f2fe;color:#075985' };
     default:             return { txt:'Despachante', style:'' };
@@ -370,7 +371,7 @@ onSnapshot(collection(db,'despachantees_pagos'), snap => {
 const TARIFA_IDS = [
   't_vn','t_r','t_sobre','t_cam_vn','t_cam_r','t_senasa_p','t_senasa_prod','t_hoja',
   't_mic','t_mic_foja','t_multinota','t_finsem',
-  't_apoderado','t_kotinya','t_ramiro_op','t_cam_apod','t_mov_ad','t_adicionales',
+  't_apoderado','t_apoderado_basico','t_kotinya','t_ramiro_op','t_cam_apod','t_mov_ad','t_adicionales',
   't_prem_vn','t_prem_r','t_prem_cam_vn','t_prem_cam_r',
   't_pesos_vn','t_pesos_r','t_oficio'
 ];
@@ -487,20 +488,31 @@ onSnapshot(collection(db,'corresponsales_mudanzas_cobros'), snap => {
   if(tabActivo.includes('Dashboard')) renderDashboard();
 });
 
+// ── Apoderados ──
+// 'apoderado_basico' = "Apoderado" (tarifa t_apoderado_basico, USD 70 por defecto).
+// 'apoderado'        = "Apoderado premium" (tarifa t_apoderado, USD 100). Mantiene el valor interno
+//                      histórico para que los clientes y operaciones ya cargadas conserven su tarifa.
+function esTipoApoderado(tipo){ return tipo === 'apoderado' || tipo === 'apoderado_basico'; }
+function tarifaApoderado(tipo){
+  return tipo === 'apoderado_basico'
+    ? (parseFloat(document.getElementById('t_apoderado_basico').value) || 70)
+    : (parseFloat(document.getElementById('t_apoderado').value) || 100);
+}
+
 // ── CAMBIO TIPO DESPACHO (select global) ──
 window.onTipoDespachoChange = function(){
   const tipo = document.getElementById('tipo_desp_global').value;
-  esApoderado = tipo === 'apoderado';
+  esApoderado = esTipoApoderado(tipo);
   esKotinya   = tipo === 'kotinya';
 
   const badge = document.getElementById('premium-badge');
-  const tApod = parseFloat(document.getElementById('t_apoderado').value) || 100;
+  const tApod = tarifaApoderado(tipo);
   const tKot  = parseFloat(document.getElementById('t_kotinya').value) || 85;
   const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
 
-  if(['desp_externo','apoderado','kotinya','despachante_pesos'].includes(tipo)){
+  if(['desp_externo','apoderado','apoderado_basico','kotinya','despachante_pesos'].includes(tipo)){
     badge.style.display = 'inline-block';
-    if(tipo === 'apoderado')             badge.textContent = `APODERADO USD ${tApod}`;
+    if(esTipoApoderado(tipo))            badge.textContent = `${tipo === 'apoderado' ? 'APODERADO PREMIUM' : 'APODERADO'} USD ${tApod}`;
     else if(tipo === 'kotinya')          badge.textContent = `KOTINYA USD ${tKot} · PAGO RAMIRO USD ${tRam}`;
     else if(tipo === 'despachante_pesos') badge.textContent = '💲 TARIFA EN PESOS';
     else                                 badge.textContent = '+20% PREMIUM';
@@ -585,7 +597,7 @@ window.onCambiarDespachante = function(){
   }
 
   const cli = clientes.find(c => c.nombre === nombre);
-  const tiposValidos = ['desp_externo','apoderado','kotinya','despachante_pesos'];
+  const tiposValidos = ['desp_externo','apoderado','apoderado_basico','kotinya','despachante_pesos'];
   if(cli){
     document.getElementById('tipo_desp_global').value = tiposValidos.includes(cli.tipo) ? cli.tipo : 'despachante';
     document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
@@ -597,7 +609,7 @@ window.onCambiarDespachante = function(){
 
   const tipoSel = document.getElementById('tipo_desp_global').value;
   esKotinya   = tipoSel === 'kotinya';
-  esApoderado = tipoSel === 'apoderado';
+  esApoderado = esTipoApoderado(tipoSel);
   onTipoDespachoChange();
 };
 
@@ -611,7 +623,7 @@ function getTarifas(){
   const esAdicionales = tipoOp === 'ADICIONALES';
   const esOficio = tipoOp === 'OFICIO';
   const esPremium   = tipo === 'desp_externo';
-  const _esApoderado = tipo === 'apoderado';
+  const _esApoderado = esTipoApoderado(tipo);
   const _esKotinya   = tipo === 'kotinya';
   const _esPesos     = tipo === 'despachante_pesos';
   const tcInput = document.getElementById('op_tc').value;
@@ -628,7 +640,7 @@ function getTarifas(){
   if(esOficio){
     usd(parseFloat(document.getElementById('t_oficio').value) || 5, 'Oficio');
   } else if(_esApoderado){
-    usd(parseFloat(document.getElementById('t_apoderado').value) || 100, 'Apoderado');
+    usd(tarifaApoderado(tipo), tipo === 'apoderado' ? 'Apoderado premium' : 'Apoderado');
   } else if(_esKotinya){
     usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
   } else if(esMultinota){
@@ -810,7 +822,7 @@ function construirDatosOperacion(){
     tieneFactura,
     esPremium:    tipo === 'desp_externo',
     esKotinya:    tipo === 'kotinya',
-    esApoderado:  tipo === 'apoderado',
+    esApoderado:  esTipoApoderado(tipo),
     esTarifaPesos: tipo === 'despachante_pesos',
     ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
     esMIC,
@@ -1528,7 +1540,7 @@ function renderTabla(){
     <tr>
       <td class="mono">${o.numOp||'-'}</td>
       <td>${o.fecha||''}</td>
-      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e;margin-left:4px;">PREM</span>':o.esKotinya?'<span class="tag" style="background:#fef9c3;color:#92400e;margin-left:4px;">KOT</span>':o.esApoderado?'<span class="tag" style="background:#ede9fe;color:#5b21b6;margin-left:4px;">APOD</span>':o.esTarifaPesos?'<span class="tag" style="background:#e0f2fe;color:#075985;margin-left:4px;">$ARS</span>':''}</td>
+      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e;margin-left:4px;">PREM</span>':o.esKotinya?'<span class="tag" style="background:#fef9c3;color:#92400e;margin-left:4px;">KOT</span>':o.esApoderado?`<span class="tag" style="background:#ede9fe;color:#5b21b6;margin-left:4px;">${o.tipoDespGlobal==='apoderado_basico'?'APOD':'APOD PREM'}</span>`:o.esTarifaPesos?'<span class="tag" style="background:#e0f2fe;color:#075985;margin-left:4px;">$ARS</span>':''}</td>
       <td>${o.cliente||''}</td>
       <td class="mono">${o.destinacion||''}</td>
       <td class="mono">${o.mic||'-'}</td>
