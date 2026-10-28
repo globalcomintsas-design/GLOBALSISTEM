@@ -128,6 +128,10 @@
           </div>
           <div class="tarifa-item">
             <span class="tarifa-label">Apoderado</span>
+            <span class="tarifa-val"><input type="number" id="t_apoderado_basico" value="70" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
+          </div>
+          <div class="tarifa-item">
+            <span class="tarifa-label">Apoderado premium</span>
             <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
           </div>
           <div class="tarifa-item">
@@ -181,7 +185,8 @@
           <select id="tipo_desp_global" onchange="onTipoDespachoChange()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
             <option value="despachante">Despachante (tarifa estándar)</option>
             <option value="desp_externo">Desp. externo (tarifa premium)</option>
-            <option value="apoderado">Apoderado</option>
+            <option value="apoderado_basico">Apoderado</option>
+            <option value="apoderado">Apoderado premium</option>
             <option value="kotinya">Kotinya / Ramiro</option>
             <option value="despachante_pesos">Despachante (tarifa en pesos)</option>
           </select>
@@ -622,7 +627,8 @@
           <select id="cli_tipo">
             <option value="despachante">Despachante (tarifa estándar)</option>
             <option value="desp_externo">Desp. externo (tarifa premium)</option>
-            <option value="apoderado">Apoderado</option>
+            <option value="apoderado_basico">Apoderado</option>
+            <option value="apoderado">Apoderado premium</option>
             <option value="kotinya">Kotinya / Ramiro</option>
             <option value="despachante_pesos">Despachante (tarifa en pesos)</option>
           </select>
