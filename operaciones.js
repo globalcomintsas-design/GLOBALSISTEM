@@ -428,7 +428,9 @@ function renderLogVinculaciones(){
     if(paginacionEl) paginacionEl.innerHTML = '';
     return;
   }
-  const { pagina, page, totalPaginas } = paginarArray('vinculaciones', logVinculaciones, PAGE_SIZE_GENERICO);
+  // Orden descendente por fecha (la más reciente primero); a igual fecha, por ts de carga
+  const logOrdenado = [...logVinculaciones].sort((a,b) => fechaISO(b.fecha).localeCompare(fechaISO(a.fecha)) || (b.ts||0)-(a.ts||0));
+  const { pagina, page, totalPaginas } = paginarArray('vinculaciones', logOrdenado, PAGE_SIZE_GENERICO);
   tbody.innerHTML = pagina.map(l => {
     const huboAlerta = (l.acciones||[]).some(a => a.startsWith('⚠️'));
     const accionesHtml = (l.acciones||[]).map(a =>
@@ -2195,7 +2197,7 @@ function renderSaldos(){
       tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>';
       if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = '';
     } else {
-      const ordenados = [...pagos].sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
+      const ordenados = [...pagos].sort((a,b) => fechaISO(b.fecha).localeCompare(fechaISO(a.fecha)) || (b.ts||0)-(a.ts||0));
       const { pagina, page, totalPaginas } = paginarArray('pagos', ordenados, PAGE_SIZE_GENERICO);
       tbodyHist.innerHTML = pagina.map(p => `
         <tr>
