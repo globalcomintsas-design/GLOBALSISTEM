@@ -2214,42 +2214,55 @@ function renderSaldos(){
 }
 window.renderSaldos = renderSaldos;
 
-// ── Menú desplegable de Saldos ──
+// ── Menú desplegable de Saldos (se abre al pasar el mouse por la pestaña "Saldos") ──
 const SALDOS_SECCIONES = {
-  pago:  { id:'saldos-sec-pago',  nombre:'Registrar pago' },
-  saldo: { id:'saldos-sec-saldo', nombre:'Saldo por despachante' },
-  hist:  { id:'saldos-sec-hist',  nombre:'Historial de pagos' },
-  vinc:  { id:'saldos-sec-vinc',  nombre:'Vinculaciones automáticas desde Caja' }
+  pago:  'saldos-sec-pago',
+  saldo: 'saldos-sec-saldo',
+  hist:  'saldos-sec-hist',
+  vinc:  'saldos-sec-vinc'
 };
-window.toggleMenuSaldos = function(ev){
-  if(ev) ev.stopPropagation();
-  document.getElementById('saldos-menu')?.classList.toggle('abierto');
-};
+let _saldosMenuTimer = null;
+function abrirMenuSaldos(){
+  clearTimeout(_saldosMenuTimer);
+  const btn = document.getElementById('tab-btn-saldos');
+  const menu = document.getElementById('saldos-menu');
+  if(!btn || !menu) return;
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.max(4, Math.min(r.left, window.innerWidth - menu.offsetWidth - 4)) + 'px';
+  menu.style.top = (r.bottom + 2) + 'px';
+  menu.classList.add('abierto');
+}
+function cerrarMenuSaldosConDemora(){
+  clearTimeout(_saldosMenuTimer);
+  _saldosMenuTimer = setTimeout(() => document.getElementById('saldos-menu')?.classList.remove('abierto'), 180);
+}
+(function initMenuSaldos(){
+  const btn = document.getElementById('tab-btn-saldos');
+  const menu = document.getElementById('saldos-menu');
+  if(!btn || !menu) return;
+  btn.addEventListener('mouseenter', abrirMenuSaldos);
+  btn.addEventListener('mouseleave', cerrarMenuSaldosConDemora);
+  menu.addEventListener('mouseenter', () => clearTimeout(_saldosMenuTimer));
+  menu.addEventListener('mouseleave', cerrarMenuSaldosConDemora);
+  window.addEventListener('scroll', () => menu.classList.remove('abierto'), { passive:true });
+})();
 window.seleccionarSeccionSaldos = function(key){
-  const sel = SALDOS_SECCIONES[key] || SALDOS_SECCIONES.saldo;
   if(!SALDOS_SECCIONES[key]) key = 'saldo';
-  Object.entries(SALDOS_SECCIONES).forEach(([k, s]) => {
-    const el = document.getElementById(s.id);
+  switchTab('saldos');
+  Object.entries(SALDOS_SECCIONES).forEach(([k, id]) => {
+    const el = document.getElementById(id);
     if(el) el.style.display = (k===key) ? '' : 'none';
   });
   document.querySelectorAll('#saldos-menu .saldos-menu-item[data-sec]').forEach(b => {
     b.classList.toggle('activo', b.dataset.sec === key);
   });
-  const lbl = document.getElementById('saldos-menu-actual');
-  if(lbl) lbl.textContent = sel.nombre;
   document.getElementById('saldos-menu')?.classList.remove('abierto');
 };
 window.exportarDesdeMenuSaldos = function(){
   // El filtro de despachante vive en "Saldo por despachante": se muestra esa sección antes de exportar
-  const visible = document.getElementById('saldos-sec-saldo')?.style.display !== 'none';
-  if(!visible) seleccionarSeccionSaldos('saldo');
-  else document.getElementById('saldos-menu')?.classList.remove('abierto');
+  seleccionarSeccionSaldos('saldo');
   exportarSaldosExcel();
 };
-document.addEventListener('click', e => {
-  const m = document.getElementById('saldos-menu');
-  if(m && !m.contains(e.target)) m.classList.remove('abierto');
-});
 
 // ── EXPORTAR MOVIMIENTOS DE UN DESPACHANTE (pestaña Saldos) ──
 window.exportarSaldosExcel = function(){
