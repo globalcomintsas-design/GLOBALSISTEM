@@ -478,7 +478,35 @@
   <!-- ═══════════════ TAB: SALDOS ═══════════════ -->
   <div id="tab-saldos" style="display:none;">
 
-    <div class="section-card">
+    <!-- Menú desplegable de Saldos -->
+    <style>
+      .saldos-menu{position:relative;display:inline-block;margin-bottom:14px;}
+      .saldos-menu-btn{background:#1e3a8a;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:8px;}
+      .saldos-menu-btn:hover{background:#1e40af;}
+      .saldos-menu-btn .flecha{font-size:10px;transition:transform .15s;}
+      .saldos-menu.abierto .saldos-menu-btn .flecha{transform:rotate(180deg);}
+      .saldos-menu-lista{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:300px;max-width:92vw;background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.18);padding:6px 0;z-index:50;}
+      .saldos-menu.abierto .saldos-menu-lista{display:block;}
+      .saldos-menu-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;padding:10px 16px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer;text-transform:uppercase;letter-spacing:.2px;}
+      .saldos-menu-item:hover{background:#eff6ff;color:#1e3a8a;}
+      .saldos-menu-item.activo{background:#dbeafe;color:#1e3a8a;}
+      .saldos-menu-sep{height:1px;background:#e2e8f0;margin:6px 0;}
+    </style>
+    <div class="saldos-menu" id="saldos-menu">
+      <button type="button" class="saldos-menu-btn" onclick="toggleMenuSaldos(event)">
+        <span>☰ <span id="saldos-menu-actual">Saldo por despachante</span></span><span class="flecha">▼</span>
+      </button>
+      <div class="saldos-menu-lista">
+        <button type="button" class="saldos-menu-item" data-sec="pago"  onclick="seleccionarSeccionSaldos('pago')">💰 Registrar pago</button>
+        <button type="button" class="saldos-menu-item activo" data-sec="saldo" onclick="seleccionarSeccionSaldos('saldo')">⚖️ Saldo por despachante</button>
+        <button type="button" class="saldos-menu-item" data-sec="hist"  onclick="seleccionarSeccionSaldos('hist')">🧾 Historial de pagos</button>
+        <button type="button" class="saldos-menu-item" data-sec="vinc"  onclick="seleccionarSeccionSaldos('vinc')">🔗 Vinculaciones automáticas desde Caja</button>
+        <div class="saldos-menu-sep"></div>
+        <button type="button" class="saldos-menu-item" onclick="exportarDesdeMenuSaldos()">📥 Exportar movimientos (Excel)</button>
+      </div>
+    </div>
+
+    <div class="section-card" id="saldos-sec-pago" style="display:none;">
       <h3>💰 Registrar pago</h3>
       <div class="form-row">
         <div class="form-group">
@@ -505,7 +533,7 @@
       </div>
     </div>
 
-    <div class="section-card">
+    <div class="section-card" id="saldos-sec-saldo">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
         <h3 style="margin:0;">⚖️ Saldo por despachante</h3>
         <div class="periodo-bar" style="margin:0;">
@@ -542,7 +570,7 @@
       </div>
     </div>
 
-    <div class="section-card">
+    <div class="section-card" id="saldos-sec-hist" style="display:none;">
       <h3>🧾 Historial de pagos</h3>
       <div class="tabla-wrap">
         <table>
@@ -563,7 +591,7 @@
       <div id="pagos-paginacion"></div>
     </div>
 
-    <div class="section-card">
+    <div class="section-card" id="saldos-sec-vinc" style="display:none;">
       <h3>🔗 Vinculaciones automáticas desde Caja</h3>
       <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">
         Registro de lo que el sistema vinculó (o no pudo vincular) automáticamente cuando se cargó un ingreso en Caja. Incluye pagos por factura, pagos genéricos por despachante y mudanzas marcadas como cobradas — y también los casos donde hubo ambigüedad o el monto no coincidió y por eso no se tocó nada.
