@@ -36,7 +36,8 @@ header{background:#1e3a8a;color:#fff;padding:14px 20px;display:flex;justify-cont
 .rep-menu.open{display:block;}
 .rep-menu-item{padding:10px 18px;font-size:12px;font-weight:600;color:#1a1a2e;cursor:pointer;text-transform:uppercase;letter-spacing:.02em;}
 .rep-menu-item:hover{background:#eff6ff;color:#1e3a8a;}
-#page-reportes .section{scroll-margin-top:70px;}
+.rep-oculta{display:none!important;}
+.rep-menu-item.sel{background:#dbeafe;color:#1e3a8a;}
 @keyframes repFlash{0%{box-shadow:0 0 0 3px #60a5fa}100%{box-shadow:0 1px 4px rgba(0,0,0,.06)}}
 .rep-flash{animation:repFlash 1.3s ease-out;}
 .container{padding:16px;max-width:1100px;margin:0 auto;}
@@ -348,7 +349,14 @@ tr:hover td{background:#fafbff;}
 
     <!-- REPORTES (unificado: incluye Cta. Corriente) -->
     <div class="page" id="page-reportes">
-      <div class="section" id="rep-informe">
+            <div class="section" id="repBarra" style="padding:12px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+          <div id="repVistaTitulo" style="font-weight:700;color:#1e3a8a;font-size:15px;">Informe anual</div>
+          <div id="repAnioTabs" class="cc-anio-tabs" style="margin:0;"></div>
+        </div>
+      </div>
+
+      <div class="section" id="rep-informe" data-rep="rep-informe">
         <div class="section-title">
           Informe Anual
           <div class="btn-row">
@@ -356,7 +364,6 @@ tr:hover td{background:#fafbff;}
             <button class="btn btn-outline btn-sm" onclick="exportarPDF()">📄 PDF</button>
           </div>
         </div>
-        <div id="repAnioTabs" class="cc-anio-tabs"></div>
         <div class="cards">
           <div class="card"><div class="card-label">Ingresos del año</div><div class="card-value green" id="repIngAnio">$ 0</div></div>
           <div class="card"><div class="card-label">Egresos del año</div><div class="card-value red" id="repEgrAnio">$ 0</div></div>
@@ -374,7 +381,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="seccionCierre">
+      <div class="section" id="seccionCierre" data-rep="seccionCierre">
         <div class="section-title">
           🔒 Cierre de Ejercicio (facturado vs. sin factura)
           <div class="btn-row"><button class="btn btn-success btn-sm" onclick="exportarCierreExcel()">📊 Excel del cierre</button></div>
@@ -410,7 +417,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-cuenta">
+      <div class="section" id="rep-cuenta" data-rep="rep-cuenta">
         <div class="section-title">Resumen por Cuenta (año seleccionado)</div>
         <div class="table-wrap">
           <table>
@@ -420,7 +427,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-cliente">
+      <div class="section" id="rep-cliente" data-rep="rep-cliente">
         <div class="section-title">Resumen por Cliente (año seleccionado) <button class="btn btn-success btn-sm" onclick="exportarCCExcel()">📊 Excel</button></div>
         <p style="font-size:11px;color:#94a3b8;margin-bottom:10px;">Cada cliente aparece una sola vez, con el total de Ingresos y Egresos del año en pesos sumados. Los movimientos en Dólares se resumen aparte, en la tabla de abajo, para que no se mezclen los importes.</p>
         <div class="search-bar"><input type="text" id="buscarCC" placeholder="Buscar cliente..." oninput="renderCC()" /></div>
@@ -432,7 +439,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="seccionClientesUsd" style="display:none">
+      <div class="section" id="seccionClientesUsd" data-rep="rep-cliente" style="display:none">
         <div class="section-title">Resumen por Cliente en Dólares (año seleccionado)</div>
         <div class="table-wrap">
           <table>
@@ -442,7 +449,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-personal">
+      <div class="section" id="rep-personal" data-rep="rep-personal">
         <div class="section-title">👥 Costo de Personal (del año seleccionado)</div>
         <div class="cards">
           <div class="card">
@@ -469,7 +476,7 @@ tr:hover td{background:#fafbff;}
         <div style="font-size:11px;color:#94a3b8;">Se arma solo con los pagos de Sueldos cargados a Caja desde que existe este desglose — los pagos anteriores no quedan incluidos acá.</div>
       </div>
 
-      <div class="section" id="detalleCC" style="display:none">
+      <div class="section" id="detalleCC" data-rep="rep-cliente" style="display:none">
         <div class="section-title">
           <span id="titleDetalleCC">Detalle cliente</span>
           <button class="btn btn-outline btn-sm" onclick="document.getElementById('detalleCC').style.display='none'">Cerrar</button>
@@ -483,7 +490,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-top">
+      <div class="section" id="rep-top" data-rep="rep-top">
         <div class="section-title">Top Clientes por Ingreso (histórico completo)</div>
         <div class="table-wrap">
           <table>
@@ -493,7 +500,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-creditos">
+      <div class="section" id="rep-creditos" data-rep="rep-creditos">
         <div class="section-title">
           🔀 Créditos a Nuestro Favor (Cheques Endosados)
         </div>
@@ -513,7 +520,7 @@ tr:hover td{background:#fafbff;}
         </div>
       </div>
 
-      <div class="section" id="rep-exportar">
+      <div class="section" id="rep-exportar" data-rep="rep-exportar">
         <div class="section-title">Exportar por rango de fechas</div>
         <div class="form-grid">
           <div class="field"><label>Desde</label><input type="date" id="repDesde" /></div>
@@ -2136,6 +2143,7 @@ window.verDetalleCC=function(cliente){
   document.getElementById('titleDetalleCC').textContent='📋 '+cliente+' · '+repAnioSeleccionado;
   document.getElementById('tablaDetalleCC').innerHTML=movs.map(m=>`<tr><td>${m.fecha}</td><td><span class="badge badge-${m.tipo==='Ingreso'?'ingreso':'egreso'}">${m.tipo}</span></td><td>${m.factura||'-'}</td><td>${m.detalle||'-'}</td><td>${m.cuenta}</td><td><strong>${m.cuenta==='Dólares'?fmtUSD(m.importe):fmtMoney(m.importe)}</strong></td></tr>`).join('')||'<tr><td colspan="6" style="text-align:center;color:#888;padding:16px">Sin movimientos en '+repAnioSeleccionado+'</td></tr>';
   renderCreditoEnDetalleCC(cliente);
+  if(window.repSeccionActual!=='rep-cliente') mostrarSeccionReporte('rep-cliente');
   document.getElementById('detalleCC').style.display='block';
   document.getElementById('detalleCC').scrollIntoView({behavior:'smooth'});
 };
@@ -2245,14 +2253,23 @@ window.repMenuHover=function(on,tabEl){
     m.classList.add('open');
   } else repMenuTimer=setTimeout(()=>m.classList.remove('open'),200);
 };
+window.repSeccionActual='rep-informe';
+window.mostrarSeccionReporte=function(id){
+  window.repSeccionActual=id;
+  document.querySelectorAll('#page-reportes [data-rep]').forEach(el=>el.classList.toggle('rep-oculta',el.dataset.rep!==id));
+  let nombre='';
+  document.querySelectorAll('#repMenu .rep-menu-item').forEach(it=>{
+    const on=it.getAttribute('onclick').includes("'"+id+"'");
+    it.classList.toggle('sel',on); if(on) nombre=it.textContent;
+  });
+  const t=document.getElementById('repVistaTitulo'); if(t) t.textContent=nombre;
+  if(id==='seccionCierre' && typeof renderCierre==='function') renderCierre();
+};
 window.irSeccionReportes=function(id){
   document.getElementById('repMenu').classList.remove('open');
+  mostrarSeccionReporte(id);
   if(!document.getElementById('page-reportes').classList.contains('active')) showTab('reportes',document.getElementById('tabReportes'));
-  setTimeout(()=>{
-    const el=document.getElementById(id); if(!el) return;
-    el.scrollIntoView({behavior:'smooth',block:'start'});
-    el.classList.remove('rep-flash'); void el.offsetWidth; el.classList.add('rep-flash');
-  },60);
+  window.scrollTo({top:0,behavior:'smooth'});
 };
 document.addEventListener('click',e=>{
   const m=document.getElementById('repMenu');
@@ -2430,6 +2447,7 @@ window.renderReportes=function(){
   renderCC();
   inicializarCierre();
   renderCierre();
+  mostrarSeccionReporte(window.repSeccionActual);
 };
 
 function fechaOrdenable(fechaAR){
