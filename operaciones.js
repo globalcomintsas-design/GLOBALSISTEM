@@ -132,6 +132,139 @@ function toast(msg, isError){
 }
 window.toast = toast;
 
+// ═══════════════════════════════════════════════════════════════════════
+// TIPO DE CAMBIO — DÓLAR OFICIAL BANCO NACIÓN (VENTA = el más caro)
+//  · Hoy:       dolarapi.com  (/v1/dolares/oficial)
+//  · Histórico: argentinadatos.com (/v1/cotizaciones/dolares/oficial/AAAA/MM/DD)
+//    Si ese día no hay cotización (sábado, domingo, feriado) retrocede al
+//    último día hábil anterior (hasta 7 días).
+// ═══════════════════════════════════════════════════════════════════════
+const _tcBnaCache = {};        // { 'AAAA-MM-DD': {venta, compra, fechaCotiz, fuente, ts} }
+let _tcAutoAplicado = false;   // true = el TC del formulario lo puso el sistema (y el usuario no lo tocó)
+let _tcReqSeq = 0;             // evita que una respuesta vieja pise a una más nueva
+
+function _fechaAR(iso){ const [y,m,d] = String(iso).slice(0,10).split('-'); return `${d}/${m}/${y}`; }
+function _sumarDiasISO(iso, n){
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return fechaLocalISO(d);
+}
+async function _fetchJSON(url, ms = 8000){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, { signal: ctrl.signal });
+    if(!r.ok) return null;
+    return await r.json();
+  } catch(e){ return null; }
+  finally { clearTimeout(t); }
+}
+
+async function obtenerTCBnaVenta(fechaISO, forzar){
+  const hoy = fechaLocalISO();
+  if(!fechaISO || fechaISO > hoy) fechaISO = hoy;
+  const c = _tcBnaCache[fechaISO];
+  if(!forzar && c && (fechaISO !== hoy || Date.now() - c.ts < 10 * 60 * 1000)) return c;
+
+  let res = null;
+  if(fechaISO === hoy){
+    const j = await _fetchJSON('https://dolarapi.com/v1/dolares/oficial');
+    if(j && Number(j.venta) > 0){
+      res = { venta: Number(j.venta), compra: Number(j.compra) || null, fechaCotiz: hoy, fuente: 'dolarapi.com' };
+    }
+  }
+  for(let i = 0; i <= 7 && !res; i++){
+    const f = _sumarDiasISO(fechaISO, -i);
+    const [y, m, d] = f.split('-');
+    let j = await _fetchJSON(`https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/${y}/${m}/${d}`);
+    if(Array.isArray(j)) j = j[j.length - 1];
+    if(j && Number(j.venta) > 0){
+      res = { venta: Number(j.venta), compra: Number(j.compra) || null, fechaCotiz: f, fuente: 'argentinadatos.com' };
+    }
+  }
+  if(res){ res.ts = Date.now(); _tcBnaCache[fechaISO] = res; }
+  return res;
+}
+window.obtenerTCBnaVenta = obtenerTCBnaVenta;
+
+function setTcHint(txt, color){
+  const el = document.getElementById('op_tc_hint');
+  if(!el) return;
+  el.textContent = txt || '';
+  el.style.color = color || '#64748b';
+}
+
+// Al cargar una operación NUEVA de tipo MIC: completa el TC con el dólar oficial BNA
+// (venta) de la fecha de la operación. No pisa un TC que el usuario escribió a mano,
+// ni toca operaciones que se están editando, ni las de tarifa en pesos.
+async function aplicarTCBnaSiMIC(){
+  if(document.getElementById('op_tipo').value !== 'MIC') return;
+  if(opEditandoId) return;
+  if(document.getElementById('tipo_desp_global').value === 'despachante_pesos') return;
+  const tcEl = document.getElementById('op_tc');
+  if(tcEl.value && !_tcAutoAplicado) return;
+
+  const fecha = document.getElementById('op_fecha').value || fechaLocalISO();
+  const seq = ++_tcReqSeq;
+  setTcHint('⏳ Buscando dólar oficial BNA...', '#64748b');
+  const r = await obtenerTCBnaVenta(fecha);
+  if(seq !== _tcReqSeq) return;
+  if(document.getElementById('op_tipo').value !== 'MIC' || opEditandoId) { setTcHint(''); return; }
+  if(tcEl.value && !_tcAutoAplicado) { setTcHint(''); return; }  // lo escribió el usuario mientras tanto
+
+  if(!r){
+    setTcHint('⚠️ No se pudo traer el dólar BNA — ingresá el TC a mano', '#dc2626');
+    toast('⚠️ No se pudo traer el dólar BNA, ingresá el TC a mano', true);
+    return;
+  }
+  tcEl.value = r.venta;
+  _tcAutoAplicado = true;
+  const dif = r.fechaCotiz !== fecha ? ` · último día hábil (${_fechaAR(r.fechaCotiz)})` : '';
+  setTcHint(`💵 BNA venta ${_fechaAR(fecha)}: $ ${fmt2(r.venta)} (automático)${dif}`, '#059669');
+  recalcularFormulario();
+}
+window.aplicarTCBnaSiMIC = aplicarTCBnaSiMIC;
+
+// Si el usuario escribe el TC a mano, deja de ser "automático" y no se vuelve a pisar
+document.getElementById('op_tc').addEventListener('input', function(ev){
+  if(ev.isTrusted){ _tcAutoAplicado = false; setTcHint(''); }
+});
+
+// ── PESTAÑA "TIPO DE CAMBIO" ──
+function _htmlTcCard(r, fechaPedida){
+  const dif = r.fechaCotiz !== fechaPedida
+    ? `<div style="font-size:11px;color:#92400e;margin-top:8px;">ℹ️ No hay cotización el ${_fechaAR(fechaPedida)} (fin de semana / feriado): se muestra la del último día hábil, ${_fechaAR(r.fechaCotiz)}.</div>` : '';
+  return `
+    <div class="resumen-box" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="res-item"><div class="res-label">Venta (se aplica)</div><div class="res-val green" style="font-size:28px;">$ ${fmt2(r.venta)}</div></div>
+      <div class="res-item"><div class="res-label">Compra</div><div class="res-val">${r.compra ? '$ ' + fmt2(r.compra) : '—'}</div></div>
+      <div class="res-item"><div class="res-label">Cotización del</div><div class="res-val">${_fechaAR(r.fechaCotiz)}</div></div>
+    </div>${dif}
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fuente: ${r.fuente}</div>`;
+}
+
+window.renderTipoCambio = async function(forzar){
+  const cont = document.getElementById('tc-hoy');
+  if(!cont) return;
+  cont.innerHTML = '<span class="spinner dark"></span> Consultando dólar oficial BNA...';
+  const hoy = fechaLocalISO();
+  const r = await obtenerTCBnaVenta(hoy, !!forzar);
+  cont.innerHTML = r ? _htmlTcCard(r, hoy)
+    : '<span style="color:#dc2626;font-weight:700;">⚠️ No se pudo obtener la cotización. Revisá la conexión y reintentá.</span>';
+  const f = document.getElementById('tc_consulta_fecha');
+  if(f && !f.value) f.value = hoy;
+};
+
+window.consultarTCBnaFecha = async function(){
+  const fecha = document.getElementById('tc_consulta_fecha').value;
+  const cont = document.getElementById('tc-consulta');
+  if(!fecha){ toast('Elegí una fecha'); return; }
+  cont.innerHTML = '<span class="spinner dark"></span> Consultando...';
+  const r = await obtenerTCBnaVenta(fecha);
+  cont.innerHTML = r ? _htmlTcCard(r, fecha < fechaLocalISO() ? fecha : fechaLocalISO())
+    : '<span style="color:#dc2626;font-weight:700;">⚠️ No hay cotización disponible para esa fecha.</span>';
+};
+
 // Etiqueta legible para el tipo de tarifa de un despachante
 function etiquetaTipoDespachante(tipo){
   switch(tipo){
@@ -198,11 +331,11 @@ window.toggleTarifas = function(){
 
 // ── SWITCH TAB ──
 window.switchTab = function(tab){
-  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos'].forEach(t => {
+  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos','tc'].forEach(t => {
     document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
   });
   document.querySelectorAll('.tab').forEach((btn,i) => {
-    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos'][i]===tab);
+    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos','tc'][i]===tab);
   });
   if(tab==='listado'){ renderTabla(); renderListadoArbolFechas(); }
   if(tab==='dashboard') renderDashboard();
@@ -210,6 +343,7 @@ window.switchTab = function(tab){
   if(tab==='clientes')  renderTablaClientesFinales();
   if(tab==='ramiro')    renderRamiro();
   if(tab==='remitos')   renderRemitos();
+  if(tab==='tc')        renderTipoCambio();
 };
 
 // ── AUTOCOMPLETE ──
@@ -329,6 +463,7 @@ actualizarFinSemPorFecha(); // evalúa fin de semana ya desde la primera carga d
 document.getElementById('op_fecha').addEventListener('change', function(){
   actualizarFinSemPorFecha();
   recalcularFormulario();
+  aplicarTCBnaSiMIC();   // si el TC es automático (MIC), lo actualiza a la nueva fecha
 });
 
 // ── NÚMERO DE OP ──
@@ -535,6 +670,7 @@ window.onTipoDespachoChange = function(){
   tcGroup.style.display = esPesosTipo ? 'none' : '';
 
   recalcularFormulario();
+  aplicarTCBnaSiMIC();
 };
 
 // ── CAMBIO TIPO OPERACIÓN ──
@@ -581,6 +717,7 @@ window.onTipoChange = function(){
     document.getElementById('chk-senasa-prod-wrap').style.display = '';
   }
   recalcularFormulario();
+  aplicarTCBnaSiMIC();   // MIC nuevo -> TC = dólar oficial BNA (venta) de la fecha de la operación
 };
 
 // ── CAMBIO DESPACHANTE ──
@@ -1057,6 +1194,8 @@ window.editarOperacion = function(id){
   document.getElementById('op_adicionales_pesos').value = o.adicionalesPesos || 0;
   document.getElementById('op_adicionales_usd').value   = o.adicionalesUsd || 0;
   document.getElementById('op_tc').value           = o.opTcInput || o.tc || 1440;
+  _tcAutoAplicado = false;   // al editar se respeta el TC guardado
+  setTcHint('');
 
   tieneFactura = o.tieneFactura !== false;
 
@@ -1126,6 +1265,8 @@ window.limpiarFormulario = function(){
   document.getElementById('op_adicionales_pesos').value = '0';
   document.getElementById('op_adicionales_usd').value = '0';
   document.getElementById('op_tc').value = '';
+  _tcAutoAplicado = false;
+  setTcHint('');
   document.getElementById('op_canal').value = 'V';
   document.getElementById('op_tipo').value = 'EXPO';
   document.getElementById('tipo_desp_global').value = 'despachante';
