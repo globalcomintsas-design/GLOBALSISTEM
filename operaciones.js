@@ -243,12 +243,31 @@ function _htmlTcCard(r, fechaPedida){
     <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fuente: ${r.fuente}</div>`;
 }
 
+
+// ── TC DEL DÍA EN LA BARRA AZUL SUPERIOR ──
+async function actualizarTopbarTC(forzar){
+  const el = document.getElementById('topbarTC');
+  if(!el) return;
+  const r = await obtenerTCBnaVenta(fechaLocalISO(), !!forzar);
+  if(r){
+    el.textContent = `💵 BNA venta ${_fechaAR(r.fechaCotiz).slice(0,5)}: $ ${fmt2(r.venta)}`;
+    el.style.background = 'rgba(255,255,255,0.15)';
+  } else {
+    el.textContent = '💵 BNA: sin datos';
+    el.style.background = 'rgba(220,38,38,0.6)';
+  }
+}
+window.actualizarTopbarTC = actualizarTopbarTC;
+actualizarTopbarTC();
+setInterval(() => actualizarTopbarTC(true), 10 * 60 * 1000);
+
 window.renderTipoCambio = async function(forzar){
   const cont = document.getElementById('tc-hoy');
   if(!cont) return;
   cont.innerHTML = '<span class="spinner dark"></span> Consultando dólar oficial BNA...';
   const hoy = fechaLocalISO();
   const r = await obtenerTCBnaVenta(hoy, !!forzar);
+  if(r) actualizarTopbarTC();
   cont.innerHTML = r ? _htmlTcCard(r, hoy)
     : '<span style="color:#dc2626;font-weight:700;">⚠️ No se pudo obtener la cotización. Revisá la conexión y reintentá.</span>';
   const f = document.getElementById('tc_consulta_fecha');
