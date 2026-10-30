@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc, where, limit }
+import { getFirestore, collection, addDoc as _addDoc, getDocs, getDoc, deleteDoc as _deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc as _updateDoc, where, limit }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -491,15 +491,75 @@ function generarNumOp(){
 }
 
 // ── FIRESTORE listeners ──
-// Ops: tiempo real, TODAS las operaciones (sin filtro de año). Antes se cargaba solo el
-// año en curso mientras los pagos se cargaban de todos los años, y eso desbalanceaba
-// los saldos del Dashboard (pagos viejos restando contra operaciones nuevas).
-const _anioActual = new Date().getFullYear();
-const _fechaDesde = _anioActual + '-01-01'; // ya no se usa en las queries; se deja por compatibilidad
+// ═══════════════════════════════════════════════════════════════════════
+// LECTURA HÍBRIDA (ahorra cuota de Firestore):
+//  · MES EN CURSO  -> en vivo (onSnapshot), igual que antes.
+//  · MESES ANTERIORES (todos los años) -> se leen UNA vez por día y se guardan en el
+//    navegador (IndexedDB). Refrescar la página NO vuelve a leerlos.
+//  · Botón "🔄 Histórico" (barra superior) para forzar la lectura cuando haga falta.
+//  · Tus propias altas / ediciones / bajas de operaciones y pagos viejos se reflejan
+//    al instante en pantalla y en la caché, sin releer nada.
+//  · Cambios hechos por OTRAS personas en meses anteriores aparecen al actualizar el
+//    histórico (o al día siguiente).
+// ═══════════════════════════════════════════════════════════════════════
+const _CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const _CACHE_KEY = 'hist_v1';
+let _histOps = [], _histPagos = [], _vivoOps = [], _vivoPagos = [];
+let _histListo = false, _histTs = 0, _histCorte = '';
 
-onSnapshot(query(collection(db,'despachantees_ops'), orderBy('fecha','asc')), snap => {
-  operaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
-  datosCargados = true;
+function _mesActualInicio(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-01';
+}
+
+// IndexedDB mínimo (clave -> valor). Si falla (modo privado, etc.) simplemente no cachea.
+function _idb(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('gc_operaciones_cache', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function _cacheGet(k){
+  try {
+    const d = await _idb();
+    return await new Promise(res => {
+      const q = d.transaction('kv').objectStore('kv').get(k);
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => res(null);
+    });
+  } catch(e){ return null; }
+}
+async function _cacheSet(k, v){
+  try {
+    const d = await _idb();
+    await new Promise(res => {
+      const t = d.transaction('kv','readwrite');
+      t.objectStore('kv').put(v, k);
+      t.oncomplete = () => res();
+      t.onerror = () => res();
+    });
+  } catch(e){}
+}
+let _guardarCacheTimer = null;
+function _guardarCacheDebounced(){
+  clearTimeout(_guardarCacheTimer);
+  _guardarCacheTimer = setTimeout(() => {
+    _cacheSet(_CACHE_KEY, { corte:_histCorte, ts:_histTs, ops:_histOps, pagos:_histPagos });
+  }, 400);
+}
+
+// Une histórico + mes en vivo (sin duplicados: si un doc está en vivo, manda el vivo)
+function _unir(hist, vivo){
+  const ids = new Set(vivo.map(x => x.id));
+  return [...hist.filter(x => !ids.has(x.id)), ...vivo];
+}
+
+function _aplicarOps(){
+  operaciones = _unir(_histOps, _vivoOps);
+  datosCargados = _histListo;      // no se muestran saldos hasta tener también el histórico
+  if(!_histListo) return;
   renderFiltros();
   renderListadoArbolFechas();
   // re-render tab activo si corresponde
@@ -510,16 +570,134 @@ onSnapshot(query(collection(db,'despachantees_ops'), orderBy('fecha','asc')), sn
   if(tabActivo.includes('Ramiro'))    renderRamiro();
   if(tabActivo.includes('Clientes'))  renderTablaClientesFinales();
   recalcularFormulario();
-});
+}
 
-// Pagos a despachantes: colección chica, sin filtro de año
-onSnapshot(collection(db,'despachantees_pagos'), snap => {
-  pagos = snap.docs.map(d => ({id:d.id, ...d.data()}));
+function _aplicarPagos(){
+  pagos = _unir(_histPagos, _vivoPagos);
   window.pagos = pagos;
+  if(!_histListo) return;
   renderSaldos();
   const tabActivo = document.querySelector('.tab.active')?.textContent || '';
   if(tabActivo.includes('Dashboard')) renderDashboard();
+}
+
+async function cargarHistorico(forzar){
+  const corte = _mesActualInicio();
+  const c = await _cacheGet(_CACHE_KEY);
+  if(!forzar && c && c.corte === corte && (Date.now() - c.ts) < _CACHE_TTL_MS){
+    _histOps = c.ops || []; _histPagos = c.pagos || [];
+    _histTs = c.ts; _histCorte = c.corte;
+  } else {
+    if(forzar) toast('⏳ Actualizando histórico...');
+    try {
+      const [so, sp] = await Promise.all([
+        getDocs(query(collection(db,'despachantees_ops'), where('fecha','<', corte), orderBy('fecha','asc'))),
+        getDocs(query(collection(db,'despachantees_pagos'), where('fecha','<', corte)))
+      ]);
+      _histOps   = so.docs.map(d => ({id:d.id, ...d.data()}));
+      _histPagos = sp.docs.map(d => ({id:d.id, ...d.data()}));
+      _histTs = Date.now(); _histCorte = corte;
+      await _cacheSet(_CACHE_KEY, { corte, ts:_histTs, ops:_histOps, pagos:_histPagos });
+      if(forzar) toast('✅ Histórico actualizado (' + _histOps.length + ' operaciones)');
+    } catch(e){
+      console.warn('Error leyendo histórico:', e);
+      if(c){   // sin conexión / cuota: se usa lo último guardado aunque sea viejo
+        _histOps = c.ops || []; _histPagos = c.pagos || [];
+        _histTs = c.ts; _histCorte = c.corte;
+        toast('⚠️ No se pudo actualizar el histórico: se usa la última copia guardada', true);
+      } else {
+        toast('❌ No se pudo leer el histórico: ' + e.message, true);
+        return;
+      }
+    }
+  }
+  _histListo = true;
+  _aplicarOps();
+  _aplicarPagos();
+}
+window.actualizarHistorico = () => cargarHistorico(true);
+
+// ── Escrituras envueltas: además de escribir en Firestore, mantienen al día el histórico local ──
+function _colDe(ref){ return ref && ref.parent ? ref.parent.id : ''; }
+function _arrHist(col){ return col === 'despachantees_ops' ? _histOps : (col === 'despachantees_pagos' ? _histPagos : null); }
+function _setArrHist(col, arr){ if(col === 'despachantees_ops') _histOps = arr; else _histPagos = arr; }
+function _reaplicar(col){ if(col === 'despachantees_ops') _aplicarOps(); else _aplicarPagos(); }
+
+async function updateDoc(ref, ...args){
+  const r = await _updateDoc(ref, ...args);
+  try {
+    const col = _colDe(ref), arr = _arrHist(col);
+    if(arr && _histListo){
+      const corte = _histCorte || _mesActualInicio();
+      const data = (args[0] && typeof args[0] === 'object') ? args[0] : null;
+      const i = arr.findIndex(x => x.id === ref.id);
+      if(i >= 0 && data){
+        const nuevo = { ...arr[i], ...data };
+        if(nuevo.fecha && nuevo.fecha >= corte){ arr.splice(i,1); }   // pasó al mes en curso: lo trae el vivo
+        else arr[i] = nuevo;
+        _reaplicar(col); _guardarCacheDebounced();
+      } else if(i < 0 && data && data.fecha && data.fecha < corte){
+        // un doc del mes en curso pasó a un mes anterior: se trae una sola vez
+        const snap = await getDoc(ref);
+        if(snap.exists()){ arr.push({ id:ref.id, ...snap.data() }); _reaplicar(col); _guardarCacheDebounced(); }
+      }
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return r;
+}
+
+async function deleteDoc(ref){
+  const r = await _deleteDoc(ref);
+  try {
+    const col = _colDe(ref), arr = _arrHist(col);
+    if(arr && _histListo){
+      const i = arr.findIndex(x => x.id === ref.id);
+      if(i >= 0){ arr.splice(i,1); _reaplicar(col); _guardarCacheDebounced(); }
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return r;
+}
+
+async function addDoc(colRef, data){
+  const ref = await _addDoc(colRef, data);
+  try {
+    const col = colRef && colRef.id, arr = _arrHist(col);
+    if(arr && _histListo && data && data.fecha && data.fecha < (_histCorte || _mesActualInicio())){
+      arr.push({ id:ref.id, ...data }); _reaplicar(col); _guardarCacheDebounced();
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return ref;
+}
+
+// Mes en curso: en vivo
+onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=', _mesActualInicio()), orderBy('fecha','asc')), snap => {
+  _vivoOps = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  _aplicarOps();
 });
+onSnapshot(query(collection(db,'despachantees_pagos'), where('fecha','>=', _mesActualInicio())), snap => {
+  _vivoPagos = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  _aplicarPagos();
+});
+
+// Histórico (meses anteriores): una vez por día
+cargarHistorico(false);
+
+// Botón "🔄 Histórico" en la barra superior (sin tocar el HTML)
+(function(){
+  const crear = () => {
+    const cont = document.querySelector('.topbar-right');
+    if(!cont || document.getElementById('btnActualizarHistorico')) return;
+    const b = document.createElement('button');
+    b.id = 'btnActualizarHistorico';
+    b.className = 'btn-back';
+    b.type = 'button';
+    b.textContent = '🔄 Histórico';
+    b.title = 'Vuelve a leer las operaciones y pagos de meses anteriores (se leen solo una vez por día)';
+    b.onclick = () => window.actualizarHistorico();
+    cont.prepend(b);
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
 
 // ── TARIFAS: persistencia en Firestore ──
 const TARIFA_IDS = [
