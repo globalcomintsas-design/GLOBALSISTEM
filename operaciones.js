@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, addDoc as _addDoc, getDocs, getDoc, deleteDoc as _deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc as _updateDoc, where, limit }
+import { getFirestore, collection, addDoc as _addDoc, getDocs, getDoc, deleteDoc as _deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc as _updateDoc, where, limit, runTransaction }
   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -487,7 +487,11 @@ document.getElementById('op_fecha').addEventListener('change', function(){
 
 // ── NÚMERO DE OP ──
 function generarNumOp(){
-  return operaciones.length + 1;
+  // Numeración por año: sigue desde el mayor número ya usado en el año en curso
+  const anio = String(new Date().getFullYear());
+  const delAnio = operaciones.filter(o => String(o.fecha||'').startsWith(anio));
+  const maxNum = delAnio.reduce((m,o) => Math.max(m, parseInt(o.numOp)||0), 0);
+  return Math.max(maxNum, delAnio.length) + 1;
 }
 
 // ── FIRESTORE listeners ──
@@ -506,6 +510,7 @@ const _CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const _CACHE_KEY = 'hist_v1';
 let _histOps = [], _histPagos = [], _vivoOps = [], _vivoPagos = [];
 let _histListo = false, _histTs = 0, _histCorte = '';
+let _vivoOpsListo = false, _numerando = false;
 
 function _mesActualInicio(){
   const d = new Date();
@@ -570,6 +575,71 @@ function _aplicarOps(){
   if(tabActivo.includes('Ramiro'))    renderRamiro();
   if(tabActivo.includes('Clientes'))  renderTablaClientesFinales();
   recalcularFormulario();
+  numerarOpsPendientes();
+}
+
+// Las operaciones cargadas desde la página de empleados se guardan SIN número (así esa
+// página no necesita leer nada para guardar). Acá se les asigna el número, en orden de
+// carga, continuando desde el mayor número del año. Se escribe una sola vez por operación.
+// Numeración segura entre varias personas: se usa un contador por año en Firestore
+// (config/contador_ops_AAAA) dentro de una transacción. Dos personas a la vez NUNCA
+// obtienen el mismo número, y una operación que ya tiene número no se vuelve a numerar.
+async function _asignarNumOp(opId){
+  const anio = new Date().getFullYear();
+  const cRef = doc(db,'config','contador_ops_' + anio);
+  const oRef = doc(db,'despachantees_ops', opId);
+  const base = generarNumOp() - 1;   // mayor número que se ve localmente (por si el contador está atrasado)
+  return await runTransaction(db, async tx => {
+    const os = await tx.get(oRef);
+    if(!os.exists()) return null;
+    const actual = parseInt(os.data().numOp) || 0;
+    if(actual > 0) return actual;
+    const cs = await tx.get(cRef);
+    const n = Math.max(cs.exists() ? (parseInt(cs.data().n) || 0) : 0, base) + 1;
+    tx.set(cRef, { n });
+    tx.update(oRef, { numOp: n });
+    return n;
+  });
+}
+
+// Reserva el próximo número para una operación que se carga desde esta misma página
+async function _reservarNumOp(){
+  const anio = new Date().getFullYear();
+  const cRef = doc(db,'config','contador_ops_' + anio);
+  const base = generarNumOp() - 1;
+  try {
+    return await runTransaction(db, async tx => {
+      const cs = await tx.get(cRef);
+      const n = Math.max(cs.exists() ? (parseInt(cs.data().n) || 0) : 0, base) + 1;
+      tx.set(cRef, { n });
+      return n;
+    });
+  } catch(e){
+    console.warn('No se pudo reservar número en el contador, se usa el local:', e);
+    return generarNumOp();
+  }
+}
+
+async function numerarOpsPendientes(){
+  if(_numerando || !_histListo || !_vivoOpsListo) return;
+  const anio = String(new Date().getFullYear());
+  const pendientes = operaciones
+    .filter(o => String(o.fecha||'').startsWith(anio) && !(parseInt(o.numOp) > 0))
+    .sort((a,b) => (a.ts||0) - (b.ts||0));
+  if(!pendientes.length) return;
+  _numerando = true;
+  let huboCambios = false;
+  try {
+    for(const o of pendientes){
+      const n = await _asignarNumOp(o.id);
+      if(n){ o.numOp = n; huboCambios = true; }   // o es la misma referencia que la copia local
+    }
+  } catch(e){
+    console.warn('No se pudo numerar operaciones pendientes:', e);
+  } finally {
+    _numerando = false;
+  }
+  if(huboCambios){ _guardarCacheDebounced(); _aplicarOps(); }
 }
 
 function _aplicarPagos(){
@@ -672,6 +742,7 @@ async function addDoc(colRef, data){
 // Mes en curso: en vivo
 onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=', _mesActualInicio()), orderBy('fecha','asc')), snap => {
   _vivoOps = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  _vivoOpsListo = true;
   _aplicarOps();
 });
 onSnapshot(query(collection(db,'despachantees_pagos'), where('fecha','>=', _mesActualInicio())), snap => {
@@ -1300,7 +1371,6 @@ window.guardarOperacion = async function(){
 
   const datos = construirDatosOperacion();
   const op = {
-    numOp: generarNumOp(),
     ...datos,
     ramiroOPagado: 'no',
     cargadoPor: user.username,
@@ -1314,6 +1384,7 @@ window.guardarOperacion = async function(){
   btn.innerHTML = '<span class="spinner"></span> Guardando...';
 
   try {
+    op.numOp = await _reservarNumOp();
     await addDoc(collection(db,'despachantees_ops'), op);
     toast('✅ Operación guardada: #' + op.numOp);
     limpiarFormulario();
