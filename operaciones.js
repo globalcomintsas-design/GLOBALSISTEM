@@ -1,1147 +1,4635 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GLOBALCOMINT · Operaciones</title>
-<link rel="stylesheet" href="operaciones.css">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
-</head>
-<body>
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, collection, addDoc as _addDoc, getDocs, getDoc, deleteDoc as _deleteDoc, doc, setDoc, onSnapshot, orderBy, query, updateDoc as _updateDoc, where, limit, runTransaction }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-<div class="topbar">
-  <div class="topbar-left">
-    <div class="topbar-brand">GLOBALCOMINT</div>
-    <div class="topbar-mod">📋 Operaciones</div>
-  </div>
-  <div class="topbar-right">
-    <span id="topbarTC" title="Dólar oficial Banco Nación (venta) del día" onclick="switchTab('tc')" style="background:rgba(255,255,255,0.15);color:#fff;font-size:12px;font-weight:700;padding:6px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;">💵 BNA venta: ...</span>
-    <span class="user-chip" id="userChip"></span>
-    <a class="btn-back" href="index.html">← Inicio</a>
-  </div>
-</div>
+const firebaseConfig = {
+  apiKey: "AIzaSyDO5AtG0PZ_Y48MGwmeDPktxTQfvcj9dbc",
+  authDomain: "caja-globalcomint.firebaseapp.com",
+  projectId: "caja-globalcomint",
+  storageBucket: "caja-globalcomint.firebasestorage.app",
+  messagingSenderId: "191266145805",
+  appId: "1:191266145805:web:a4b7e7124e6ad9f8f9b744"
+};
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
 
-<div class="main">
-  <div class="page-header">
-    <div class="page-title">Operaciones de Despachantes</div>
-    <div class="page-sub">Carga, tarifación y seguimiento de operaciones realizadas para otros despachantes</div>
-  </div>
+// ── Auth check ──
+const sesion = localStorage.getItem('gc_user');
+if(!sesion){ location.href='index.html'; }
+const user = JSON.parse(sesion);
+document.getElementById('userChip').textContent = '👤 ' + user.nombre;
 
-  <!-- TABS -->
-  <div class="tabs">
-    <button class="tab active" onclick="switchTab('cargar')">➕ Cargar Operación</button>
-    <button class="tab" onclick="switchTab('listado')">📋 Listado</button>
-    <button class="tab" onclick="switchTab('dashboard')">📊 Dashboard</button>
-    <button class="tab" id="tab-btn-saldos" onclick="switchTab('saldos')">💰 Saldos ▾</button>
-    <button class="tab" onclick="switchTab('clientes')">🏢 Clientes</button>
-    <button class="tab" onclick="switchTab('mudanzas')">📦 Mudanzas</button>
-    <button class="tab" onclick="switchTab('ramiro')">👷 Cuenta Ramiro</button>
-    <button class="tab" onclick="switchTab('remitos')">🧾 Recibos</button>
-    <button class="tab" onclick="switchTab('tc')">💵 Tipo de cambio</button>
-  </div>
+// ── Estado global ──
+let operaciones = [];
+let clientes = [];
+let mudanzas = [];
+let mudanzasCobros = []; // historial de cobros de mudanzas (con fecha real de cobro)
+let pagos = [];
+let despachantesNombres = [];
+let clientesNombres = [];
+let clientesFinalesDocs = []; // [{id, nombre}] de corresponsales_clientes_finales
+window.despachantesNombres = despachantesNombres;
+window.clientesNombres = clientesNombres;
 
-  <!-- Menú desplegable de Saldos: se abre al pasar el mouse por la pestaña "Saldos" -->
-  <style>
-    #saldos-menu{display:none;position:fixed;z-index:1000;min-width:300px;max-width:92vw;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 8px 24px rgba(15,23,42,.22);padding:6px 0;}
-    #saldos-menu.abierto{display:block;}
-    .saldos-menu-item{display:block;width:100%;text-align:left;background:none;border:none;padding:10px 16px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer;text-transform:uppercase;letter-spacing:.2px;}
-    .saldos-menu-item:hover{background:#eff6ff;color:#1e3a8a;}
-    .saldos-menu-item.activo{background:#dbeafe;color:#1e3a8a;}
-    .saldos-menu-sep{height:1px;background:#e2e8f0;margin:6px 0;}
-  </style>
-  <div id="saldos-menu">
-    <button type="button" class="saldos-menu-item" data-sec="pago"  onclick="seleccionarSeccionSaldos('pago')">💰 Registrar pago</button>
-    <button type="button" class="saldos-menu-item activo" data-sec="saldo" onclick="seleccionarSeccionSaldos('saldo')">⚖️ Saldo por despachante</button>
-    <button type="button" class="saldos-menu-item" data-sec="hist"  onclick="seleccionarSeccionSaldos('hist')">🧾 Historial de pagos</button>
-    <button type="button" class="saldos-menu-item" data-sec="vinc"  onclick="seleccionarSeccionSaldos('vinc')">🔗 Vinculaciones automáticas desde Caja</button>
-    <div class="saldos-menu-sep"></div>
-    <button type="button" class="saldos-menu-item" onclick="exportarDesdeMenuSaldos()">📥 Exportar movimientos (Excel)</button>
-  </div>
+// Variables de estado del formulario (accesibles en todo el módulo)
+let tieneFactura = true;
+let esApoderado  = false;
+let esKotinya    = false;
+let opEditandoId = null;
+let datosCargados = false;
+// Adicionales propios (ver bloque ADICIONALES PROPIOS más abajo)
+let adicionalesCustom = [];
+window._adicForzados = new Set();   // ids archivados que igual hay que mostrar (operación en edición)
+let adicTimeout = null;
 
-  <!-- ═══════════════ TAB: CARGAR ═══════════════ -->
-  <div id="tab-cargar">
+// Paginación del listado
+let listadoPage = 1;
+const LISTADO_PAGE_SIZE = 15;
 
-    <!-- TARIFAS CONFIGURABLES -->
-    <div class="tarifas-bar">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="toggleTarifas()">
-        <h3 style="margin:0;">⚙️ Tarifas vigentes</h3>
-        <span id="tarifas-toggle-icon" style="font-size:18px;color:#1e3a8a;">🔒</span>
-      </div>
-      <div id="tarifas-body" style="display:none;margin-top:14px;">
-        <div style="margin-bottom:10px;font-size:11px;color:#059669;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 12px;">
-          💾 Todas las tarifas de acá abajo se guardan solas apenas las modificás — no hace falta ningún botón. Van a estar así para todos la próxima vez que entren.
-        </div>
-        <div class="tarifas-grid">
-          <div class="tarifa-item">
-            <span class="tarifa-label">Honorarios V/N</span>
-            <span class="tarifa-val"><input type="number" id="t_vn" value="17" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Honorarios R</span>
-            <span class="tarifa-val"><input type="number" id="t_r" value="20" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item" style="background:#e0f2fe;">
-            <span class="tarifa-label">💲 Honorarios V/N (pesos)</span>
-            <span class="tarifa-val"><input type="number" id="t_pesos_vn" value="5000" step="50" oninput="recalcularFormulario();guardarTarifasDebounced()"> $</span>
-          </div>
-          <div class="tarifa-item" style="background:#e0f2fe;">
-            <span class="tarifa-label">💲 Honorarios R (pesos)</span>
-            <span class="tarifa-val"><input type="number" id="t_pesos_r" value="6000" step="50" oninput="recalcularFormulario();guardarTarifasDebounced()"> $</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Armado sobre</span>
-            <span class="tarifa-val"><input type="number" id="t_sobre" value="4" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Camión AD (V/N)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_vn" value="5" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Camión AD (R)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_r" value="6" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">SENASA embalaje</span>
-            <span class="tarifa-val"><input type="number" id="t_senasa_p" value="2" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">SENASA producto</span>
-            <span class="tarifa-val"><input type="number" id="t_senasa_prod" value="3" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Hojas adicionales</span>
-            <span class="tarifa-val"><input type="number" id="t_hoja" value="0.15" step="0.05" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">MIC base</span>
-            <span class="tarifa-val"><input type="number" id="t_mic" value="5" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Foja ad. MIC</span>
-            <span class="tarifa-val"><input type="number" id="t_mic_foja" value="2" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Multinota</span>
-            <span class="tarifa-val"><input type="number" id="t_multinota" value="2" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Fin de semana</span>
-            <span class="tarifa-val"><input type="number" id="t_finsem" value="4" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Apoderado</span>
-            <span class="tarifa-val"><input type="number" id="t_apoderado_basico" value="70" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Apoderado premium</span>
-            <span class="tarifa-val"><input type="number" id="t_apoderado" value="100" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Honorarios Kotinya</span>
-            <span class="tarifa-val"><input type="number" id="t_kotinya" value="85" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Pago a Ramiro</span>
-            <span class="tarifa-val"><input type="number" id="t_ramiro_op" value="30" step="1" oninput="onTipoDespachoChange();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Camión AD (apod.)</span>
-            <span class="tarifa-val"><input type="number" id="t_cam_apod" value="10" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD/u</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">MOV AD</span>
-            <span class="tarifa-val"><input type="number" id="t_mov_ad" value="0" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Adicionales (pesos)</span>
-            <span class="tarifa-val"><input type="number" id="t_adicionales" value="0" step="100" oninput="recalcularFormulario();guardarTarifasDebounced()"> $</span>
-          </div>
-          <div class="tarifa-item">
-            <span class="tarifa-label">Oficio (fijo, cualquier canal)</span>
-            <span class="tarifa-val"><input type="number" id="t_oficio" value="5" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-          </div>
-        </div>
-        <div style="margin-top:12px;padding:10px 14px;border-top:1px solid #fef3c7;background:#fffbeb;border-radius:8px;">
-          <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">⭐ Tarifas despachante externo (premium)</div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;">
-            <div class="tarifa-item" style="background:#fef9c3;">
-              <span class="tarifa-label">Honorarios V/N (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_vn" value="26" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-            </div>
-            <div class="tarifa-item" style="background:#fef9c3;">
-              <span class="tarifa-label">Honorarios R (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_r" value="28" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-            </div>
-            <div class="tarifa-item" style="background:#fef9c3;">
-              <span class="tarifa-label">Camión AD V/N (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_cam_vn" value="6" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-            </div>
-            <div class="tarifa-item" style="background:#fef9c3;">
-              <span class="tarifa-label">Camión AD R (prem)</span>
-              <span class="tarifa-val"><input type="number" id="t_prem_cam_r" value="8" step="0.5" oninput="recalcularFormulario();guardarTarifasDebounced()"> USD</span>
-            </div>
-          </div>
-        </div>
-        <div style="margin-top:12px;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
-          <div style="font-size:11px;font-weight:700;color:#0c4a6e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">➕ Adicionales propios (los que agregás vos)</div>
-          <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Cada adicional nuevo aparece solo como tilde en "Adicionales y servicios" y acá podés cambiarle la tarifa cuando quieras.</div>
-          <div id="adic-custom-lista" class="tarifas-grid"></div>
-          <div id="adic-form-tarifas"></div>
-        </div>
-        <div class="tc-row">
-          <span style="font-size:12px;color:#64748b;">Tipo de despacho:</span>
-          <select id="tipo_desp_global" onchange="onTipoDespachoChange()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;">
-            <option value="despachante">Despachante (tarifa estándar)</option>
-            <option value="desp_externo">Desp. externo (tarifa premium)</option>
-            <option value="apoderado_basico">Apoderado</option>
-            <option value="apoderado">Apoderado premium</option>
-            <option value="kotinya">Kotinya / Ramiro</option>
-            <option value="despachante_pesos">Despachante (tarifa en pesos)</option>
-          </select>
-          <span id="premium-badge" style="display:none;background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;margin-left:8px;">+20% PREMIUM</span>
-        </div>
-      </div>
-    </div>
+// ── Paginación genérica (para tablas que no tenían paginación propia) ──
+// Se usa para: Historial de pagos, Vinculaciones automáticas (Saldos), Cuenta Ramiro,
+// Historial de recibos y las tablas de Clientes/Clientes finales. Cada tabla se identifica
+// por una "key" propia y mantiene su propio número de página en paginaGenerica.
+const PAGE_SIZE_GENERICO = 15;
+const paginaGenerica = {}; // { key: numeroDePagina }
 
-    <!-- DATOS GENERALES -->
-    <div class="section-card">
-      <h3>📄 Datos de la operación</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="op_fecha">
-        </div>
-        <div class="form-group ac-wrap">
-          <label>Despachante</label>
-          <input type="text" id="op_despachante" placeholder="Escribí el nombre..." autocomplete="off"
-            oninput="filtrarAC('op_despachante','ac_despachante',despachantesNombres,true)"
-            onkeydown="manejarTecladoAC(event,'ac_despachante')"
-            onblur="setTimeout(()=>cerrarAC('ac_despachante'),180)">
-          <div id="ac_despachante" class="ac-list"></div>
-        </div>
-        <div class="form-group ac-wrap">
-          <label>Cliente final</label>
-          <input type="text" id="op_cliente" placeholder="Ej: ENVACO, AGROISME..." autocomplete="off"
-            oninput="filtrarAC('op_cliente','ac_cliente',clientesNombres,false)"
-            onkeydown="manejarTecladoAC(event,'ac_cliente')"
-            onblur="setTimeout(()=>cerrarAC('ac_cliente'),180)">
-          <div id="ac_cliente" class="ac-list"></div>
-        </div>
-        <div class="form-group" id="destinacion-group">
-          <label>Destinación / Permiso</label>
-          <input type="text" id="op_destinacion" placeholder="IC03 1251N / EC01..." style="text-transform:uppercase;">
-        </div>
-        <div class="form-group">
-          <label>Canal</label>
-          <select id="op_canal" onchange="recalcularFormulario()">
-            <option value="V">Verde (V)</option>
-            <option value="N">Naranja (N)</option>
-            <option value="R">Rojo (R)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>ZPA / Fiscal</label>
-          <input type="text" id="op_zpa" placeholder="PS / PTM / TCA...">
-        </div>
-        <div class="form-group">
-          <label>Tipo de operación</label>
-          <select id="op_tipo" onchange="onTipoChange()">
-            <option value="EXPO">Exportación (EC)</option>
-            <option value="IMPO">Importación (IC)</option>
-            <option value="MIC">MIC (solo manifiesto)</option>
-            <option value="MULTINOTA">Multinota</option>
-            <option value="ADICIONALES">Adicionales</option>
-            <option value="OFICIO">Oficio</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Período facturación</label>
-          <select id="op_periodo_factura">
-            <option value="diario">Por operación / diario</option>
-            <option value="semanal">Semanal</option>
-            <option value="mensual">Mensual</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>N° MIC</label>
-          <input type="text" id="op_mic" placeholder="Ej: 26AR225103A" style="text-transform:uppercase;">
-        </div>
-        <div class="form-group">
-          <label>Toma de contenedor / detalle</label>
-          <input type="text" id="op_toma" placeholder="Ej: 13/5 AL 5/6  237-48-51...">
-        </div>
-        <div class="form-group">
-          <label>TC Oficialización ⚠️ obligatorio</label>
-          <input type="number" id="op_tc" placeholder="Ingresá el TC" step="0.01" required oninput="recalcularFormulario()">
-          <div id="op_tc_hint" style="font-size:11px;font-weight:600;min-height:14px;"></div>
-        </div>
-      </div>
-    </div>
+function getPaginaGenerica(key){ return paginaGenerica[key] || 1; }
 
-    <!-- ADICIONALES -->
-    <div class="section-card">
-      <h3>➕ Adicionales y servicios</h3>
-      <div class="chk-group" id="adicionales-chk">
+function paginarArray(key, arr, pageSize){
+  const totalPaginas = Math.max(1, Math.ceil(arr.length / pageSize));
+  let page = getPaginaGenerica(key);
+  if(page > totalPaginas) page = totalPaginas;
+  if(page < 1) page = 1;
+  paginaGenerica[key] = page;
+  const inicio = (page - 1) * pageSize;
+  return { pagina: arr.slice(inicio, inicio + pageSize), page, totalPaginas };
+}
 
-        <label class="chk-item" id="chk-sobre-wrap">
-          <input type="checkbox" id="chk_sobre" onchange="recalcularFormulario()">
-          <label for="chk_sobre">Armado sobre</label>
-        </label>
+function htmlPaginacionGenerica(page, totalPaginas, key){
+  return `<div class="pagin-bar">
+      <button onclick="cambiarPaginaGenerica('${key}',-1)" ${page<=1?'disabled':''}>‹ Anterior</button>
+      <span>${page}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaGenerica('${key}',1)" ${page>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
+}
 
-        <label class="chk-item" id="chk-cam-wrap">
-          <input type="checkbox" id="chk_cam" onchange="recalcularFormulario()">
-          <label for="chk_cam">Camión AD</label>
-          <input type="number" class="chk-extra" id="n_cam" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
-        </label>
+window.cambiarPaginaGenerica = function(key, delta){
+  paginaGenerica[key] = Math.max(1, getPaginaGenerica(key) + delta);
+  switch(key){
+    case 'pagos':           renderSaldos(); break;
+    case 'vinculaciones':   renderLogVinculaciones(); break;
+    case 'ramiro':          renderRamiro(); break;
+    case 'remitosHist':     renderHistorialRemitos(); break;
+    case 'clientesDesp':    renderTablaClientes(); break;
+    case 'clientesFinales': renderTablaClientesFinales(); break;
+  }
+};
 
-        <label class="chk-item" id="chk-senasa-p-wrap">
-          <input type="checkbox" id="chk_senasa_p" onchange="recalcularFormulario()">
-          <label for="chk_senasa_p">SENASA embalaje</label>
-          <input type="number" class="chk-extra" id="n_senasa_p" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
-        </label>
+// Para que el selector de mes del Dashboard arranque en el mes en curso (no en blanco)
+// y no quede pegado a un mes viejo por una carga inicial incompleta de Firestore.
+let usuarioEligioMesDash = false;
+window.marcarMesDashElegidoPorUsuario = function(){ usuarioEligioMesDash = true; };
 
-        <label class="chk-item" id="chk-senasa-prod-wrap">
-          <input type="checkbox" id="chk_senasa_prod" onchange="recalcularFormulario()">
-          <label for="chk_senasa_prod">SENASA producto</label>
-        </label>
+// Igual que el de arriba pero para el filtro de mes del Listado: arranca siempre en el
+// mes en curso, y una vez que el usuario lo cambia a mano (incluido "Todos los meses"),
+// se respeta esa elección y no se lo pisa más.
+let usuarioEligioMesListado = false;
+window.marcarMesListadoElegidoPorUsuario = function(){ usuarioEligioMesListado = true; };
 
-        <label class="chk-item" id="chk-hojas-wrap">
-          <input type="checkbox" id="chk_hojas" onchange="recalcularFormulario()">
-          <label for="chk_hojas">Hojas adicionales</label>
-          <input type="number" class="chk-extra" id="n_hojas" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
-        </label>
+// ── UTILS ──
 
-        <label class="chk-item" id="chk-mic-wrap">
-          <input type="checkbox" id="chk_mic" onchange="recalcularFormulario()">
-          <label for="chk_mic">MIC</label>
-          <input type="text" class="chk-extra" id="n_mic_num" placeholder="N° MIC" style="width:80px;">
-        </label>
+// ── FECHA / MES "DE HOY" EN HORA LOCAL (no UTC) ──
+function fechaLocalISO(d = new Date()){
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+window.fechaLocalISO = fechaLocalISO;
 
-        <label class="chk-item" id="chk-mic-fojas-wrap">
-          <input type="checkbox" id="chk_mic_fojas" onchange="recalcularFormulario()">
-          <label for="chk_mic_fojas">Fojas ad. MIC</label>
-          <input type="number" class="chk-extra" id="n_mic_fojas" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">
-        </label>
+function mesLocalISO(d = new Date()){
+  return fechaLocalISO(d).slice(0,7);
+}
+window.mesLocalISO = mesLocalISO;
 
-        <label class="chk-item" id="chk-finsem-wrap">
-          <input type="checkbox" id="chk_finsem" onchange="recalcularFormulario()">
-          <label for="chk_finsem">Fin de semana</label>
-        </label>
+function fmt(n){ return Math.round(n||0).toLocaleString('es-AR'); }
+window.fmt = fmt;
 
-        <label class="chk-item" id="chk-movad-wrap">
-          <input type="checkbox" id="chk_mov_ad" onchange="recalcularFormulario()">
-          <label for="chk_mov_ad">MOV AD</label>
-        </label>
+// Formato exacto (2 decimales, sin redondear a entero) - se usa en Pagos/Saldos y Dashboard
+function fmt2(n){
+  return (n||0).toLocaleString('es-AR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+window.fmt2 = fmt2;
 
-        <label class="chk-item" id="chk-impreso-wrap" style="display:none;">
-          <input type="checkbox" id="chk_impreso" onchange="recalcularFormulario()">
-          <label for="chk_impreso">Impreso</label>
-        </label>
+// ── PUNTO SI VACÍO (para exportaciones a Excel) ──
+function puntoSiVacio(v){
+  return (v === '' || v === null || typeof v === 'undefined') ? '.' : v;
+}
+window.puntoSiVacio = puntoSiVacio;
 
-        <!-- Adicionales propios (se generan desde JS) -->
-        <div id="adic-custom-chk" style="display:contents;"></div>
+function toast(msg, isError){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isError ? '#dc2626' : '';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), isError ? 5000 : 3000);
+}
+window.toast = toast;
 
-      </div>
-      <div style="margin-top:10px;">
-        <button type="button" class="btn-outline" style="padding:6px 14px;font-size:12px;" onclick="toggleFormNuevoAdicSrv()">➕ Nuevo adicional</button>
-        <div id="adic-form-srv" style="display:none;margin-top:10px;"></div>
-      </div>
-      <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <div class="form-group" style="min-width:200px;">
-          <label>Adicionales en pesos</label>
-          <input type="number" id="op_adicionales_pesos" value="0" oninput="recalcularFormulario()" placeholder="$ 0">
-        </div>
-        <div class="form-group" style="min-width:200px;">
-          <label>Adicionales en USD</label>
-          <input type="number" id="op_adicionales_usd" value="0" step="0.5" oninput="recalcularFormulario()" placeholder="USD 0">
-        </div>
-        <div class="form-group" style="min-width:240px;">
-          <label>Observaciones</label>
-          <input type="text" id="op_obs" placeholder="Notas, referencia...">
-        </div>
-      </div>
-    </div>
+// ═══════════════════════════════════════════════════════════════════════
+// TIPO DE CAMBIO — DÓLAR OFICIAL BANCO NACIÓN (VENTA = el más caro)
+//  · Hoy:       dolarapi.com  (/v1/dolares/oficial)
+//  · Histórico: argentinadatos.com (/v1/cotizaciones/dolares/oficial/AAAA/MM/DD)
+//    Si ese día no hay cotización (sábado, domingo, feriado) retrocede al
+//    último día hábil anterior (hasta 7 días).
+// ═══════════════════════════════════════════════════════════════════════
+const _tcBnaCache = {};        // { 'AAAA-MM-DD': {venta, compra, fechaCotiz, fuente, ts} }
+let _tcAutoAplicado = false;   // true = el TC del formulario lo puso el sistema (y el usuario no lo tocó)
+let _tcReqSeq = 0;             // evita que una respuesta vieja pise a una más nueva
 
-    <!-- RESUMEN PREVIO -->
-    <div class="section-card">
-      <h3>💰 Liquidación previa</h3>
-      <div id="desglose-prev" style="font-size:12px;color:#64748b;margin-bottom:12px;min-height:20px;"></div>
-      <div class="resumen-box">
-        <div class="res-item">
-          <div class="res-label">Neto (sin IVA)</div>
-          <div class="res-val" id="prev_neto">$ 0</div>
-        </div>
-        <div class="res-item">
-          <div class="res-label">IVA 21%</div>
-          <div class="res-val" id="prev_iva">$ 0</div>
-        </div>
-        <div class="res-item">
-          <div class="res-label">Total bruto</div>
-          <div class="res-val green" id="prev_bruto">$ 0</div>
-        </div>
-      </div>
-      <div id="op-edit-badge" style="display:none;background:#fef9c3;color:#92400e;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;margin-bottom:10px;"></div>
-      <div class="btn-row">
-        <button id="op-btn-guardar" class="btn-primary" onclick="guardarOperacion()" style="display:inline-flex;">💾 Guardar operación</button>
-        <button id="op-btn-actualizar" class="btn-success" onclick="actualizarOperacion()" style="display:none;">💾 Actualizar operación</button>
-        <button id="op-btn-cancelar" class="btn-outline" onclick="cancelarEdicionOperacion()" style="display:none;">✕ Cancelar edición</button>
-        <button class="btn-outline" onclick="limpiarFormulario()">🗑 Limpiar</button>
-        <span id="op-numero-preview" style="font-size:12px;color:#94a3b8;margin-left:8px;"></span>
-      </div>
-    </div>
+function _fechaAR(iso){ const [y,m,d] = String(iso).slice(0,10).split('-'); return `${d}/${m}/${y}`; }
+function _sumarDiasISO(iso, n){
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return fechaLocalISO(d);
+}
+async function _fetchJSON(url, ms = 8000){
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try{
+    const r = await fetch(url, { signal: ctrl.signal });
+    if(!r.ok) return null;
+    return await r.json();
+  } catch(e){ return null; }
+  finally { clearTimeout(t); }
+}
 
-  </div><!-- /tab-cargar -->
+async function obtenerTCBnaVenta(fechaISO, forzar){
+  const hoy = fechaLocalISO();
+  if(!fechaISO || fechaISO > hoy) fechaISO = hoy;
+  const c = _tcBnaCache[fechaISO];
+  if(!forzar && c && (fechaISO !== hoy || Date.now() - c.ts < 10 * 60 * 1000)) return c;
 
-  <!-- ═══════════════ TAB: LISTADO ═══════════════ -->
-  <div id="tab-listado" style="display:none;">
-    <div class="section-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-        <h3 style="margin:0;">📋 Operaciones registradas</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <div class="periodo-bar" style="margin:0;">
-            <select id="filtro_despachante" onchange="resetPaginaListado()">
-              <option value="">Todos los despachantes</option>
-            </select>
-            <select id="filtro_mes" onchange="marcarMesListadoElegidoPorUsuario();resetPaginaListado()">
-              <option value="">Todos los meses</option>
-            </select>
-            <div class="ac-wrap" style="position:relative;">
-              <button type="button" class="btn-outline" onclick="toggleListadoFechasDropdown()" id="listado-fechas-btn">📅 Año/Mes/Día<span class="multisel-badge" id="listado-fechas-badge" style="display:none;"></span> ▾</button>
-              <div id="listado-fechas-dropdown" class="multisel-dropdown" style="min-width:260px;">
-                <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Tildá años, meses o días puntuales. Se combina con los demás filtros.</div>
-                <div class="multisel-actions">
-                  <button type="button" class="btn-outline" onclick="seleccionarTodoArbolFechasListado()">Todos</button>
-                  <button type="button" class="btn-outline" onclick="limpiarArbolFechasListado()">Ninguno</button>
-                </div>
-                <div id="listado-fechas-checks"></div>
-              </div>
-            </div>
-            <input type="date" id="filtro_fecha_desde" onchange="resetPaginaListado()" title="Desde">
-            <input type="date" id="filtro_fecha_hasta" onchange="resetPaginaListado()" title="Hasta">
-            <button class="btn-outline" onclick="document.getElementById('filtro_fecha_desde').value='';document.getElementById('filtro_fecha_hasta').value='';resetPaginaListado()">✕ Fechas</button>
-            <select id="filtro_pendiente" onchange="resetPaginaListado()" title="Filtrar por estado de cobro/pago">
-              <option value="">Todas (pagadas y pendientes)</option>
-              <option value="pendiente">⚠️ Solo pendientes de pago</option>
-              <option value="cubierta">✅ Solo cubiertas / pagadas</option>
-            </select>
-          </div>
-          <button class="btn-outline" onclick="toggleFacturaLotePanel()">🧾 Asignar factura (lote)</button>
-          <button class="btn-success" onclick="exportarExcel()">📥 Exportar Excel</button>
-          <button class="btn-outline" id="btn-corregir-etiquetas" onclick="migrarEtiquetasAdicionales()">🔧 Corregir etiquetas viejas</button>
-        </div>
-      </div>
+  let res = null;
+  if(fechaISO === hoy){
+    const j = await _fetchJSON('https://dolarapi.com/v1/dolares/oficial');
+    if(j && Number(j.venta) > 0){
+      res = { venta: Number(j.venta), compra: Number(j.compra) || null, fechaCotiz: hoy, fuente: 'dolarapi.com' };
+    }
+  }
+  for(let i = 0; i <= 7 && !res; i++){
+    const f = _sumarDiasISO(fechaISO, -i);
+    const [y, m, d] = f.split('-');
+    let j = await _fetchJSON(`https://api.argentinadatos.com/v1/cotizaciones/dolares/oficial/${y}/${m}/${d}`);
+    if(Array.isArray(j)) j = j[j.length - 1];
+    if(j && Number(j.venta) > 0){
+      res = { venta: Number(j.venta), compra: Number(j.compra) || null, fechaCotiz: f, fuente: 'argentinadatos.com' };
+    }
+  }
+  if(res){ res.ts = Date.now(); _tcBnaCache[fechaISO] = res; }
+  return res;
+}
+window.obtenerTCBnaVenta = obtenerTCBnaVenta;
 
-      <div id="factura-lote-panel" class="section-card" style="display:none;border:2px solid #bfdbfe;margin-bottom:16px;">
-        <h3 style="margin:0 0 14px 0;">🧾 Asignar N° de factura en lote</h3>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Despachante</label>
-            <select id="lote_despachante" onchange="actualizarPreviewLote()">
-              <option value="">Seleccioná...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Fecha desde</label>
-            <input type="date" id="lote_fecha_desde" onchange="actualizarPreviewLote()">
-          </div>
-          <div class="form-group">
-            <label>Fecha hasta</label>
-            <input type="date" id="lote_fecha_hasta" onchange="actualizarPreviewLote()">
-          </div>
-          <div class="form-group">
-            <label>N° de factura</label>
-            <input type="text" id="lote_num_factura" placeholder="Ej: A0001-00001234" style="text-transform:uppercase;">
-          </div>
-          <div class="form-group" style="align-self:end;">
-            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#64748b;cursor:pointer;">
-              <input type="checkbox" id="lote_incluir_con_factura" onchange="actualizarPreviewLote()">
-              Incluir operaciones que ya tienen factura (corregir)
+function setTcHint(txt, color){
+  const el = document.getElementById('op_tc_hint');
+  if(!el) return;
+  el.textContent = txt || '';
+  el.style.color = color || '#64748b';
+}
+
+// Al cargar una operación NUEVA de tipo MIC: completa el TC con el dólar oficial BNA
+// (venta) de la fecha de la operación. No pisa un TC que el usuario escribió a mano,
+// ni toca operaciones que se están editando, ni las de tarifa en pesos.
+async function aplicarTCBnaSiMIC(){
+  if(document.getElementById('op_tipo').value !== 'MIC') return;
+  if(opEditandoId) return;
+  if(document.getElementById('tipo_desp_global').value === 'despachante_pesos') return;
+  const tcEl = document.getElementById('op_tc');
+  if(tcEl.value && !_tcAutoAplicado) return;
+
+  const fecha = document.getElementById('op_fecha').value || fechaLocalISO();
+  const seq = ++_tcReqSeq;
+  setTcHint('⏳ Buscando dólar oficial BNA...', '#64748b');
+  const r = await obtenerTCBnaVenta(fecha);
+  if(seq !== _tcReqSeq) return;
+  if(document.getElementById('op_tipo').value !== 'MIC' || opEditandoId) { setTcHint(''); return; }
+  if(tcEl.value && !_tcAutoAplicado) { setTcHint(''); return; }  // lo escribió el usuario mientras tanto
+
+  if(!r){
+    setTcHint('⚠️ No se pudo traer el dólar BNA — ingresá el TC a mano', '#dc2626');
+    toast('⚠️ No se pudo traer el dólar BNA, ingresá el TC a mano', true);
+    return;
+  }
+  tcEl.value = r.venta;
+  _tcAutoAplicado = true;
+  const dif = r.fechaCotiz !== fecha ? ` · último día hábil (${_fechaAR(r.fechaCotiz)})` : '';
+  setTcHint(`💵 BNA venta ${_fechaAR(fecha)}: $ ${fmt2(r.venta)} (automático)${dif}`, '#059669');
+  recalcularFormulario();
+}
+window.aplicarTCBnaSiMIC = aplicarTCBnaSiMIC;
+
+// Si el usuario escribe el TC a mano, deja de ser "automático" y no se vuelve a pisar
+document.getElementById('op_tc').addEventListener('input', function(ev){
+  if(ev.isTrusted){ _tcAutoAplicado = false; setTcHint(''); }
+});
+
+// ── PESTAÑA "TIPO DE CAMBIO" ──
+function _htmlTcCard(r, fechaPedida){
+  const dif = r.fechaCotiz !== fechaPedida
+    ? `<div style="font-size:11px;color:#92400e;margin-top:8px;">ℹ️ No hay cotización el ${_fechaAR(fechaPedida)} (fin de semana / feriado): se muestra la del último día hábil, ${_fechaAR(r.fechaCotiz)}.</div>` : '';
+  return `
+    <div class="resumen-box" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));">
+      <div class="res-item"><div class="res-label">Venta (se aplica)</div><div class="res-val green" style="font-size:28px;">$ ${fmt2(r.venta)}</div></div>
+      <div class="res-item"><div class="res-label">Compra</div><div class="res-val">${r.compra ? '$ ' + fmt2(r.compra) : '—'}</div></div>
+      <div class="res-item"><div class="res-label">Cotización del</div><div class="res-val">${_fechaAR(r.fechaCotiz)}</div></div>
+    </div>${dif}
+    <div style="font-size:11px;color:#94a3b8;margin-top:8px;">Fuente: ${r.fuente}</div>`;
+}
+
+
+// ── TC DEL DÍA EN LA BARRA AZUL SUPERIOR ──
+async function actualizarTopbarTC(forzar){
+  const el = document.getElementById('topbarTC');
+  if(!el) return;
+  const r = await obtenerTCBnaVenta(fechaLocalISO(), !!forzar);
+  if(r){
+    el.textContent = `💵 BNA venta ${_fechaAR(r.fechaCotiz).slice(0,5)}: $ ${fmt2(r.venta)}`;
+    el.style.background = 'rgba(255,255,255,0.15)';
+  } else {
+    el.textContent = '💵 BNA: sin datos';
+    el.style.background = 'rgba(220,38,38,0.6)';
+  }
+}
+window.actualizarTopbarTC = actualizarTopbarTC;
+actualizarTopbarTC();
+setInterval(() => actualizarTopbarTC(true), 10 * 60 * 1000);
+
+window.renderTipoCambio = async function(forzar){
+  const cont = document.getElementById('tc-hoy');
+  if(!cont) return;
+  cont.innerHTML = '<span class="spinner dark"></span> Consultando dólar oficial BNA...';
+  const hoy = fechaLocalISO();
+  const r = await obtenerTCBnaVenta(hoy, !!forzar);
+  if(r) actualizarTopbarTC();
+  cont.innerHTML = r ? _htmlTcCard(r, hoy)
+    : '<span style="color:#dc2626;font-weight:700;">⚠️ No se pudo obtener la cotización. Revisá la conexión y reintentá.</span>';
+  const f = document.getElementById('tc_consulta_fecha');
+  if(f && !f.value) f.value = hoy;
+};
+
+window.consultarTCBnaFecha = async function(){
+  const fecha = document.getElementById('tc_consulta_fecha').value;
+  const cont = document.getElementById('tc-consulta');
+  if(!fecha){ toast('Elegí una fecha'); return; }
+  cont.innerHTML = '<span class="spinner dark"></span> Consultando...';
+  const r = await obtenerTCBnaVenta(fecha);
+  cont.innerHTML = r ? _htmlTcCard(r, fecha < fechaLocalISO() ? fecha : fechaLocalISO())
+    : '<span style="color:#dc2626;font-weight:700;">⚠️ No hay cotización disponible para esa fecha.</span>';
+};
+
+// Etiqueta legible para el tipo de tarifa de un despachante
+function etiquetaTipoDespachante(tipo){
+  switch(tipo){
+    case 'desp_externo': return { txt:'Externo ⭐', style:'background:#fef3c7;color:#92400e' };
+    case 'apoderado_basico': return { txt:'Apoderado', style:'background:#ede9fe;color:#5b21b6' };
+    case 'apoderado':    return { txt:'Apoderado premium',  style:'background:#ede9fe;color:#5b21b6' };
+    case 'kotinya':      return { txt:'Kotinya/Ramiro', style:'background:#fef9c3;color:#92400e' };
+    case 'despachante_pesos': return { txt:'Tarifa en $', style:'background:#e0f2fe;color:#075985' };
+    default:             return { txt:'Despachante', style:'' };
+  }
+}
+window.etiquetaTipoDespachante = etiquetaTipoDespachante;
+
+// Estado de residencia (para color del Cliente final y de la columna Residencia en Mudanzas)
+function estadoResidencia(m){
+  if(!m || !m.vencimientoResidencia){
+    return { clase:'ok', label:'N/A', bg:'#dcfce7', color:'#166534' };
+  }
+  if(m.residenciaCancelada){
+    return { clase:'ok', label:'Cancelada', bg:'#dcfce7', color:'#166534' };
+  }
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const venc = new Date(m.vencimientoResidencia + 'T00:00:00');
+  const diffDias = Math.ceil((venc - hoy) / (1000*60*60*24));
+  if(diffDias > 30){
+    return { clase:'warn', label:`Vence en ${diffDias}d`, bg:'#fef9c3', color:'#854d0e' };
+  }
+  if(diffDias >= 0){
+    return { clase:'danger', label:`Vence en ${diffDias}d`, bg:'#fee2e2', color:'#991b1b' };
+  }
+  return { clase:'danger', label:'Vencida', bg:'#fee2e2', color:'#991b1b' };
+}
+window.estadoResidencia = estadoResidencia;
+
+// ── ESTADO DE COBRO DE UNA MUDANZA (soporta pago parcial) ──
+function estadoCobro(m){
+  const bruto = m && m.bruto ? m.bruto : 0;
+  let cobrado;
+  if(m && m.montoCobrado !== undefined && m.montoCobrado !== null){
+    cobrado = m.montoCobrado;
+  } else {
+    cobrado = (m && m.cobrado) ? bruto : 0;
+  }
+  const saldo = bruto - cobrado;
+  const ramiroHabilitado = bruto <= 0.005 ? true : (cobrado >= (bruto * 0.5) - 0.005);
+  if(cobrado <= 0.005){
+    return { estado:'no', label:'❌ Sin cobrar', bg:'#fee2e2', color:'#991b1b', cobrado, saldo, ramiroHabilitado };
+  }
+  if(saldo > 0.5){
+    return { estado:'parcial', label:`🟡 Parcial: $${fmt(cobrado)} de $${fmt(bruto)} (falta $${fmt(saldo)})`, bg:'#fef9c3', color:'#854d0e', cobrado, saldo, ramiroHabilitado };
+  }
+  return { estado:'si', label:'✅ Cobrado', bg:'#dcfce7', color:'#166534', cobrado, saldo, ramiroHabilitado };
+}
+window.estadoCobro = estadoCobro;
+
+// ── TOGGLE TARIFAS ──
+window.toggleTarifas = function(){
+  const body = document.getElementById('tarifas-body');
+  const icon = document.getElementById('tarifas-toggle-icon');
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  icon.textContent = open ? '🔓' : '🔒';
+};
+
+// ── SWITCH TAB ──
+window.switchTab = function(tab){
+  ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos','tc'].forEach(t => {
+    document.getElementById('tab-'+t).style.display = t===tab ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab').forEach((btn,i) => {
+    btn.classList.toggle('active', ['cargar','listado','dashboard','saldos','clientes','mudanzas','ramiro','remitos','tc'][i]===tab);
+  });
+  if(tab==='listado'){ renderTabla(); renderListadoArbolFechas(); }
+  if(tab==='dashboard') renderDashboard();
+  if(tab==='saldos'){ renderSaldos(); renderLogVinculaciones(); }
+  if(tab==='clientes')  renderTablaClientesFinales();
+  if(tab==='ramiro')    renderRamiro();
+  if(tab==='remitos')   renderRemitos();
+  if(tab==='tc')        renderTipoCambio();
+};
+
+// ── AUTOCOMPLETE ──
+let acState = {}; // { [listId]: { items:[{tipo:'match'|'nuevo', valor}], activeIndex, inputId, esDespachante } }
+
+function renderAC(listId){
+  const state = acState[listId];
+  const list = document.getElementById(listId);
+  if(!list) return;
+  if(!state || !state.items.length){ list.style.display='none'; return; }
+  list.innerHTML = state.items.map((it,i) => {
+    const activeClass = i === state.activeIndex ? ' ac-item-active' : '';
+    if(it.tipo === 'nuevo'){
+      return `<div class="ac-item ac-new${activeClass}" onmousedown="seleccionarACIndex('${listId}',${i})">➕ Guardar "${it.valor}"</div>`;
+    }
+    return `<div class="ac-item${activeClass}" onmousedown="seleccionarACIndex('${listId}',${i})">${it.valor}</div>`;
+  }).join('');
+  list.style.display = 'block';
+  const activeEl = list.querySelector('.ac-item-active');
+  if(activeEl) activeEl.scrollIntoView({block:'nearest'});
+}
+window.renderAC = renderAC;
+
+window.filtrarAC = function(inputId, listId, fuente, esDespachante){
+  const val = document.getElementById(inputId).value.trim().toUpperCase();
+  const list = document.getElementById(listId);
+  if(!val){ list.style.display='none'; acState[listId] = null; return; }
+  const matches = fuente.filter(n => n.toUpperCase().includes(val)).slice(0,8);
+  const existe  = fuente.map(n=>n.toUpperCase()).includes(val);
+  const items = matches.map(n => ({tipo:'match', valor:n}));
+  if(!existe && val.length > 1){
+    items.push({tipo:'nuevo', valor: val});
+  }
+  acState[listId] = { items, activeIndex: -1, inputId, esDespachante };
+  renderAC(listId);
+};
+
+window.seleccionarACIndex = function(listId, idx){
+  const state = acState[listId];
+  if(!state) return;
+  const it = state.items[idx];
+  if(!it) return;
+  if(it.tipo === 'nuevo'){
+    guardarNuevoAC(state.inputId, listId, state.esDespachante);
+  } else {
+    document.getElementById(state.inputId).value = it.valor;
+    document.getElementById(listId).style.display = 'none';
+    acState[listId] = null;
+    if(state.esDespachante) onCambiarDespachante();
+    else recalcularFormulario();
+  }
+};
+
+window.manejarTecladoAC = function(e, listId){
+  const state = acState[listId];
+  const list = document.getElementById(listId);
+  if(!state || !list || list.style.display === 'none' || !state.items.length) return;
+  if(e.key === 'ArrowDown'){
+    e.preventDefault();
+    state.activeIndex = state.activeIndex < state.items.length - 1 ? state.activeIndex + 1 : 0;
+    renderAC(listId);
+  } else if(e.key === 'ArrowUp'){
+    e.preventDefault();
+    state.activeIndex = state.activeIndex > 0 ? state.activeIndex - 1 : state.items.length - 1;
+    renderAC(listId);
+  } else if(e.key === 'Enter' || e.key === 'Tab'){
+    if(state.activeIndex >= 0){
+      e.preventDefault();
+      seleccionarACIndex(listId, state.activeIndex);
+    }
+  } else if(e.key === 'Escape'){
+    list.style.display = 'none';
+  }
+};
+
+window.cerrarAC = function(listId){
+  const el = document.getElementById(listId);
+  if(el) el.style.display = 'none';
+};
+
+window.guardarNuevoAC = async function(inputId, listId, esDespachante){
+  const val = document.getElementById(inputId).value.trim().toUpperCase();
+  if(!val) return;
+  document.getElementById(listId).style.display = 'none';
+  acState[listId] = null;
+  if(esDespachante){
+    const id = val.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    await setDoc(doc(db,'corresponsales_clientes',id), {
+      nombre: val, tipo:'despachante', factura:'mensual', tieneFactura:'si', cuit:''
+    });
+    toast('✅ Despachante guardado: ' + val);
+  } else {
+    const id = val.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    await setDoc(doc(db,'corresponsales_clientes_finales',id), {nombre:val});
+    clientesNombres = [...new Set([...clientesNombres, val])].sort();
+    window.clientesNombres = clientesNombres;
+    toast('✅ Cliente guardado: ' + val);
+  }
+};
+
+// ── AUTO FIN DE SEMANA SEGÚN FECHA ──
+function actualizarFinSemPorFecha(){
+  const val = document.getElementById('op_fecha').value;
+  if(!val) return;
+  // En operaciones MIC el fin de semana no se cobra: nunca se tilda
+  const _tipoSel = document.getElementById('op_tipo');
+  if(_tipoSel && _tipoSel.value === 'MIC'){ document.getElementById('chk_finsem').checked = false; return; }
+  const d = new Date(val + 'T12:00:00');
+  const esFinsem = d.getDay() === 0 || d.getDay() === 6;
+  document.getElementById('chk_finsem').checked = esFinsem;
+}
+window.actualizarFinSemPorFecha = actualizarFinSemPorFecha;
+
+// ── Fecha default (hora local, no UTC) ──
+document.getElementById('op_fecha').value    = fechaLocalISO();
+document.getElementById('mud_fecha').value   = fechaLocalISO();
+document.getElementById('recgen_fecha').value = fechaLocalISO();
+actualizarFinSemPorFecha(); // evalúa fin de semana ya desde la primera carga de la página
+
+document.getElementById('op_fecha').addEventListener('change', function(){
+  actualizarFinSemPorFecha();
+  recalcularFormulario();
+  aplicarTCBnaSiMIC();   // si el TC es automático (MIC), lo actualiza a la nueva fecha
+});
+
+// ── NÚMERO DE OP ──
+function generarNumOp(){
+  // Numeración por año: sigue desde el mayor número ya usado en el año en curso
+  const anio = String(new Date().getFullYear());
+  const delAnio = operaciones.filter(o => String(o.fecha||'').startsWith(anio));
+  const maxNum = delAnio.reduce((m,o) => Math.max(m, parseInt(o.numOp)||0), 0);
+  return Math.max(maxNum, delAnio.length) + 1;
+}
+
+// ── FIRESTORE listeners ──
+// ═══════════════════════════════════════════════════════════════════════
+// LECTURA HÍBRIDA (ahorra cuota de Firestore):
+//  · MES EN CURSO  -> en vivo (onSnapshot), igual que antes.
+//  · MESES ANTERIORES (todos los años) -> se leen UNA vez por día y se guardan en el
+//    navegador (IndexedDB). Refrescar la página NO vuelve a leerlos.
+//  · Botón "🔄 Histórico" (barra superior) para forzar la lectura cuando haga falta.
+//  · Tus propias altas / ediciones / bajas de operaciones y pagos viejos se reflejan
+//    al instante en pantalla y en la caché, sin releer nada.
+//  · Cambios hechos por OTRAS personas en meses anteriores aparecen al actualizar el
+//    histórico (o al día siguiente).
+// ═══════════════════════════════════════════════════════════════════════
+const _CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const _CACHE_KEY = 'hist_v1';
+let _histOps = [], _histPagos = [], _vivoOps = [], _vivoPagos = [];
+let _histListo = false, _histTs = 0, _histCorte = '';
+let _vivoOpsListo = false, _numerando = false;
+
+function _mesActualInicio(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-01';
+}
+
+// IndexedDB mínimo (clave -> valor). Si falla (modo privado, etc.) simplemente no cachea.
+function _idb(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('gc_operaciones_cache', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function _cacheGet(k){
+  try {
+    const d = await _idb();
+    return await new Promise(res => {
+      const q = d.transaction('kv').objectStore('kv').get(k);
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => res(null);
+    });
+  } catch(e){ return null; }
+}
+async function _cacheSet(k, v){
+  try {
+    const d = await _idb();
+    await new Promise(res => {
+      const t = d.transaction('kv','readwrite');
+      t.objectStore('kv').put(v, k);
+      t.oncomplete = () => res();
+      t.onerror = () => res();
+    });
+  } catch(e){}
+}
+let _guardarCacheTimer = null;
+function _guardarCacheDebounced(){
+  clearTimeout(_guardarCacheTimer);
+  _guardarCacheTimer = setTimeout(() => {
+    _cacheSet(_CACHE_KEY, { corte:_histCorte, ts:_histTs, ops:_histOps, pagos:_histPagos });
+  }, 400);
+}
+
+// Une histórico + mes en vivo (sin duplicados: si un doc está en vivo, manda el vivo)
+function _unir(hist, vivo){
+  const ids = new Set(vivo.map(x => x.id));
+  return [...hist.filter(x => !ids.has(x.id)), ...vivo];
+}
+
+function _aplicarOps(){
+  operaciones = _unir(_histOps, _vivoOps);
+  datosCargados = _histListo;      // no se muestran saldos hasta tener también el histórico
+  if(!_histListo) return;
+  renderFiltros();
+  renderListadoArbolFechas();
+  // re-render tab activo si corresponde
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Listado'))   renderTabla();
+  if(tabActivo.includes('Dashboard')) renderDashboard();
+  if(tabActivo.includes('Saldos'))    renderSaldos();
+  if(tabActivo.includes('Ramiro'))    renderRamiro();
+  if(tabActivo.includes('Clientes'))  renderTablaClientesFinales();
+  recalcularFormulario();
+  numerarOpsPendientes();
+}
+
+// Las operaciones cargadas desde la página de empleados se guardan SIN número (así esa
+// página no necesita leer nada para guardar). Acá se les asigna el número, en orden de
+// carga, continuando desde el mayor número del año. Se escribe una sola vez por operación.
+// Numeración segura entre varias personas: se usa un contador por año en Firestore
+// (config/contador_ops_AAAA) dentro de una transacción. Dos personas a la vez NUNCA
+// obtienen el mismo número, y una operación que ya tiene número no se vuelve a numerar.
+async function _asignarNumOp(opId){
+  const anio = new Date().getFullYear();
+  const cRef = doc(db,'config','contador_ops_' + anio);
+  const oRef = doc(db,'despachantees_ops', opId);
+  const base = generarNumOp() - 1;   // mayor número que se ve localmente (por si el contador está atrasado)
+  return await runTransaction(db, async tx => {
+    const os = await tx.get(oRef);
+    if(!os.exists()) return null;
+    const actual = parseInt(os.data().numOp) || 0;
+    if(actual > 0) return actual;
+    const cs = await tx.get(cRef);
+    const n = Math.max(cs.exists() ? (parseInt(cs.data().n) || 0) : 0, base) + 1;
+    tx.set(cRef, { n });
+    tx.update(oRef, { numOp: n });
+    return n;
+  });
+}
+
+// Reserva el próximo número para una operación que se carga desde esta misma página
+async function _reservarNumOp(){
+  const anio = new Date().getFullYear();
+  const cRef = doc(db,'config','contador_ops_' + anio);
+  const base = generarNumOp() - 1;
+  try {
+    return await runTransaction(db, async tx => {
+      const cs = await tx.get(cRef);
+      const n = Math.max(cs.exists() ? (parseInt(cs.data().n) || 0) : 0, base) + 1;
+      tx.set(cRef, { n });
+      return n;
+    });
+  } catch(e){
+    console.warn('No se pudo reservar número en el contador, se usa el local:', e);
+    return generarNumOp();
+  }
+}
+
+async function numerarOpsPendientes(){
+  if(_numerando || !_histListo || !_vivoOpsListo) return;
+  const anio = String(new Date().getFullYear());
+  const pendientes = operaciones
+    .filter(o => String(o.fecha||'').startsWith(anio) && !(parseInt(o.numOp) > 0))
+    .sort((a,b) => (a.ts||0) - (b.ts||0));
+  if(!pendientes.length) return;
+  _numerando = true;
+  let huboCambios = false;
+  try {
+    for(const o of pendientes){
+      const n = await _asignarNumOp(o.id);
+      if(n){ o.numOp = n; huboCambios = true; }   // o es la misma referencia que la copia local
+    }
+  } catch(e){
+    console.warn('No se pudo numerar operaciones pendientes:', e);
+  } finally {
+    _numerando = false;
+  }
+  if(huboCambios){ _guardarCacheDebounced(); _aplicarOps(); }
+}
+
+function _aplicarPagos(){
+  pagos = _unir(_histPagos, _vivoPagos);
+  window.pagos = pagos;
+  if(!_histListo) return;
+  renderSaldos();
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
+}
+
+async function cargarHistorico(forzar){
+  const corte = _mesActualInicio();
+  const c = await _cacheGet(_CACHE_KEY);
+  if(!forzar && c && c.corte === corte && (Date.now() - c.ts) < _CACHE_TTL_MS){
+    _histOps = c.ops || []; _histPagos = c.pagos || [];
+    _histTs = c.ts; _histCorte = c.corte;
+  } else {
+    if(forzar) toast('⏳ Actualizando histórico...');
+    try {
+      const [so, sp] = await Promise.all([
+        getDocs(query(collection(db,'despachantees_ops'), where('fecha','<', corte), orderBy('fecha','asc'))),
+        getDocs(query(collection(db,'despachantees_pagos'), where('fecha','<', corte)))
+      ]);
+      _histOps   = so.docs.map(d => ({id:d.id, ...d.data()}));
+      _histPagos = sp.docs.map(d => ({id:d.id, ...d.data()}));
+      _histTs = Date.now(); _histCorte = corte;
+      await _cacheSet(_CACHE_KEY, { corte, ts:_histTs, ops:_histOps, pagos:_histPagos });
+      if(forzar) toast('✅ Histórico actualizado (' + _histOps.length + ' operaciones)');
+    } catch(e){
+      console.warn('Error leyendo histórico:', e);
+      if(c){   // sin conexión / cuota: se usa lo último guardado aunque sea viejo
+        _histOps = c.ops || []; _histPagos = c.pagos || [];
+        _histTs = c.ts; _histCorte = c.corte;
+        toast('⚠️ No se pudo actualizar el histórico: se usa la última copia guardada', true);
+      } else {
+        toast('❌ No se pudo leer el histórico: ' + e.message, true);
+        return;
+      }
+    }
+  }
+  _histListo = true;
+  _aplicarOps();
+  _aplicarPagos();
+}
+window.actualizarHistorico = () => cargarHistorico(true);
+
+// ── Escrituras envueltas: además de escribir en Firestore, mantienen al día el histórico local ──
+function _colDe(ref){ return ref && ref.parent ? ref.parent.id : ''; }
+function _arrHist(col){ return col === 'despachantees_ops' ? _histOps : (col === 'despachantees_pagos' ? _histPagos : null); }
+function _setArrHist(col, arr){ if(col === 'despachantees_ops') _histOps = arr; else _histPagos = arr; }
+function _reaplicar(col){ if(col === 'despachantees_ops') _aplicarOps(); else _aplicarPagos(); }
+
+async function updateDoc(ref, ...args){
+  const r = await _updateDoc(ref, ...args);
+  try {
+    const col = _colDe(ref), arr = _arrHist(col);
+    if(arr && _histListo){
+      const corte = _histCorte || _mesActualInicio();
+      const data = (args[0] && typeof args[0] === 'object') ? args[0] : null;
+      const i = arr.findIndex(x => x.id === ref.id);
+      if(i >= 0 && data){
+        const nuevo = { ...arr[i], ...data };
+        if(nuevo.fecha && nuevo.fecha >= corte){ arr.splice(i,1); }   // pasó al mes en curso: lo trae el vivo
+        else arr[i] = nuevo;
+        _reaplicar(col); _guardarCacheDebounced();
+      } else if(i < 0 && data && data.fecha && data.fecha < corte){
+        // un doc del mes en curso pasó a un mes anterior: se trae una sola vez
+        const snap = await getDoc(ref);
+        if(snap.exists()){ arr.push({ id:ref.id, ...snap.data() }); _reaplicar(col); _guardarCacheDebounced(); }
+      }
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return r;
+}
+
+async function deleteDoc(ref){
+  const r = await _deleteDoc(ref);
+  try {
+    const col = _colDe(ref), arr = _arrHist(col);
+    if(arr && _histListo){
+      const i = arr.findIndex(x => x.id === ref.id);
+      if(i >= 0){ arr.splice(i,1); _reaplicar(col); _guardarCacheDebounced(); }
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return r;
+}
+
+async function addDoc(colRef, data){
+  const ref = await _addDoc(colRef, data);
+  try {
+    const col = colRef && colRef.id, arr = _arrHist(col);
+    if(arr && _histListo && data && data.fecha && data.fecha < (_histCorte || _mesActualInicio())){
+      arr.push({ id:ref.id, ...data }); _reaplicar(col); _guardarCacheDebounced();
+    }
+  } catch(e){ console.warn('No se pudo actualizar la copia local:', e); }
+  return ref;
+}
+
+// Mes en curso: en vivo
+onSnapshot(query(collection(db,'despachantees_ops'), where('fecha','>=', _mesActualInicio()), orderBy('fecha','asc')), snap => {
+  _vivoOps = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  _vivoOpsListo = true;
+  _aplicarOps();
+});
+onSnapshot(query(collection(db,'despachantees_pagos'), where('fecha','>=', _mesActualInicio())), snap => {
+  _vivoPagos = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  _aplicarPagos();
+});
+
+// Histórico (meses anteriores): una vez por día
+cargarHistorico(false);
+
+// Botón "🔄 Histórico" en la barra superior (sin tocar el HTML)
+(function(){
+  const crear = () => {
+    const cont = document.querySelector('.topbar-right');
+    if(!cont || document.getElementById('btnActualizarHistorico')) return;
+    const b = document.createElement('button');
+    b.id = 'btnActualizarHistorico';
+    b.className = 'btn-back';
+    b.type = 'button';
+    b.textContent = '🔄 Histórico';
+    b.title = 'Vuelve a leer las operaciones y pagos de meses anteriores (se leen solo una vez por día)';
+    b.onclick = () => window.actualizarHistorico();
+    cont.prepend(b);
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', crear); else crear();
+})();
+
+// ── TARIFAS: persistencia en Firestore ──
+const TARIFA_IDS = [
+  't_vn','t_r','t_sobre','t_cam_vn','t_cam_r','t_senasa_p','t_senasa_prod','t_hoja',
+  't_mic','t_mic_foja','t_multinota','t_finsem',
+  't_apoderado','t_apoderado_basico','t_kotinya','t_ramiro_op','t_cam_apod','t_mov_ad','t_adicionales',
+  't_prem_vn','t_prem_r','t_prem_cam_vn','t_prem_cam_r',
+  't_pesos_vn','t_pesos_r','t_oficio'
+];
+
+let cargandoTarifas = false; // evita re-guardar mientras se están poblando los campos desde Firestore
+let tarifasTimeout = null;
+
+function guardarTarifasDebounced(){
+  if(cargandoTarifas) return;
+  clearTimeout(tarifasTimeout);
+  tarifasTimeout = setTimeout(async () => {
+    const datos = {};
+    TARIFA_IDS.forEach(id => {
+      const el = document.getElementById(id);
+      if(el) datos[id] = el.value;
+    });
+    try {
+      await setDoc(doc(db,'config','tarifas_operaciones'), datos, { merge:true });
+      toast('💾 Tarifas guardadas');
+    } catch(e){
+      console.warn('Error guardando tarifas:', e);
+      toast('❌ Error al guardar tarifas: ' + e.message);
+    }
+  }, 600);
+}
+window.guardarTarifasDebounced = guardarTarifasDebounced;
+
+onSnapshot(doc(db,'config','tarifas_operaciones'), snap => {
+  if(!snap.exists()) return;
+  cargandoTarifas = true;
+  const datos = snap.data();
+  TARIFA_IDS.forEach(id => {
+    const el = document.getElementById(id);
+    if(el && datos[id] !== undefined && datos[id] !== null && datos[id] !== ''){
+      el.value = datos[id];
+    }
+  });
+  cargandoTarifas = false;
+  if(Array.isArray(datos.adicionales_custom)){
+    adicionalesCustom = datos.adicionales_custom;
+    if(!snap.metadata.hasPendingWrites) renderAdicionalesCustom();   // no pisa el input que se está tipeando
+  }
+  recalcularFormulario();
+});
+
+
+// ═══════════════ ADICIONALES PROPIOS (alta desde el sistema) ═══════════════
+// Se guardan en config/tarifas_operaciones -> campo "adicionales_custom" (lista).
+// Cada uno: { id, nombre, tarifa, moneda:'USD'|'ARS', porCantidad:bool, archivado:bool }
+
+function _escAdic(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+async function guardarAdicionalesCustom(){
+  try {
+    await setDoc(doc(db,'config','tarifas_operaciones'), { adicionales_custom: adicionalesCustom }, { merge:true });
+    toast('💾 Adicionales guardados');
+  } catch(e){
+    console.warn('Error guardando adicionales:', e);
+    toast('❌ Error al guardar adicionales: ' + e.message);
+  }
+}
+function guardarAdicionalesCustomDebounced(){
+  clearTimeout(adicTimeout);
+  adicTimeout = setTimeout(guardarAdicionalesCustom, 600);
+}
+
+// Lee los adicionales propios tildados en el formulario (usado por el cálculo y el guardado)
+function adicionalesCustomMarcados(){
+  const res = [];
+  adicionalesCustom.forEach(a => {
+    const chk = document.getElementById('chk_custom_' + a.id);
+    if(!chk || !chk.checked) return;
+    const nEl = document.getElementById('n_custom_' + a.id);
+    const n = a.porCantidad ? (parseInt(nEl && nEl.value) || 1) : 1;
+    res.push({ id:a.id, nombre:a.nombre, tarifa:parseFloat(a.tarifa) || 0, moneda:a.moneda, porCantidad:!!a.porCantidad, n });
+  });
+  return res;
+}
+window.adicionalesCustomMarcados = adicionalesCustomMarcados;
+
+function renderAdicionalesCustom(){
+  // 1) Tildes en "Adicionales y servicios" (conserva lo que ya estaba tildado)
+  const cont = document.getElementById('adic-custom-chk');
+  if(cont){
+    const previo = {};
+    adicionalesCustom.forEach(a => {
+      const c = document.getElementById('chk_custom_' + a.id);
+      const n = document.getElementById('n_custom_' + a.id);
+      if(c) previo[a.id] = { checked:c.checked, n:n ? n.value : '1' };
+    });
+    cont.innerHTML = adicionalesCustom
+      .filter(a => !a.archivado || window._adicForzados.has(a.id))
+      .map(a => `
+        <label class="chk-item" id="chk-custom-wrap-${a.id}">
+          <input type="checkbox" id="chk_custom_${a.id}" onchange="recalcularFormulario()">
+          <label for="chk_custom_${a.id}">${_escAdic(a.nombre)}</label>
+          ${a.porCantidad ? `<input type="number" class="chk-extra" id="n_custom_${a.id}" value="1" min="1" oninput="recalcularFormulario()" placeholder="cant">` : ''}
+        </label>`).join('');
+    Object.entries(previo).forEach(([id, v]) => {
+      const c = document.getElementById('chk_custom_' + id);
+      if(c) c.checked = v.checked;
+      const n = document.getElementById('n_custom_' + id);
+      if(n) n.value = v.n;
+    });
+  }
+
+  // 2) Lista con tarifa editable en "Tarifas vigentes"
+  const lista = document.getElementById('adic-custom-lista');
+  if(lista){
+    const activos = adicionalesCustom.filter(a => !a.archivado);
+    lista.innerHTML = activos.length ? activos.map(a => `
+      <div class="tarifa-item" style="background:#e0f2fe;">
+        <span class="tarifa-label" style="display:flex;justify-content:space-between;gap:6px;">
+          <span>${_escAdic(a.nombre)}</span>
+          <span style="cursor:pointer;color:#dc2626;" title="Quitar este adicional" onclick="quitarAdicionalCustom('${a.id}')">🗑</span>
+        </span>
+        <span class="tarifa-val"><input type="number" value="${a.tarifa}" step="0.5" min="0" oninput="cambiarTarifaAdicionalCustom('${a.id}', this.value)"> ${a.moneda === 'ARS' ? '$' : 'USD'}${a.porCantidad ? '/u' : ''}</span>
+      </div>`).join('')
+      : '<div style="font-size:12px;color:#94a3b8;grid-column:1/-1;">Todavía no agregaste ningún adicional propio.</div>';
+  }
+}
+window.renderAdicionalesCustom = renderAdicionalesCustom;
+
+window.cambiarTarifaAdicionalCustom = function(id, valor){
+  const a = adicionalesCustom.find(x => x.id === id);
+  if(!a) return;
+  a.tarifa = parseFloat(valor) || 0;
+  recalcularFormulario();
+  guardarAdicionalesCustomDebounced();
+};
+
+window.quitarAdicionalCustom = async function(id){
+  const a = adicionalesCustom.find(x => x.id === id);
+  if(!a) return;
+  if(!confirm(`¿Quitar el adicional "${a.nombre}"? Las operaciones ya guardadas con este adicional no se modifican.`)) return;
+  // Se archiva (no se borra) para que se puedan seguir editando operaciones viejas que lo usaron
+  a.archivado = true;
+  renderAdicionalesCustom();
+  recalcularFormulario();
+  await guardarAdicionalesCustom();
+};
+
+// Formulario de alta (el mismo en Tarifas y en Adicionales y servicios)
+function _htmlFormNuevoAdic(p){
+  return `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end;margin-top:10px;">
+      <div class="form-group"><label>Nombre del adicional</label>
+        <input type="text" id="${p}_nombre" placeholder="Ej: Trámite SENASA urgente" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarAdicionalCustom('${p}');}"></div>
+      <div class="form-group"><label>Tarifa</label>
+        <input type="number" id="${p}_tarifa" step="0.5" min="0" placeholder="0" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarAdicionalCustom('${p}');}"></div>
+      <div class="form-group"><label>Moneda</label>
+        <select id="${p}_moneda"><option value="USD">USD (se convierte con el TC)</option><option value="ARS">Pesos ($)</option></select></div>
+      <div class="form-group"><label>¿Se cobra por cantidad?</label>
+        <select id="${p}_cant"><option value="no">No (monto fijo)</option><option value="si">Sí (tarifa × cantidad)</option></select></div>
+      <div class="form-group"><button type="button" class="btn-primary" onclick="agregarAdicionalCustom('${p}')">Agregar adicional</button></div>
+    </div>`;
+}
+(function(){
+  const montar = () => {
+    const a = document.getElementById('adic-form-tarifas');
+    const b = document.getElementById('adic-form-srv');
+    if(a) a.innerHTML = _htmlFormNuevoAdic('adt');
+    if(b) b.innerHTML = _htmlFormNuevoAdic('ads');
+    renderAdicionalesCustom();
+  };
+  if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', montar); else montar();
+})();
+
+window.toggleFormNuevoAdicSrv = function(){
+  const f = document.getElementById('adic-form-srv');
+  f.style.display = f.style.display === 'none' ? '' : 'none';
+  if(f.style.display !== 'none'){ const i = document.getElementById('ads_nombre'); if(i) i.focus(); }
+};
+
+window.agregarAdicionalCustom = async function(p){
+  const nombre = document.getElementById(p + '_nombre').value.replace(/,/g, ' ').replace(/\s+/g, ' ').trim();
+  const tarifa = parseFloat(document.getElementById(p + '_tarifa').value);
+  const moneda = document.getElementById(p + '_moneda').value;
+  const porCantidad = document.getElementById(p + '_cant').value === 'si';
+  if(!nombre){ toast('Escribí el nombre del adicional'); return; }
+  if(isNaN(tarifa) || tarifa < 0){ toast('Ingresá una tarifa válida'); return; }
+  if(adicionalesCustom.some(a => !a.archivado && a.nombre.toUpperCase() === nombre.toUpperCase())){
+    toast('Ya existe un adicional con ese nombre'); return;
+  }
+  const base = nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'') || 'adic';
+  const id = base + '_' + Date.now().toString(36);
+  adicionalesCustom = [...adicionalesCustom, { id, nombre, tarifa, moneda, porCantidad, archivado:false }];
+  document.getElementById(p + '_nombre').value = '';
+  document.getElementById(p + '_tarifa').value = '';
+  renderAdicionalesCustom();
+  if(p === 'ads'){   // si se creó desde la carga de operación, queda tildado para esta operación
+    const c = document.getElementById('chk_custom_' + id);
+    if(c) c.checked = true;
+  }
+  recalcularFormulario();
+  await guardarAdicionalesCustom();
+};
+
+// ── Log de vinculaciones automáticas desde Caja ──
+let logVinculaciones = [];
+onSnapshot(query(collection(db,'log_vinculaciones_caja'), orderBy('ts','desc'), limit(300)), snap => {
+  logVinculaciones = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderLogVinculaciones();
+});
+
+function renderLogVinculaciones(){
+  const tbody = document.getElementById('tbody-log-vinculaciones');
+  const paginacionEl = document.getElementById('vinculaciones-paginacion');
+  if(!tbody) return;
+  if(!logVinculaciones.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin registros</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
+    return;
+  }
+  // Orden descendente por fecha (la más reciente primero); a igual fecha, por ts de carga
+  const logOrdenado = [...logVinculaciones].sort((a,b) => fechaISO(b.fecha).localeCompare(fechaISO(a.fecha)) || (b.ts||0)-(a.ts||0));
+  const { pagina, page, totalPaginas } = paginarArray('vinculaciones', logOrdenado, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(l => {
+    const huboAlerta = (l.acciones||[]).some(a => a.startsWith('⚠️'));
+    const accionesHtml = (l.acciones||[]).map(a =>
+      a.startsWith('⚠️')
+        ? `<div style="color:#dc2626;font-weight:600;">${a}</div>`
+        : `<div style="color:#059669;">${a}</div>`
+    ).join('');
+    return `<tr style="${huboAlerta ? 'background:#fef2f2;' : ''}">
+      <td>${l.fecha||''}</td>
+      <td><strong>${l.cliente||''}</strong></td>
+      <td class="mono">${l.factura||'-'}</td>
+      <td style="text-align:right;font-weight:600;">$${fmt2(l.importe)}</td>
+      <td style="font-size:11px;max-width:340px;">${accionesHtml}</td>
+      <td style="font-size:11px;color:#64748b;">${l.cargadoPor||''}</td>
+    </tr>`;
+  }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'vinculaciones');
+}
+window.renderLogVinculaciones = renderLogVinculaciones;
+
+// Clientes: colección chica y estática, sin filtro
+onSnapshot(collection(db,'corresponsales_clientes'), snap => {
+  clientes = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  despachantesNombres = clientes.map(c => c.nombre).sort();
+  window.despachantesNombres = despachantesNombres;
+  renderTablaClientes();
+  renderFiltros();
+  renderSaldos();
+});
+
+onSnapshot(collection(db,'corresponsales_clientes_finales'), snap => {
+  clientesFinalesDocs = snap.docs.map(d => ({id:d.id, nombre:d.data().nombre})).filter(c => c.nombre);
+  const fromDB = clientesFinalesDocs.map(c => c.nombre);
+  const fromOps = [...new Set(operaciones.map(o => o.cliente).filter(Boolean))];
+  clientesNombres = [...new Set([...fromDB, ...fromOps])].sort();
+  window.clientesNombres = clientesNombres;
+  renderTablaClientesFinales();
+});
+
+// Mudanzas: tiempo real, TODAS (sin filtro de año)
+onSnapshot(query(collection(db,'corresponsales_mudanzas'), orderBy('fecha','asc')), snap => {
+  mudanzas = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  renderMudanzas();
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
+  if(tabActivo.includes('Ramiro'))   renderRamiro();
+  if(tabActivo.includes('Clientes')) renderTablaClientesFinales();
+});
+
+// Cobros de mudanzas (historial con fecha real de cobro) — alimenta el "Cobrado del mes" del Dashboard
+onSnapshot(collection(db,'corresponsales_mudanzas_cobros'), snap => {
+  mudanzasCobros = snap.docs.map(d => ({id:d.id, ...d.data()}));
+  const tabActivo = document.querySelector('.tab.active')?.textContent || '';
+  if(tabActivo.includes('Dashboard')) renderDashboard();
+});
+
+// ── Apoderados ──
+// 'apoderado_basico' = "Apoderado" (tarifa t_apoderado_basico, USD 70 por defecto).
+// 'apoderado'        = "Apoderado premium" (tarifa t_apoderado, USD 100). Mantiene el valor interno
+//                      histórico para que los clientes y operaciones ya cargadas conserven su tarifa.
+function esTipoApoderado(tipo){ return tipo === 'apoderado' || tipo === 'apoderado_basico'; }
+function tarifaApoderado(tipo){
+  return tipo === 'apoderado_basico'
+    ? (parseFloat(document.getElementById('t_apoderado_basico').value) || 70)
+    : (parseFloat(document.getElementById('t_apoderado').value) || 100);
+}
+
+// ── CAMBIO TIPO DESPACHO (select global) ──
+window.onTipoDespachoChange = function(){
+  const tipo = document.getElementById('tipo_desp_global').value;
+  esApoderado = esTipoApoderado(tipo);
+  esKotinya   = tipo === 'kotinya';
+
+  const badge = document.getElementById('premium-badge');
+  const tApod = tarifaApoderado(tipo);
+  const tKot  = parseFloat(document.getElementById('t_kotinya').value) || 85;
+  const tRam  = parseFloat(document.getElementById('t_ramiro_op').value) || 30;
+
+  if(['desp_externo','apoderado','apoderado_basico','kotinya','despachante_pesos'].includes(tipo)){
+    badge.style.display = 'inline-block';
+    if(esTipoApoderado(tipo))            badge.textContent = `${tipo === 'apoderado' ? 'APODERADO PREMIUM' : 'APODERADO'} USD ${tApod}`;
+    else if(tipo === 'kotinya')          badge.textContent = `KOTINYA USD ${tKot} · PAGO RAMIRO USD ${tRam}`;
+    else if(tipo === 'despachante_pesos') badge.textContent = '💲 TARIFA EN PESOS';
+    else                                 badge.textContent = '+20% PREMIUM';
+  } else {
+    badge.style.display = 'none';
+  }
+
+  // Ocultar/mostrar canal según tipo
+  const tipoOpActual = document.getElementById('op_tipo').value;
+  const esMICoMultinota = tipoOpActual === 'MIC' || tipoOpActual === 'MULTINOTA' || tipoOpActual === 'ADICIONALES' || tipoOpActual === 'OFICIO';
+  const canalGroup = document.getElementById('op_canal').closest('.form-group');
+  const sinCanal = esApoderado || esKotinya || esMICoMultinota;
+  canalGroup.style.opacity = sinCanal ? '0.4' : '';
+  canalGroup.style.pointerEvents = sinCanal ? 'none' : '';
+
+  // El TC no aplica cuando la tarifa es en pesos (no hay conversión USD->$): se oculta
+  // el campo entero y deja de ser obligatorio para poder guardar.
+  const esPesosTipo = tipo === 'despachante_pesos';
+  const tcGroup = document.getElementById('op_tc').closest('.form-group');
+  tcGroup.style.display = esPesosTipo ? 'none' : '';
+
+  recalcularFormulario();
+  aplicarTCBnaSiMIC();
+};
+
+// ── CAMBIO TIPO OPERACIÓN ──
+window.onTipoChange = function(){
+  const tipoOp  = document.getElementById('op_tipo').value;
+  const esMIC       = tipoOp === 'MIC';
+  const esMultinota = tipoOp === 'MULTINOTA';
+  const esAdicionales = tipoOp === 'ADICIONALES';
+  const esOficio = tipoOp === 'OFICIO';
+
+  // Fin de semana: no se cobra en MIC -> se oculta y se destilda
+  const finsemWrap = document.getElementById('chk-finsem-wrap');
+  if(finsemWrap) finsemWrap.style.display = esMIC ? 'none' : '';
+  if(esMIC) document.getElementById('chk_finsem').checked = false;
+  else if(window._eraMICFinsem) actualizarFinSemPorFecha();   // al salir de MIC, recalcula según la fecha
+  window._eraMICFinsem = esMIC;
+
+  const impresoWrap = document.getElementById('chk-impreso-wrap');
+  if(impresoWrap) impresoWrap.style.display = esMIC ? '' : 'none';
+  if(!esMIC) document.getElementById('chk_impreso').checked = false;
+
+  if(esMIC){
+    document.getElementById('chk_mic').checked = true;
+  } else {
+    document.getElementById('chk_mic').checked = false;
+  }
+
+  const destinGroup = document.getElementById('destinacion-group');
+  const canalGroup  = document.getElementById('op_canal').closest('.form-group');
+
+  const sinDestinacion = esAdicionales || esMIC;
+  destinGroup.style.display = sinDestinacion ? 'none' : '';
+  if(sinDestinacion) document.getElementById('op_destinacion').value = '';
+
+  if(esMIC || esMultinota || esAdicionales || esOficio){
+    canalGroup.style.display = esAdicionales ? 'none' : '';
+    canalGroup.style.opacity = '0.3';
+    canalGroup.style.pointerEvents = 'none';
+    document.getElementById('chk-sobre-wrap').style.display = esOficio ? '' : 'none';
+    document.getElementById('chk-cam-wrap').style.display = 'none';
+    document.getElementById('chk-senasa-p-wrap').style.display = 'none';
+    document.getElementById('chk-senasa-prod-wrap').style.display = 'none';
+  } else {
+    const sinCanal = esApoderado || esKotinya;
+    canalGroup.style.display = '';
+    canalGroup.style.opacity = sinCanal ? '0.4' : '';
+    canalGroup.style.pointerEvents = sinCanal ? 'none' : '';
+    document.getElementById('chk-sobre-wrap').style.display = '';
+    document.getElementById('chk-cam-wrap').style.display = '';
+    document.getElementById('chk-senasa-p-wrap').style.display = '';
+    document.getElementById('chk-senasa-prod-wrap').style.display = '';
+  }
+  recalcularFormulario();
+  aplicarTCBnaSiMIC();   // MIC nuevo -> TC = dólar oficial BNA (venta) de la fecha de la operación
+};
+
+// ── CAMBIO DESPACHANTE ──
+window.onCambiarDespachante = function(){
+  const nombre = document.getElementById('op_despachante').value.trim().toUpperCase();
+
+  if(nombre.includes('KOTINYA')){
+    document.getElementById('tipo_desp_global').value = 'kotinya';
+    esKotinya   = true;
+    esApoderado = false;
+    tieneFactura = true;
+    onTipoDespachoChange();
+    return;
+  }
+
+  const cli = clientes.find(c => c.nombre === nombre);
+  const tiposValidos = ['desp_externo','apoderado','apoderado_basico','kotinya','despachante_pesos'];
+  if(cli){
+    document.getElementById('tipo_desp_global').value = tiposValidos.includes(cli.tipo) ? cli.tipo : 'despachante';
+    document.getElementById('op_periodo_factura').value = cli.factura || 'mensual';
+    tieneFactura = cli.tieneFactura !== 'no';
+  } else {
+    document.getElementById('tipo_desp_global').value = 'despachante';
+    tieneFactura = true;
+  }
+
+  const tipoSel = document.getElementById('tipo_desp_global').value;
+  esKotinya   = tipoSel === 'kotinya';
+  esApoderado = esTipoApoderado(tipoSel);
+  onTipoDespachoChange();
+};
+
+// ── CÁLCULO ──
+function getTarifas(){
+  const canal       = document.getElementById('op_canal').value;
+  const tipo        = document.getElementById('tipo_desp_global').value;
+  const tipoOp      = document.getElementById('op_tipo').value;
+  const esMIC       = tipoOp === 'MIC';
+  const esMultinota = tipoOp === 'MULTINOTA';
+  const esAdicionales = tipoOp === 'ADICIONALES';
+  const esOficio = tipoOp === 'OFICIO';
+  const esPremium   = tipo === 'desp_externo';
+  const _esApoderado = esTipoApoderado(tipo);
+  const _esKotinya   = tipo === 'kotinya';
+  const _esPesos     = tipo === 'despachante_pesos';
+  const tcInput = document.getElementById('op_tc').value;
+  const tcParsed  = parseFloat(tcInput);
+  const tcValido  = !isNaN(tcParsed) && tcParsed > 0;
+  const tcFalta = _esPesos ? false : !tcValido;
+  const tc = _esPesos ? (tcValido ? tcParsed : 1) : (tcFalta ? 0 : tcParsed);
+
+  const items = [];
+  const usd   = (u, label) => { items.push({label, usd: u, pesos: u * tc}); };
+  const pesos = (p, label) => { items.push({label, usd: 0, pesos: p}); };
+
+  // ── Honorarios base ──
+  if(esOficio){
+    usd(parseFloat(document.getElementById('t_oficio').value) || 5, 'Oficio');
+  } else if(_esApoderado){
+    usd(tarifaApoderado(tipo), tipo === 'apoderado' ? 'Apoderado premium' : 'Apoderado');
+  } else if(_esKotinya){
+    usd(parseFloat(document.getElementById('t_kotinya').value) || 85, 'Kotinya');
+  } else if(esMultinota){
+    usd(parseFloat(document.getElementById('t_multinota').value) || 2, 'Multinota');
+  } else if(_esPesos && !esMIC && !esAdicionales){
+    const hon_pesos = canal === 'R'
+      ? parseFloat(document.getElementById('t_pesos_r').value)
+      : parseFloat(document.getElementById('t_pesos_vn').value);
+    pesos(hon_pesos || 0, `Honorarios canal ${canal} (tarifa $)`);
+  } else if(!esMIC && !esAdicionales){
+    let hon_usd;
+    if(esPremium){
+      hon_usd = canal === 'R'
+        ? parseFloat(document.getElementById('t_prem_r').value)
+        : parseFloat(document.getElementById('t_prem_vn').value);
+    } else {
+      hon_usd = canal === 'R'
+        ? parseFloat(document.getElementById('t_r').value)
+        : parseFloat(document.getElementById('t_vn').value);
+    }
+    usd(hon_usd, `Honorarios canal ${canal}`);
+  }
+
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)
+    usd(parseFloat(document.getElementById('t_sobre').value), 'Armado sobre');
+
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked){
+    const n = parseInt(document.getElementById('n_cam').value)||1;
+    let t;
+    if(_esApoderado){
+      t = parseFloat(document.getElementById('t_cam_apod').value);
+    } else if(esPremium){
+      t = canal === 'R'
+        ? parseFloat(document.getElementById('t_prem_cam_r').value)
+        : parseFloat(document.getElementById('t_prem_cam_vn').value);
+    } else {
+      t = canal === 'R'
+        ? parseFloat(document.getElementById('t_cam_r').value)
+        : parseFloat(document.getElementById('t_cam_vn').value);
+    }
+    usd(t*n, `Camión AD ×${n}`);
+  }
+
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_p').checked){
+    const n = parseInt(document.getElementById('n_senasa_p').value)||1;
+    usd(parseFloat(document.getElementById('t_senasa_p').value)*n, `SENASA embalaje ×${n}`);
+  }
+
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_prod').checked)
+    usd(parseFloat(document.getElementById('t_senasa_prod').value), 'SENASA producto');
+
+  if(document.getElementById('chk_hojas').checked){
+    const n = parseInt(document.getElementById('n_hojas').value)||1;
+    usd(parseFloat(document.getElementById('t_hoja').value)*n, `Hojas adicionales ×${n}`);
+  }
+
+  const impresoOk = !esMIC || document.getElementById('chk_impreso').checked;
+
+  if(document.getElementById('chk_mic').checked && impresoOk)
+    usd(parseFloat(document.getElementById('t_mic').value), 'MIC base');
+
+  if(document.getElementById('chk_mic_fojas').checked && impresoOk){
+    const n = parseInt(document.getElementById('n_mic_fojas').value)||1;
+    const cobrarFojas = Math.max(0, n - 1);
+    if(cobrarFojas > 0){
+      usd(parseFloat(document.getElementById('t_mic_foja').value)*cobrarFojas, `AD Foja(${cobrarFojas})`);
+    }
+  }
+
+  if(!esMIC && document.getElementById('chk_finsem').checked)
+    usd(parseFloat(document.getElementById('t_finsem').value), 'Fin de semana');
+
+  if(document.getElementById('chk_mov_ad').checked){
+    const movVal = parseFloat(document.getElementById('t_mov_ad').value) || 0;
+    if(movVal > 0) usd(movVal, 'MOV AD');
+  }
+
+  // Adicionales propios (creados desde el sistema)
+  adicionalesCustomMarcados().forEach(a => {
+    const t = a.tarifa * a.n;
+    const etiqueta = a.porCantidad ? `${a.nombre} ×${a.n}` : a.nombre;
+    if(a.moneda === 'ARS') pesos(t, etiqueta); else usd(t, etiqueta);
+  });
+
+  // Adicionales en pesos
+  const adicPesos = parseFloat(document.getElementById('op_adicionales_pesos').value)||0;
+  if(adicPesos > 0) pesos(adicPesos, 'Adicionales en pesos');
+
+  // Adicionales en USD
+  const adicUsd = parseFloat(document.getElementById('op_adicionales_usd').value)||0;
+  if(adicUsd > 0) usd(adicUsd, 'Adicionales en USD');
+
+  const totalNeto = items.reduce((a,b) => a + b.pesos, 0);
+  const iva       = tieneFactura ? totalNeto * 0.21 : 0;
+  const bruto     = totalNeto + iva;
+  const totalUsd  = items.reduce((a,b) => a + b.usd, 0);
+
+  return { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, esOficio, tcFalta };
+}
+
+window.recalcularFormulario = function(){
+  try {
+    const { items, totalNeto, iva, bruto, tcFalta } = getTarifas();
+    const tcInputEl = document.getElementById('op_tc');
+
+    if(tcFalta){
+      tcInputEl.style.borderColor = '#dc2626';
+      tcInputEl.style.background  = '#fef2f2';
+      document.getElementById('prev_neto').textContent  = '⚠️ Falta TC';
+      document.getElementById('prev_iva').textContent   = '⚠️ Falta TC';
+      document.getElementById('prev_bruto').textContent = '⚠️ Falta TC';
+      document.getElementById('prev_neto').style.color  = '#dc2626';
+      document.getElementById('prev_bruto').style.color = '#dc2626';
+      document.getElementById('prev_iva').style.color   = '#dc2626';
+      document.getElementById('desglose-prev').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
+      document.getElementById('op-numero-preview').textContent = '→ Op #' + generarNumOp();
+      return;
+    }
+
+    tcInputEl.style.borderColor = '';
+    tcInputEl.style.background  = '';
+
+    document.getElementById('prev_neto').textContent  = '$ ' + fmt2(totalNeto);
+    document.getElementById('prev_iva').textContent   = tieneFactura ? '$ ' + fmt2(iva) : '— Sin factura';
+    document.getElementById('prev_bruto').textContent = '$ ' + fmt2(bruto);
+    document.getElementById('prev_neto').style.color  = '';
+    document.getElementById('prev_bruto').style.color = '';
+    document.getElementById('prev_iva').style.color   = tieneFactura ? '' : '#dc2626';
+
+    const desglose = items.map(i =>
+      `<span class="tag">${i.label}: ${i.usd > 0 ? 'USD '+i.usd.toFixed(2)+' → ' : ''}$${fmt2(i.pesos)}</span>`
+    ).join(' ');
+    document.getElementById('desglose-prev').innerHTML = desglose;
+    document.getElementById('op-numero-preview').textContent = '→ Op #' + generarNumOp();
+  } catch(e) {
+    console.warn('recalcularFormulario error:', e);
+  }
+};
+
+// ── CONSTRUIR DATOS DEL FORMULARIO (compartido entre crear y actualizar) ──
+function construirDatosOperacion(){
+  const { items, totalNeto, iva, bruto, tc, totalUsd, esMIC, esMultinota, esAdicionales, esOficio } = getTarifas();
+  const tipo = document.getElementById('tipo_desp_global').value;
+
+  const adicTags = [];
+  if(!esMultinota && !esAdicionales && document.getElementById('chk_sobre').checked)      adicTags.push('Armado');
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_cam').checked)        adicTags.push(`Cam×${document.getElementById('n_cam').value}`);
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_p').checked)   adicTags.push(`SENASA-Embalaje×${document.getElementById('n_senasa_p').value}`);
+  if(!esMultinota && !esOficio && !esAdicionales && document.getElementById('chk_senasa_prod').checked) adicTags.push('SENASA-Prod');
+  if(document.getElementById('chk_hojas').checked)      adicTags.push(`Hojas×${document.getElementById('n_hojas').value}`);
+  if(document.getElementById('chk_mic').checked){
+    const numMic = document.getElementById('n_mic_num').value.trim() || document.getElementById('op_mic').value.trim() || 's/n';
+    adicTags.push(`MIC:${numMic}`);
+  }
+  if(esMIC && !document.getElementById('chk_impreso').checked) adicTags.push('Sin liberar (no cobra)');
+  if(esMultinota) adicTags.push('Multinota');
+  if(esAdicionales) adicTags.push('Adicionales');
+  if(esOficio) adicTags.push('Oficio');
+  if(document.getElementById('chk_mic_fojas').checked){
+    const nFojas = parseInt(document.getElementById('n_mic_fojas').value)||1;
+    const cobrarFojas = Math.max(0, nFojas - 1);
+    if(cobrarFojas > 0) adicTags.push(`AD Foja(${cobrarFojas})`);
+  }
+  if(!esMIC && document.getElementById('chk_finsem').checked)     adicTags.push('F/S');
+  if(document.getElementById('chk_mov_ad').checked)     adicTags.push('MOV AD');
+  if(esMIC && document.getElementById('chk_impreso').checked) adicTags.push('Impreso');
+  adicionalesCustomMarcados().forEach(a => adicTags.push(a.porCantidad ? `${a.nombre}×${a.n}` : a.nombre));
+  const chkCustom = {};
+  adicionalesCustomMarcados().forEach(a => { chkCustom[a.id] = { n: a.n }; });
+
+  return {
+    fecha: document.getElementById('op_fecha').value,
+    despachante: document.getElementById('op_despachante').value.trim().toUpperCase(),
+    cliente: document.getElementById('op_cliente').value.trim().toUpperCase(),
+    destinacion: (esAdicionales || esMIC) ? '' : document.getElementById('op_destinacion').value.trim().toUpperCase(),
+    canal: (esMIC || esMultinota || esAdicionales || esOficio) ? '' : document.getElementById('op_canal').value,
+    zpa: document.getElementById('op_zpa').value.trim().toUpperCase(),
+    tipo: document.getElementById('op_tipo').value,
+    mic: document.getElementById('op_mic').value.trim().toUpperCase(),
+    toma: document.getElementById('op_toma').value.trim(),
+    tc,
+    totalUsd,
+    neto: totalNeto,
+    iva,
+    bruto,
+    adicionales: adicTags.join(', '),
+    obs: document.getElementById('op_obs').value.trim(),
+    periodoFactura: document.getElementById('op_periodo_factura').value,
+    tieneFactura,
+    esPremium:    tipo === 'desp_externo',
+    esKotinya:    tipo === 'kotinya',
+    esApoderado:  esTipoApoderado(tipo),
+    esTarifaPesos: tipo === 'despachante_pesos',
+    ramiroDeuda:  tipo === 'kotinya' ? (parseFloat(document.getElementById('t_ramiro_op').value) || 30) : 0,
+    esMIC,
+    esMultinota,
+    esAdicionales,
+    esOficio,
+    tipoDespGlobal: tipo,
+    opTcInput: document.getElementById('op_tc').value,
+    adicionalesPesos: parseFloat(document.getElementById('op_adicionales_pesos').value) || 0,
+    adicionalesUsd: parseFloat(document.getElementById('op_adicionales_usd').value) || 0,
+    chk_sobre: document.getElementById('chk_sobre').checked,
+    chk_cam: document.getElementById('chk_cam').checked,
+    n_cam: document.getElementById('n_cam').value,
+    chk_senasa_p: document.getElementById('chk_senasa_p').checked,
+    n_senasa_p: document.getElementById('n_senasa_p').value,
+    chk_senasa_prod: document.getElementById('chk_senasa_prod').checked,
+    chk_hojas: document.getElementById('chk_hojas').checked,
+    n_hojas: document.getElementById('n_hojas').value,
+    chk_mic_check: document.getElementById('chk_mic').checked,
+    n_mic_num: document.getElementById('n_mic_num').value,
+    chk_mic_fojas: document.getElementById('chk_mic_fojas').checked,
+    n_mic_fojas: document.getElementById('n_mic_fojas').value,
+    chk_finsem: !esMIC && document.getElementById('chk_finsem').checked,
+    chk_mov_ad: document.getElementById('chk_mov_ad').checked,
+    impreso: document.getElementById('chk_impreso').checked,
+    chk_custom: chkCustom
+  };
+}
+
+// ── VALIDACIÓN: DESTINACIÓN Y N° MIC (obligatorios y sin duplicados) ──
+function normClave(v){ return String(v||'').toUpperCase().replace(/\s+/g,' ').trim(); }
+
+function mostrarErrorCampo(inputId, msg){
+  const input = document.getElementById(inputId);
+  if(!input) return;
+  let err = document.getElementById('err_' + inputId);
+  if(!msg){
+    if(err) err.remove();
+    input.style.borderColor = '';
+    input.style.background  = '';
+    return;
+  }
+  if(!err){
+    err = document.createElement('div');
+    err.id = 'err_' + inputId;
+    err.style.cssText = 'color:#dc2626;font-size:11px;font-weight:700;margin-top:4px;';
+    input.insertAdjacentElement('afterend', err);
+  }
+  err.textContent = msg;
+  input.style.borderColor = '#dc2626';
+  input.style.background  = '#fef2f2';
+}
+
+function buscarDuplicado(campo, valor, excluirId){
+  const clave = normClave(valor);
+  if(!clave) return null;
+  return operaciones.find(o => o.id !== excluirId && normClave(o[campo]) === clave) || null;
+}
+
+function descripcionOp(o){
+  return `Op #${o.numOp || '-'} · ${o.despachante || '-'} · ${o.fecha || '-'}`;
+}
+
+// Devuelve true si se puede guardar. Marca en rojo el campo con problema.
+function validarDestinacionYMic(excluirId, soloDuplicados){
+  const tipoOp = document.getElementById('op_tipo').value;
+  const esMICTipo = tipoOp === 'MIC';
+  const esAdicionalesTipo = tipoOp === 'ADICIONALES';
+  const chkMic = document.getElementById('chk_mic').checked;
+  const destinacion = document.getElementById('op_destinacion').value.trim();
+  const mic = document.getElementById('op_mic').value.trim() || document.getElementById('n_mic_num').value.trim();
+  let ok = true;
+
+  // Destinación
+  mostrarErrorCampo('op_destinacion', '');
+  if(!esAdicionalesTipo && !esMICTipo){
+    if(!destinacion){
+      if(!soloDuplicados){
+        mostrarErrorCampo('op_destinacion', '⛔ Falta cargar la destinación / permiso');
+        toast('⛔ Falta cargar la destinación / permiso', true);
+        ok = false;
+      }
+    } else {
+      const dup = buscarDuplicado('destinacion', destinacion, excluirId);
+      if(dup){
+        const msg = `⛔ La destinación ${normClave(destinacion)} YA ESTÁ CARGADA (${descripcionOp(dup)})`;
+        mostrarErrorCampo('op_destinacion', msg);
+        if(!soloDuplicados) toast(msg, true);
+        ok = false;
+      }
+    }
+  }
+
+  // N° MIC
+  mostrarErrorCampo('op_mic', '');
+  if(esMICTipo || chkMic){
+    if(!mic){
+      if(!soloDuplicados){
+        mostrarErrorCampo('op_mic', '⛔ Falta cargar el N° de MIC');
+        toast('⛔ Falta cargar el N° de MIC', true);
+        ok = false;
+      }
+    } else {
+      const dup = buscarDuplicado('mic', mic, excluirId);
+      if(dup){
+        const msg = `⛔ El MIC ${normClave(mic)} YA ESTÁ CARGADO (${descripcionOp(dup)})`;
+        mostrarErrorCampo('op_mic', msg);
+        if(!soloDuplicados) toast(msg, true);
+        ok = false;
+      }
+    }
+  }
+  return ok;
+}
+window.validarDestinacionYMic = validarDestinacionYMic;
+
+// Aviso en vivo mientras se escribe (solo duplicados; lo obligatorio se controla al guardar)
+['op_destinacion','op_mic','n_mic_num'].forEach(id => {
+  document.getElementById(id)?.addEventListener('input', () => validarDestinacionYMic(opEditandoId, true));
+});
+document.getElementById('op_tipo')?.addEventListener('change', () => validarDestinacionYMic(opEditandoId, true));
+document.getElementById('chk_mic')?.addEventListener('change', () => validarDestinacionYMic(opEditandoId, true));
+
+// ── GUARDAR OPERACIÓN (nueva) ──
+let guardandoOperacion = false;
+window.guardarOperacion = async function(){
+  if(guardandoOperacion) return;
+
+  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
+  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esMICTipo = document.getElementById('op_tipo').value === 'MIC';
+  const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
+  const tcVal = parseFloat(document.getElementById('op_tc').value);
+  if(!esPesosTipo && (!tcVal || tcVal <= 0)){
+    toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
+    document.getElementById('op_tc').focus();
+    return;
+  }
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!validarDestinacionYMic(null)) return;
+
+  const datos = construirDatosOperacion();
+  const op = {
+    ...datos,
+    ramiroOPagado: 'no',
+    cargadoPor: user.username,
+    ts: Date.now()
+  };
+
+  const btn = document.getElementById('op-btn-guardar');
+  const textoOriginal = btn.innerHTML;
+  guardandoOperacion = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Guardando...';
+
+  try {
+    op.numOp = await _reservarNumOp();
+    await addDoc(collection(db,'despachantees_ops'), op);
+    toast('✅ Operación guardada: #' + op.numOp);
+    limpiarFormulario();
+  } catch(e){
+    toast('❌ Error al guardar: ' + e.message);
+  } finally {
+    guardandoOperacion = false;
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
+  }
+};
+
+// ── ACTUALIZAR OPERACIÓN (edición) ──
+let actualizandoOperacion = false;
+window.actualizarOperacion = async function(){
+  if(!opEditandoId) return;
+  if(actualizandoOperacion) return;
+
+  const despachante = document.getElementById('op_despachante').value.trim().toUpperCase();
+  const destinacion = document.getElementById('op_destinacion').value.trim().toUpperCase();
+  const esAdicionalesTipo = document.getElementById('op_tipo').value === 'ADICIONALES';
+  const esMICTipo = document.getElementById('op_tipo').value === 'MIC';
+  const esPesosTipo = document.getElementById('tipo_desp_global').value === 'despachante_pesos';
+  const tcVal = parseFloat(document.getElementById('op_tc').value);
+  if(!esPesosTipo && (!tcVal || tcVal <= 0)){
+    toast('⚠️ Falta el TC de la operación — es obligatorio para guardar');
+    document.getElementById('op_tc').focus();
+    return;
+  }
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!validarDestinacionYMic(opEditandoId)) return;
+
+  const datos = construirDatosOperacion();
+
+  const btn = document.getElementById('op-btn-actualizar');
+  const textoOriginal = btn.innerHTML;
+  actualizandoOperacion = true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Actualizando...';
+
+  try {
+    await updateDoc(doc(db,'despachantees_ops', opEditandoId), {
+      ...datos,
+      modificadoPor: user.username,
+      tsEdit: Date.now()
+    });
+    toast('✅ Operación actualizada');
+    cancelarEdicionOperacion();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  } finally {
+    actualizandoOperacion = false;
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
+  }
+};
+
+// ── EDITAR OPERACIÓN: carga los datos en el formulario ──
+window.editarOperacion = function(id){
+  const o = operaciones.find(x => x.id === id);
+  if(!o) return;
+  opEditandoId = id;
+
+  document.getElementById('op_fecha').value        = o.fecha || '';
+  document.getElementById('op_despachante').value  = o.despachante || '';
+  document.getElementById('op_cliente').value      = o.cliente || '';
+  document.getElementById('op_destinacion').value  = o.destinacion || '';
+  document.getElementById('op_zpa').value          = o.zpa || '';
+  document.getElementById('op_mic').value          = o.mic || '';
+  document.getElementById('op_toma').value         = o.toma || '';
+  document.getElementById('op_obs').value          = o.obs || '';
+  document.getElementById('op_periodo_factura').value = o.periodoFactura || 'diario';
+  document.getElementById('op_canal').value        = o.canal || 'V';
+  document.getElementById('op_tipo').value         = o.tipo || 'EXPO';
+  document.getElementById('op_adicionales_pesos').value = o.adicionalesPesos || 0;
+  document.getElementById('op_adicionales_usd').value   = o.adicionalesUsd || 0;
+  document.getElementById('op_tc').value           = o.opTcInput || o.tc || 1440;
+  _tcAutoAplicado = false;   // al editar se respeta el TC guardado
+  setTcHint('');
+
+  tieneFactura = o.tieneFactura !== false;
+
+  onTipoChange();
+
+  document.getElementById('tipo_desp_global').value =
+    o.tipoDespGlobal || (o.esApoderado ? 'apoderado' : o.esKotinya ? 'kotinya' : o.esPremium ? 'desp_externo' : o.esTarifaPesos ? 'despachante_pesos' : 'despachante');
+  onTipoDespachoChange();
+
+  document.getElementById('chk_sobre').checked       = !!o.chk_sobre;
+  document.getElementById('chk_cam').checked         = !!o.chk_cam;
+  document.getElementById('n_cam').value             = o.n_cam || 1;
+  document.getElementById('chk_senasa_p').checked    = !!o.chk_senasa_p;
+  document.getElementById('n_senasa_p').value        = o.n_senasa_p || 1;
+  document.getElementById('chk_senasa_prod').checked = !!o.chk_senasa_prod;
+  document.getElementById('chk_hojas').checked       = !!o.chk_hojas;
+  document.getElementById('n_hojas').value           = o.n_hojas || 1;
+  document.getElementById('chk_mic').checked         = o.chk_mic_check !== undefined ? !!o.chk_mic_check : (o.tipo === 'MIC');
+  document.getElementById('n_mic_num').value         = o.n_mic_num || '';
+  document.getElementById('chk_mic_fojas').checked   = !!o.chk_mic_fojas;
+  document.getElementById('n_mic_fojas').value       = o.n_mic_fojas || 1;
+  document.getElementById('chk_finsem').checked      = !!o.chk_finsem;
+  document.getElementById('chk_mov_ad').checked      = !!o.chk_mov_ad;
+  document.getElementById('chk_impreso').checked     = !!o.impreso;
+  if(o.tipo === 'MIC') document.getElementById('chk_finsem').checked = false;
+
+  // Adicionales propios: se muestran (aunque estén archivados) los que usó esta operación
+  window._adicForzados = new Set(Object.keys(o.chk_custom || {}));
+  renderAdicionalesCustom();
+  Object.entries(o.chk_custom || {}).forEach(([id, v]) => {
+    const c = document.getElementById('chk_custom_' + id);
+    if(c) c.checked = true;
+    const n = document.getElementById('n_custom_' + id);
+    if(n) n.value = (v && v.n) || 1;
+  });
+
+  recalcularFormulario();
+
+  const badge = document.getElementById('op-edit-badge');
+  badge.style.display = 'block';
+  badge.textContent = `✏️ Editando operación #${o.numOp || ''} — ${o.despachante || ''}`;
+  document.getElementById('op-btn-guardar').style.display    = 'none';
+  document.getElementById('op-btn-actualizar').style.display = 'inline-flex';
+  document.getElementById('op-btn-cancelar').style.display   = 'inline-flex';
+
+  switchTab('cargar');
+  document.getElementById('tab-cargar').scrollIntoView({behavior:'smooth'});
+  toast('✏️ Operación cargada para editar');
+};
+
+// ── CANCELAR EDICIÓN ──
+window.cancelarEdicionOperacion = function(){
+  opEditandoId = null;
+  document.getElementById('op-edit-badge').style.display = 'none';
+  document.getElementById('op-btn-guardar').style.display    = 'inline-flex';
+  document.getElementById('op-btn-actualizar').style.display = 'none';
+  document.getElementById('op-btn-cancelar').style.display   = 'none';
+  limpiarFormulario();
+};
+
+// ── ELIMINAR ──
+window.eliminarOp = async function(id){
+  if(!confirm('¿Eliminar esta operación?')) return;
+  await deleteDoc(doc(db,'despachantees_ops',id));
+  toast('Operación eliminada');
+};
+
+// ── LIMPIAR FORM ──
+window.limpiarFormulario = function(){
+  mostrarErrorCampo('op_destinacion', '');
+  mostrarErrorCampo('op_mic', '');
+  document.getElementById('op_despachante').value = '';
+  document.getElementById('op_destinacion').value = '';
+  document.getElementById('op_cliente').value = '';
+  document.getElementById('op_obs').value = '';
+  document.getElementById('op_mic').value = '';
+  document.getElementById('op_toma').value = '';
+  document.getElementById('op_adicionales_pesos').value = '0';
+  document.getElementById('op_adicionales_usd').value = '0';
+  document.getElementById('op_tc').value = '';
+  _tcAutoAplicado = false;
+  setTcHint('');
+  document.getElementById('op_canal').value = 'V';
+  document.getElementById('op_tipo').value = 'EXPO';
+  document.getElementById('tipo_desp_global').value = 'despachante';
+  document.querySelectorAll('.chk-item input[type=checkbox]').forEach(c => c.checked = false);
+  window._adicForzados = new Set();
+  renderAdicionalesCustom();
+  actualizarFinSemPorFecha();
+  cerrarAC('ac_despachante');
+  cerrarAC('ac_cliente');
+  esApoderado = false;
+  esKotinya   = false;
+  tieneFactura = true;
+  onTipoChange();
+  onTipoDespachoChange();
+  recalcularFormulario();
+};
+
+// ── GUARDAR CLIENTE (despachante) — alta o edición ──
+let clienteEditandoId = null;
+
+window.guardarCliente = async function(){
+  const nombre = document.getElementById('cli_nombre').value.trim().toUpperCase();
+  if(!nombre){ toast('Ingresá el nombre'); return; }
+  const cli = {
+    nombre,
+    tipo: document.getElementById('cli_tipo').value,
+    factura: document.getElementById('cli_factura').value,
+    tieneFactura: document.getElementById('cli_tiene_factura').value,
+    cuit: document.getElementById('cli_cuit').value.trim()
+  };
+  if(clienteEditandoId){
+    // Edición: el nombre queda fijo (las operaciones y pagos se vinculan por nombre)
+    await updateDoc(doc(db,'corresponsales_clientes', clienteEditandoId), {
+      tipo: cli.tipo, factura: cli.factura, tieneFactura: cli.tieneFactura, cuit: cli.cuit
+    });
+    cancelarEdicionCliente();
+    toast('✅ Despachante actualizado');
+    return;
+  }
+  const id = nombre.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+  await setDoc(doc(db,'corresponsales_clientes', id), cli);
+  document.getElementById('cli_nombre').value = '';
+  document.getElementById('cli_cuit').value = '';
+  toast('✅ Despachante guardado');
+};
+
+window.editarCliente = function(id){
+  const c = clientes.find(x => x.id === id);
+  if(!c){ toast('No se encontró el despachante'); return; }
+  clienteEditandoId = id;
+  const nom = document.getElementById('cli_nombre');
+  nom.value = c.nombre || '';
+  nom.disabled = true; // el nombre no se edita: las operaciones y pagos están vinculados por nombre
+  document.getElementById('cli_tipo').value = c.tipo || 'despachante';
+  document.getElementById('cli_factura').value = c.factura || 'mensual';
+  document.getElementById('cli_tiene_factura').value = c.tieneFactura === 'no' ? 'no' : 'si';
+  document.getElementById('cli_cuit').value = c.cuit || '';
+  document.getElementById('cli-btn-guardar').textContent = '💾 Guardar cambios';
+  document.getElementById('cli-btn-cancelar').style.display = 'inline-flex';
+  nom.closest('.section-card').scrollIntoView({ behavior:'smooth', block:'start' });
+  toast('✏️ Editando: ' + (c.nombre || ''));
+};
+
+window.cancelarEdicionCliente = function(){
+  clienteEditandoId = null;
+  const nom = document.getElementById('cli_nombre');
+  nom.disabled = false;
+  nom.value = '';
+  document.getElementById('cli_tipo').value = 'despachante';
+  document.getElementById('cli_factura').value = 'mensual';
+  document.getElementById('cli_tiene_factura').value = 'si';
+  document.getElementById('cli_cuit').value = '';
+  document.getElementById('cli-btn-guardar').textContent = 'Agregar despachante';
+  document.getElementById('cli-btn-cancelar').style.display = 'none';
+};
+
+window.eliminarCliente = async function(id){
+  if(!confirm('¿Eliminar despachante?')) return;
+  await deleteDoc(doc(db,'corresponsales_clientes',id));
+  if(clienteEditandoId === id) cancelarEdicionCliente();
+  toast('Despachante eliminado');
+};
+
+// ── GUARDAR / ELIMINAR CLIENTE FINAL (mudanzas y cliente final de operaciones) ──
+window.guardarClienteFinal = async function(){
+  const input = document.getElementById('clifinal_nombre');
+  const nombre = input.value.trim().toUpperCase();
+  if(!nombre){ toast('Ingresá el nombre del cliente'); return; }
+  const id = nombre.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+  try {
+    await setDoc(doc(db,'corresponsales_clientes_finales', id), { nombre });
+    input.value = '';
+    toast('✅ Cliente guardado: ' + nombre);
+  } catch(e){
+    toast('❌ Error al guardar: ' + e.message);
+  }
+};
+
+window.eliminarClienteFinal = async function(id){
+  if(!confirm('¿Eliminar este cliente? (no borra operaciones ni mudanzas ya cargadas con su nombre)')) return;
+  try {
+    await deleteDoc(doc(db,'corresponsales_clientes_finales', id));
+    toast('Cliente eliminado');
+  } catch(e){
+    toast('❌ Error al eliminar: ' + e.message);
+  }
+};
+
+function normalizarBusqueda(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+window.buscarClienteFinal = function(){
+  paginaGenerica['clientesFinales'] = 1;
+  renderTablaClientesFinales();
+};
+window.limpiarBusquedaClienteFinal = function(){
+  const el = document.getElementById('clifinal_buscar');
+  if(el) el.value = '';
+  buscarClienteFinal();
+};
+
+function renderTablaClientesFinales(){
+  const tbody = document.getElementById('tbody-clientes-finales');
+  const paginacionEl = document.getElementById('clientesfinales-paginacion');
+  if(!tbody) return;
+  const q = normalizarBusqueda(document.getElementById('clifinal_buscar')?.value);
+
+  // Despachante(s) de cada cliente final: salen de las operaciones (cliente → despachante)
+  const despPorCliente = new Map(); // cliente -> Map(despachante -> cantidad de ops)
+  operaciones.forEach(o => {
+    if(!o.cliente || !o.despachante) return;
+    if(!despPorCliente.has(o.cliente)) despPorCliente.set(o.cliente, new Map());
+    const m = despPorCliente.get(o.cliente);
+    m.set(o.despachante, (m.get(o.despachante)||0) + 1);
+  });
+
+  // Lista base: clientes finales cargados. Al buscar, también se incluyen los que solo figuran en operaciones/mudanzas.
+  let lista = clientesFinalesDocs.map(c => ({ id:c.id, nombre:c.nombre }));
+  if(q){
+    const yaEstan = new Set(lista.map(c => c.nombre));
+    const extra = new Set([...despPorCliente.keys(), ...mudanzas.map(m => m.cliente).filter(Boolean)]);
+    extra.forEach(n => { if(!yaEstan.has(n)) lista.push({ id:null, nombre:n }); });
+  }
+
+  const conDesp = lista.map(c => {
+    const m = despPorCliente.get(c.nombre);
+    const desps = m ? [...m.entries()].sort((a,b) => b[1]-a[1] || a[0].localeCompare(b[0])) : [];
+    return { ...c, desps };
+  });
+  const filtrados = q
+    ? conDesp.filter(c => normalizarBusqueda(c.nombre).includes(q) || c.desps.some(([d]) => normalizarBusqueda(d).includes(q)))
+    : conDesp;
+
+  if(!filtrados.length){
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px;">${q ? 'Sin resultados para esa búsqueda' : 'Sin clientes cargados'}</td></tr>`;
+    if(paginacionEl) paginacionEl.innerHTML = '';
+    return;
+  }
+  const ordenados = [...filtrados].sort((a,b) => a.nombre.localeCompare(b.nombre));
+  const { pagina, page, totalPaginas } = paginarArray('clientesFinales', ordenados, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(c => {
+    const cantOps  = operaciones.filter(o => o.cliente === c.nombre).length;
+    const cantMud  = mudanzas.filter(m => m.cliente === c.nombre).length;
+    const despHtml = c.desps.length
+      ? c.desps.map(([d,n]) => `<span class="tag" style="background:#dbeafe;color:#1e3a8a;margin:1px 4px 1px 0;">${d}${c.desps.length>1?` (${n})`:''}</span>`).join('')
+      : '<span style="color:#94a3b8;">—</span>';
+    return `<tr>
+      <td><strong>${c.nombre}</strong>${c.id ? '' : ' <span class="tag" style="background:#f1f5f9;color:#64748b;">solo en ops</span>'}</td>
+      <td>${despHtml}</td>
+      <td style="text-align:center;">${cantOps} op${cantOps===1?'':'s'} · ${cantMud} mud.</td>
+      <td>${c.id ? `<button class="btn-danger" onclick="eliminarClienteFinal('${c.id}')">✕</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesFinales');
+}
+window.renderTablaClientesFinales = renderTablaClientesFinales;
+
+// ── CALCULAR COBERTURA FIFO (pagos sin factura asignada se aplican a las operaciones más viejas) ──
+function calcularCoberturaFIFO(nombre){
+  const { pagado } = calcularSaldoDespachante(nombre);
+  const ops = operaciones.filter(o => o.despachante === nombre).sort((a,b)=>(a.ts||0)-(b.ts||0));
+  let restante = pagado;
+  return ops.map(o => {
+    const cubierto = Math.min(o.bruto||0, Math.max(0, restante));
+    restante -= cubierto;
+    return { ...o, cubierto, pendiente: (o.bruto||0) - cubierto };
+  });
+}
+window.calcularCoberturaFIFO = calcularCoberturaFIFO;
+
+// ── ASIGNAR N° FACTURA A UNA OPERACIÓN ──
+window.asignarFactura = async function(id, numFactura){
+  const val = (numFactura||'').trim().toUpperCase();
+  try {
+    await updateDoc(doc(db,'despachantees_ops', id), { numFactura: val });
+    toast(val ? '🧾 Factura asignada: ' + val : 'Factura quitada');
+  } catch(e){
+    toast('❌ Error al asignar factura: ' + e.message);
+  }
+};
+
+// ── ASIGNAR N° FACTURA EN LOTE (panel con rango de fechas) ──
+window.toggleFacturaLotePanel = function(){
+  const panel = document.getElementById('factura-lote-panel');
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  if(open){
+    document.getElementById('lote_despachante').value = document.getElementById('filtro_despachante').value || '';
+    document.getElementById('lote_fecha_desde').value = '';
+    document.getElementById('lote_fecha_hasta').value = '';
+    document.getElementById('lote_num_factura').value = '';
+    const chkIncluir = document.getElementById('lote_incluir_con_factura');
+    if(chkIncluir) chkIncluir.checked = false;
+    actualizarPreviewLote();
+  }
+};
+
+function opsParaLote(){
+  const despachante = document.getElementById('lote_despachante').value;
+  const desde = document.getElementById('lote_fecha_desde').value;
+  const hasta = document.getElementById('lote_fecha_hasta').value;
+  const incluirConFactura = document.getElementById('lote_incluir_con_factura')?.checked;
+  if(!despachante) return [];
+  return operaciones.filter(o => o.despachante === despachante
+    && (!desde || (o.fecha || '') >= desde)
+    && (!hasta || (o.fecha || '') <= hasta)
+    && (incluirConFactura || !o.numFactura));
+}
+window.opsParaLote = opsParaLote;
+
+window.actualizarPreviewLote = function(){
+  const despachante = document.getElementById('lote_despachante').value;
+  const prev = document.getElementById('lote-preview');
+  if(!despachante){
+    prev.innerHTML = '<span style="color:#dc2626;">⚠️ Elegí un despachante</span>';
+    return;
+  }
+  const ops = opsParaLote();
+  const totBruto = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  const incluirConFactura = document.getElementById('lote_incluir_con_factura')?.checked;
+  prev.innerHTML = ops.length
+    ? `${ops.length} operación(es) ${incluirConFactura ? '(incluye con factura ya asignada)' : 'sin factura'} por un total de $${fmt2(totBruto)}`
+    : `<span style="color:#dc2626;">No hay operaciones ${incluirConFactura ? '' : 'sin factura '}con esos filtros</span>`;
+};
+
+window.ejecutarAsignarFacturaMasiva = async function(){
+  const despachante = document.getElementById('lote_despachante').value;
+  if(!despachante){ toast('⚠️ Elegí un despachante'); return; }
+  const ops = opsParaLote();
+  if(!ops.length){ toast('No hay operaciones con esos filtros'); return; }
+  const val = document.getElementById('lote_num_factura').value.trim().toUpperCase();
+  if(!val){ toast('⚠️ Ingresá el N° de factura'); return; }
+  for(const o of ops){
+    await updateDoc(doc(db,'despachantees_ops', o.id), { numFactura: val });
+  }
+  toast(`✅ Factura ${val} asignada a ${ops.length} operaciones`);
+  toggleFacturaLotePanel();
+};
+
+// ── MAPA DE PENDIENTE DE PAGO POR OPERACIÓN (para el filtro "Solo pendientes de pago") ──
+function mapaPendientePorOperacion(){
+  const map = {};
+  const despachantesConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))];
+  despachantesConOps.forEach(desp => {
+    calcularCoberturaExigibleFIFO(desp).forEach(o => { map[o.id] = o.pendiente; });
+  });
+  return map;
+}
+window.mapaPendientePorOperacion = mapaPendientePorOperacion;
+
+function aplicarFiltroPendiente(ops, filtroPendiente){
+  if(!filtroPendiente) return ops;
+  const pendienteMap = mapaPendientePorOperacion();
+  return ops.filter(o => {
+    const pend = pendienteMap[o.id] || 0;
+    return filtroPendiente === 'pendiente' ? pend > 0.5 : pend <= 0.5;
+  });
+}
+window.aplicarFiltroPendiente = aplicarFiltroPendiente;
+
+// ══════════════════════════════ ÁRBOL DE FECHAS (Año > Mes > Día) — LISTADO ══════════════════════════════
+// Filtro adicional para la pestaña Listado (y su reporte Excel): permite tildar años,
+// meses o días puntuales, igual que el selector de meses de Cuenta Ramiro pero con un
+// nivel más (día). Un Set vacío = sin filtro de fecha por árbol (se respetan igual los
+// demás filtros: despachante, mes simple, rango desde/hasta, pendiente).
+let listadoFechasSeleccionadas = new Set(); // fechas exactas 'YYYY-MM-DD' tildadas
+let listadoArbolAbierto = new Set(); // años/meses actualmente desplegados en el árbol
+
+const NOMBRES_MESES_ARBOL = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+// Arma { '2026': { '2026-09': ['2026-09-21', '2026-09-20', ...] } } a partir de las
+// fechas realmente cargadas en operaciones (ordenadas de más nueva a más vieja).
+function construirArbolFechasListado(){
+  const fechas = [...new Set(operaciones.map(o => o.fecha).filter(Boolean))].sort().reverse();
+  const arbol = {};
+  fechas.forEach(f => {
+    const anio = f.slice(0,4);
+    const mes  = f.slice(0,7);
+    if(!arbol[anio]) arbol[anio] = {};
+    if(!arbol[anio][mes]) arbol[anio][mes] = [];
+    arbol[anio][mes].push(f);
+  });
+  return arbol;
+}
+
+function diasDeAnio(arbol, anio){
+  return Object.values(arbol[anio] || {}).flat();
+}
+
+// 'todos' | 'ninguno' | 'parcial' según cuántos de esos días estén tildados
+function estadoGrupoFechas(dias){
+  if(!dias.length) return 'ninguno';
+  const seleccionados = dias.filter(d => listadoFechasSeleccionadas.has(d)).length;
+  if(seleccionados === 0) return 'ninguno';
+  if(seleccionados === dias.length) return 'todos';
+  return 'parcial';
+}
+
+window.toggleListadoArbolNodo = function(key){
+  if(listadoArbolAbierto.has(key)) listadoArbolAbierto.delete(key);
+  else listadoArbolAbierto.add(key);
+  renderListadoArbolFechas();
+};
+
+window.toggleListadoFechaGrupo = function(dias, checked){
+  dias.forEach(d => checked ? listadoFechasSeleccionadas.add(d) : listadoFechasSeleccionadas.delete(d));
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.toggleListadoFechaDia = function(dia, checked){
+  if(checked) listadoFechasSeleccionadas.add(dia);
+  else listadoFechasSeleccionadas.delete(dia);
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.limpiarArbolFechasListado = function(){
+  listadoFechasSeleccionadas.clear();
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.seleccionarTodoArbolFechasListado = function(){
+  const arbol = construirArbolFechasListado();
+  Object.values(arbol).forEach(meses => Object.values(meses).forEach(dias => dias.forEach(d => listadoFechasSeleccionadas.add(d))));
+  renderListadoArbolFechas();
+  resetPaginaListado();
+};
+
+window.toggleListadoFechasDropdown = function(){
+  const dd = document.getElementById('listado-fechas-dropdown');
+  if(dd) dd.classList.toggle('show');
+};
+
+document.addEventListener('click', function(e){
+  const dd  = document.getElementById('listado-fechas-dropdown');
+  const btn = document.getElementById('listado-fechas-btn');
+  if(!dd || !btn) return;
+  if(dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)){
+    dd.classList.remove('show');
+  }
+});
+
+function renderListadoArbolFechas(){
+  const cont  = document.getElementById('listado-fechas-checks');
+  const badge = document.getElementById('listado-fechas-badge');
+  if(!cont) return;
+
+  const arbol = construirArbolFechasListado();
+  const anios = Object.keys(arbol).sort().reverse();
+
+  if(!anios.length){
+    cont.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px;">Sin operaciones cargadas</div>';
+  } else {
+    cont.innerHTML = anios.map(anio => {
+      const diasAnio = diasDeAnio(arbol, anio);
+      const estAnio = estadoGrupoFechas(diasAnio);
+      const abiertoAnio = listadoArbolAbierto.has(anio);
+      const meses = Object.keys(arbol[anio]).sort().reverse();
+      return `
+        <div class="arbol-nodo">
+          <div class="arbol-fila">
+            <span class="arbol-flecha" onclick="toggleListadoArbolNodo('${anio}')">${abiertoAnio?'▾':'▸'}</span>
+            <label class="multisel-item" style="flex:1;padding:4px 6px;">
+              <input type="checkbox" ${estAnio==='todos'?'checked':''} class="chk-arbol" data-indet="${estAnio==='parcial'}"
+                onchange="toggleListadoFechaGrupo(${JSON.stringify(diasAnio)}, this.checked)">
+              <strong>${anio}</strong>
             </label>
           </div>
-          <div class="form-group" style="align-self:end;display:flex;gap:8px;">
-            <button class="btn-primary" onclick="ejecutarAsignarFacturaMasiva()">✅ Asignar</button>
-            <button class="btn-outline" onclick="toggleFacturaLotePanel()">Cancelar</button>
-          </div>
-        </div>
-        <div id="lote-preview" style="font-size:12px;color:#64748b;margin-top:10px;font-weight:600;"></div>
-      </div>
-
-      <div class="tabla-wrap">
-        <table id="tabla-ops">
-          <thead>
-            <tr>
-              <th>N° Op</th>
-              <th>Fecha</th>
-              <th>Despachante</th>
-              <th>Cliente</th>
-              <th>Destinación</th>
-              <th>MIC</th>
-              <th>Toma cont.</th>
-              <th>Canal</th>
-              <th>TC</th>
-              <th>USD</th>
-              <th>Neto $</th>
-              <th>IVA $</th>
-              <th>Total $</th>
-              <th>N° Factura</th>
-              <th>Cobertura</th>
-              <th>Adicionales</th>
-              <th>Obs</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-ops">
-            <tr><td colspan="18" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>
-          </tbody>
-          <tfoot id="tfoot-ops"></tfoot>
-        </table>
-      </div>
-      <div id="listado-paginacion"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════ TAB: DASHBOARD ═══════════════ -->
-  <div id="tab-dashboard" style="display:none;">
-    <div class="periodo-bar">
-      <select id="dash_mes" onchange="marcarMesDashElegidoPorUsuario();renderDashboard()">
-        <option value="">Todos los meses</option>
-      </select>
-      <select id="dash_despachante" onchange="renderDashboard()">
-        <option value="">Todos los despachantes</option>
-      </select>
-    </div>
-    <div class="kpis" id="kpis-wrap"></div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;" id="dash-detalle"></div>
-  </div>
-
-  <!-- ═══════════════ TAB: SALDOS ═══════════════ -->
-  <div id="tab-saldos" style="display:none;">
-
-    <div class="section-card" id="saldos-sec-pago" style="display:none;">
-      <h3>💰 Registrar pago</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Despachante</label>
-          <select id="pago_despachante">
-            <option value="">Seleccioná...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Fecha del pago</label>
-          <input type="date" id="pago_fecha">
-        </div>
-        <div class="form-group">
-          <label>Monto pagado ($)</label>
-          <input type="number" id="pago_monto" placeholder="$ 0">
-        </div>
-        <div class="form-group">
-          <label>Observación</label>
-          <input type="text" id="pago_obs" placeholder="Transferencia, efectivo, a cuenta...">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" onclick="guardarPago()">💾 Registrar pago</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="section-card" id="saldos-sec-saldo">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:4px;">
-        <h3 style="margin:0;">⚖️ Saldo por despachante</h3>
-        <div class="periodo-bar" style="margin:0;">
-          <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px;">
-            Despachante:
-            <select id="saldos_filtro_despachante" onchange="renderSaldos()">
-              <option value="">Todos los despachantes</option>
-            </select>
-          </label>
-          <label style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:6px;">
-            Mes:
-            <select id="saldos_filtro_mes" onchange="renderSaldos()">
-              <option value="">Todos los meses (histórico)</option>
-            </select>
-          </label>
-          <button class="btn-success" onclick="exportarSaldosExcel()">📥 Exportar movimientos (Excel)</button>
-        </div>
-      </div>
-      <div id="saldos-periodo-nota" style="font-size:11px;color:#94a3b8;margin-bottom:10px;"></div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Despachante</th>
-              <th>Facturado</th>
-              <th>Pagado</th>
-              <th>Saldo</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-saldos">
-            <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">Sin datos</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="section-card" id="saldos-sec-hist" style="display:none;">
-      <h3>🧾 Historial de pagos</h3>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Despachante</th>
-              <th>Monto</th>
-              <th>Obs</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-pagos-hist">
-            <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="pagos-paginacion"></div>
-    </div>
-
-    <div class="section-card" id="saldos-sec-vinc" style="display:none;">
-      <h3>🔗 Vinculaciones automáticas desde Caja</h3>
-      <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">
-        Registro de lo que el sistema vinculó (o no pudo vincular) automáticamente cuando se cargó un ingreso en Caja. Incluye pagos por factura, pagos genéricos por despachante y mudanzas marcadas como cobradas — y también los casos donde hubo ambigüedad o el monto no coincidió y por eso no se tocó nada.
-      </div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Factura</th>
-              <th>Importe</th>
-              <th>Qué hizo el sistema</th>
-              <th>Cargado por</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-log-vinculaciones">
-            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin registros</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="vinculaciones-paginacion"></div>
-    </div>
-
-  </div>
-
-  <!-- ═══════════════ TAB: CLIENTES ═══════════════ -->
-  <div id="tab-clientes" style="display:none;">
-    <div class="section-card">
-      <h3>🏢 Despachantes</h3>
-      <div class="form-row" style="margin-bottom:16px;">
-        <div class="form-group">
-          <label>Nombre / Razón Social</label>
-          <input type="text" id="cli_nombre" placeholder="Ej: MARANG JAVIER">
-        </div>
-        <div class="form-group">
-          <label>Tipo</label>
-          <select id="cli_tipo">
-            <option value="despachante">Despachante (tarifa estándar)</option>
-            <option value="desp_externo">Desp. externo (tarifa premium)</option>
-            <option value="apoderado_basico">Apoderado</option>
-            <option value="apoderado">Apoderado premium</option>
-            <option value="kotinya">Kotinya / Ramiro</option>
-            <option value="despachante_pesos">Despachante (tarifa en pesos)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Período de facturación</label>
-          <select id="cli_factura">
-            <option value="mensual">Mensual</option>
-            <option value="semanal">Semanal</option>
-            <option value="diario">Por operación</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>¿Tiene factura?</label>
-          <select id="cli_tiene_factura">
-            <option value="si">✅ Sí — neto + IVA</option>
-            <option value="no">❌ No — solo neto</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>CUIT</label>
-          <input type="text" id="cli_cuit" placeholder="20-XXXXXXXX-X">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" id="cli-btn-guardar" onclick="guardarCliente()">Agregar despachante</button>
-          <button class="btn-outline" id="cli-btn-cancelar" onclick="cancelarEdicionCliente()" style="display:none;">✕ Cancelar edición</button>
-        </div>
-      </div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Tipo tarifa</th>
-              <th>Facturación</th>
-              <th>Factura</th>
-              <th>CUIT</th>
-              <th>Ops</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-clientes">
-            <tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="clientes-paginacion"></div>
-    </div>
-
-    <div class="section-card">
-      <h3>🏠 Clientes finales (mudanzas / cliente final de operaciones)</h3>
-      <div class="form-row" style="margin-bottom:16px;">
-        <div class="form-group">
-          <label>Nombre</label>
-          <input type="text" id="clifinal_nombre" placeholder="Ej: PEREZ JUAN" onkeydown="if(event.key==='Enter'){event.preventDefault();guardarClienteFinal();}">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" onclick="guardarClienteFinal()">Agregar cliente</button>
-        </div>
-      </div>
-      <div class="form-row" style="margin-bottom:12px;">
-        <div class="form-group" style="flex:1;min-width:260px;">
-          <label>🔎 Buscar cliente final (o despachante)</label>
-          <input type="text" id="clifinal_buscar" placeholder="Escribí parte del nombre para ver a qué despachante pertenece..." oninput="buscarClienteFinal()">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-outline" onclick="limpiarBusquedaClienteFinal()">✕ Limpiar</button>
-        </div>
-      </div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Nombre</th>
-              <th>Despachante(s)</th>
-              <th>Ops / Mudanzas</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-clientes-finales">
-            <tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px;">Sin clientes cargados</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="clientesfinales-paginacion"></div>
-    </div>
-  </div>
-
-  <!-- ═══════════════ TAB: MUDANZAS ═══════════════ -->
-  <div id="tab-mudanzas" style="display:none;">
-
-    <div class="section-card">
-      <h3 id="mud-form-titulo">📦 Nueva mudanza</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="mud_fecha">
-        </div>
-        <div class="form-group ac-wrap">
-          <label>Cliente</label>
-          <input type="text" id="mud_cliente" placeholder="Nombre del cliente..." autocomplete="off"
-            oninput="filtrarAC('mud_cliente','ac_mud_cliente',clientesNombres,false)"
-            onkeydown="manejarTecladoAC(event,'ac_mud_cliente')"
-            onblur="setTimeout(()=>cerrarAC('ac_mud_cliente'),180)">
-          <div id="ac_mud_cliente" class="ac-list"></div>
-        </div>
-        <div class="form-group ac-wrap">
-          <label>Cliente final</label>
-          <input type="text" id="mud_cliente_final" placeholder="Nombre del cliente final..." autocomplete="off"
-            oninput="filtrarAC('mud_cliente_final','ac_mud_cliente_final',clientesNombres,false)"
-            onkeydown="manejarTecladoAC(event,'ac_mud_cliente_final')"
-            onblur="setTimeout(()=>cerrarAC('ac_mud_cliente_final'),180)">
-          <div id="ac_mud_cliente_final" class="ac-list"></div>
-        </div>
-        <div class="form-group">
-          <label>Destinación / Permiso</label>
-          <input type="text" id="mud_destinacion" placeholder="IC03 1251N / EC01..." style="text-transform:uppercase;">
-        </div>
-        <div class="form-group">
-          <label>TC Oficialización ⚠️ obligatorio</label>
-          <input type="number" id="mud_tc" placeholder="Ingresá el TC" required oninput="recalcMudanza()">
-        </div>
-        <div class="form-group">
-          <label>Valor honorarios (USD)</label>
-          <input type="number" id="mud_valor_usd" placeholder="0" oninput="recalcMudanza()">
-        </div>
-      </div>
-
-      <div style="margin-top:16px;">
-        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px;">Gastos (en pesos)</div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Precinto electrónico</label>
-            <input type="number" id="mud_precinto" value="0" oninput="recalcMudanza()" placeholder="$ 0">
-          </div>
-          <div class="form-group">
-            <label>Gastos de fiscal</label>
-            <input type="number" id="mud_fiscal" value="0" oninput="recalcMudanza()" placeholder="$ 0">
-          </div>
-          <div class="form-group">
-            <label>Valor digitalización</label>
-            <input type="number" id="mud_digitalizacion" value="0" oninput="recalcMudanza()" placeholder="$ 0">
-          </div>
-          <div class="form-group">
-            <label>Pago Ramiro (USD)</label>
-            <input type="number" id="mud_ramiro" value="190" oninput="recalcMudanza()" placeholder="190">
-          </div>
-          <div class="form-group">
-            <label>Otros gastos ($)</label>
-            <input type="number" id="mud_otros" value="0" oninput="recalcMudanza()" placeholder="$ 0">
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top:16px;">
-        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.3px;margin-bottom:10px;">Facturación y residencia</div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>¿Tiene factura?</label>
-            <select id="mud_tiene_factura" onchange="recalcMudanza()">
-              <option value="si">✅ Sí — neto + IVA</option>
-              <option value="no">❌ No — sin factura (sin IVA)</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Vencimiento residencia (si aplica)</label>
-            <input type="date" id="mud_venc_residencia" oninput="recalcMudanza()">
-          </div>
-          <div class="form-group">
-            <label>Estado residencia</label>
-            <select id="mud_residencia_cancelada" onchange="recalcMudanza()">
-              <option value="no">⏳ Vigente / pendiente</option>
-              <option value="si">✅ Cancelada / renovada</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <div class="form-group">
-          <label>Observaciones</label>
-          <input type="text" id="mud_obs" placeholder="Referencia, destino...">
-        </div>
-        <div class="form-group">
-          <label>Estado pago Ramiro</label>
-          <select id="mud_ramiro_pagado">
-            <option value="no">❌ Pendiente</option>
-            <option value="si">✅ Pagado</option>
-          </select>
-        </div>
-        <!-- Antes era un select sí/no "¿Cobrado?". Ahora es un monto: soporta pago
-             parcial (ej: te pagaron $200.000 de $350.000). El estado (Sin cobrar /
-             Parcial / Cobrado) se calcula solo comparando esto contra el Total bruto. -->
-        <div class="form-group">
-          <label>Monto cobrado ($)</label>
-          <input type="number" id="mud_monto_cobrado" value="0" oninput="recalcMudanza()" placeholder="$ 0">
-        </div>
-      </div>
-
-      <!-- RESUMEN MUDANZA -->
-      <div style="margin-top:18px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px;padding:16px;">
-        <div style="font-size:12px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.3px;margin-bottom:12px;">💰 Liquidación</div>
-        <div id="mud_desglose" style="font-size:12px;color:#64748b;margin-bottom:10px;"></div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;">
-          <div class="res-item">
-            <div class="res-label">Honorarios neto</div>
-            <div class="res-val" id="mud_neto">$ 0</div>
-          </div>
-          <div class="res-item">
-            <div class="res-label">IVA 21%</div>
-            <div class="res-val" id="mud_iva">$ 0</div>
-          </div>
-          <div class="res-item">
-            <div class="res-label">Total bruto</div>
-            <div class="res-val" id="mud_bruto">$ 0</div>
-          </div>
-          <div class="res-item">
-            <div class="res-label">Total gastos</div>
-            <div class="res-val" style="color:#dc2626;" id="mud_gastos_total">$ 0</div>
-          </div>
-          <div class="res-item">
-            <div class="res-label">✅ Nos queda (neto)</div>
-            <div class="res-val green" id="mud_neto_final">$ 0</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="btn-row">
-        <button id="mud-btn-guardar"    class="btn-primary" onclick="guardarMudanza()" style="display:inline-flex;">💾 Guardar mudanza</button>
-        <button id="mud-btn-actualizar" class="btn-success" onclick="actualizarMudanza()" style="display:none;">💾 Actualizar mudanza</button>
-        <button id="mud-btn-cancelar"   class="btn-outline" onclick="cancelarEdicionMudanza()" style="display:none;">✕ Cancelar edición</button>
-        <button class="btn-outline" onclick="limpiarMudanza()">🗑 Limpiar</button>
-      </div>
-    </div>
-
-    <!-- LISTADO MUDANZAS -->
-    <div class="section-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
-        <h3 style="margin:0;">📋 Mudanzas registradas</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <div class="periodo-bar" style="margin:0;">
-            <select id="mud_filtro_cliente" onchange="resetPaginaMudanzas()">
-              <option value="">Todos los clientes</option>
-            </select>
-            <select id="mud_filtro_mes" onchange="resetPaginaMudanzas()">
-              <option value="">Todos los meses</option>
-            </select>
-            <input type="date" id="mud_filtro_fecha_desde" onchange="resetPaginaMudanzas()" title="Desde">
-            <input type="date" id="mud_filtro_fecha_hasta" onchange="resetPaginaMudanzas()" title="Hasta">
-            <button class="btn-outline" onclick="document.getElementById('mud_filtro_fecha_desde').value='';document.getElementById('mud_filtro_fecha_hasta').value='';resetPaginaMudanzas()">✕ Fechas</button>
-          </div>
-          <button class="btn-success" onclick="exportarMudanzas()">📥 Exportar Excel</button>
-        </div>
-      </div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Cliente final</th>
-              <th>Destinación</th>
-              <th>TC</th>
-              <th>USD</th>
-              <th>Honorarios neto</th>
-              <th>IVA</th>
-              <th>Bruto</th>
-              <th>Gastos</th>
-              <th>Nos queda</th>
-              <th>Cobrado</th>
-              <th>Ramiro</th>
-              <th>Residencia</th>
-              <th>Obs</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-mudanzas">
-            <tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>
-          </tbody>
-          <tfoot id="tfoot-mudanzas"></tfoot>
-        </table>
-      </div>
-      <div id="mudanzas-paginacion"></div>
-    </div>
-
-  </div><!-- /tab-mudanzas -->
-
-  <!-- ═══════════════ TAB: CUENTA RAMIRO ═══════════════ -->
-  <div id="tab-ramiro" style="display:none;">
-
-    <div class="kpis" id="ramiro-kpis"></div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;" id="ramiro-grids"></div>
-
-    <div class="section-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-        <h3 style="margin:0;">📋 Detalle completo</h3>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <div class="ac-wrap" style="position:relative;">
-            <button type="button" class="btn-outline" onclick="toggleRamiroMesesDropdown()" id="ramiro-meses-btn">📅 Meses<span class="multisel-badge" id="ramiro-meses-badge" style="display:none;"></span> ▾</button>
-            <div id="ramiro-meses-dropdown" class="multisel-dropdown">
-              <div class="multisel-actions">
-                <button type="button" class="btn-outline" onclick="seleccionarTodosMesesRamiro(true)">Todos</button>
-                <button type="button" class="btn-outline" onclick="seleccionarTodosMesesRamiro(false)">Ninguno</button>
+          ${abiertoAnio ? meses.map(mes => {
+            const diasMes = arbol[anio][mes];
+            const estMes = estadoGrupoFechas(diasMes);
+            const abiertoMes = listadoArbolAbierto.has(mes);
+            const nombreMes = NOMBRES_MESES_ARBOL[parseInt(mes.slice(5,7),10)-1] || mes;
+            return `
+              <div class="arbol-nodo" style="margin-left:16px;">
+                <div class="arbol-fila">
+                  <span class="arbol-flecha" onclick="toggleListadoArbolNodo('${mes}')">${abiertoMes?'▾':'▸'}</span>
+                  <label class="multisel-item" style="flex:1;padding:4px 6px;">
+                    <input type="checkbox" ${estMes==='todos'?'checked':''} class="chk-arbol" data-indet="${estMes==='parcial'}"
+                      onchange="toggleListadoFechaGrupo(${JSON.stringify(diasMes)}, this.checked)">
+                    ${nombreMes} (${mes})
+                  </label>
+                </div>
+                ${abiertoMes ? diasMes.slice().sort().reverse().map(dia => `
+                  <label class="multisel-item" style="margin-left:32px;">
+                    <input type="checkbox" ${listadoFechasSeleccionadas.has(dia)?'checked':''} onchange="toggleListadoFechaDia('${dia}', this.checked)">
+                    ${dia.slice(8,10)}/${dia.slice(5,7)}/${dia.slice(0,4)}
+                  </label>
+                `).join('') : ''}
               </div>
-              <div id="ramiro-meses-checks"></div>
-            </div>
-          </div>
-          <input type="date" id="ramiro_filtro_fecha" onchange="renderRamiro()" style="padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
-          <button class="btn-outline" onclick="document.getElementById('ramiro_filtro_fecha').value='';renderRamiro()">✕ Día</button>
-          <select id="ramiro_filtro_estado" onchange="renderRamiro()" style="padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:'DM Sans',sans-serif;">
-            <option value="">Todos</option>
-            <option value="no">Solo pendientes</option>
-            <option value="si">Solo pagados</option>
-          </select>
-          <button class="btn-success" onclick="marcarTodoPagadoRamiro()">✅ Marcar todo pagado</button>
+            `;
+          }).join('') : ''}
         </div>
-      </div>
+      `;
+    }).join('');
+  }
 
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding:10px 14px;background:#eff6ff;border-radius:10px;border:1.5px solid #bfdbfe;">
-        <span id="ramiro-seleccion-info" style="font-size:13px;font-weight:700;color:#1e3a8a;">Ninguna operación seleccionada para el reporte</span>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn-outline" onclick="marcarPagadasSeleccionRamiro()">✅ Marcar seleccionadas como pagadas</button>
-          <button class="btn-success" onclick="exportarRamiroExcel()">📥 Exportar Excel (lo que se va a pagar)</button>
-        </div>
-      </div>
+  // El HTML no tiene atributo para "indeterminado": se marca por JS después de renderizar.
+  cont.querySelectorAll('input.chk-arbol[data-indet="true"]').forEach(chk => { chk.indeterminate = true; });
 
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:36px;"><input type="checkbox" id="ramiro_chk_todas" onchange="toggleRamiroSeleccionTodas(this.checked)" title="Tildar todas las filtradas"></th>
-              <th>Tipo</th>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Detalle</th>
-              <th>USD Ramiro</th>
-              <th>$ (TC)</th>
-              <th>Estado</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-ramiro"></tbody>
-        </table>
+  if(badge){
+    if(listadoFechasSeleccionadas.size > 0){
+      badge.style.display = 'inline-block';
+      badge.textContent = listadoFechasSeleccionadas.size;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+}
+window.renderListadoArbolFechas = renderListadoArbolFechas;
+
+// Aplica el filtro de árbol de fechas sobre un array de operaciones (se usa tanto en
+// renderTabla como en exportarExcel, para que la tabla y el reporte siempre coincidan).
+function aplicarFiltroArbolFechas(ops){
+  if(!listadoFechasSeleccionadas.size) return ops;
+  return ops.filter(o => listadoFechasSeleccionadas.has(o.fecha));
+}
+window.aplicarFiltroArbolFechas = aplicarFiltroArbolFechas;
+
+// ── RENDER TABLA OPERACIONES ──
+function renderTabla(){
+  const tbody = document.getElementById('tbody-ops');
+  if(!datosCargados){
+    tbody.innerHTML = '<tr><td colspan="18" style="text-align:center;padding:32px;"><span class="spinner dark"></span> Cargando operaciones...</td></tr>';
+    document.getElementById('tfoot-ops').innerHTML = '';
+    return;
+  }
+  const filtCorr  = document.getElementById('filtro_despachante')?.value || '';
+  const filtMes   = document.getElementById('filtro_mes')?.value || '';
+  const filtDesde = document.getElementById('filtro_fecha_desde')?.value || '';
+  const filtHasta = document.getElementById('filtro_fecha_hasta')?.value || '';
+  const filtPendiente = document.getElementById('filtro_pendiente')?.value || '';
+  let ops = [...operaciones];
+  if(filtCorr)  ops = ops.filter(o => o.despachante === filtCorr);
+  if(filtMes)   ops = ops.filter(o => o.fecha && o.fecha.startsWith(filtMes));
+  if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
+  if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroArbolFechas(ops);
+  ops = aplicarFiltroPendiente(ops, filtPendiente);
+
+  // Más nueva primero: la última operación cargada arriba de todo, y así hacia atrás.
+  ops.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
+
+  if(!ops.length){
+    tbody.innerHTML = '<tr><td colspan="18" style="text-align:center;color:#94a3b8;padding:32px;">Sin operaciones</td></tr>';
+    document.getElementById('tfoot-ops').innerHTML = '';
+    document.getElementById('listado-paginacion').innerHTML = '';
+    return;
+  }
+
+  // Cobertura FIFO por operación (solo relevante para pagos sin factura asignada)
+  const coberturaPorId = {};
+  [...new Set(ops.map(o=>o.despachante))].forEach(desp => {
+    calcularCoberturaFIFO(desp).forEach(o => coberturaPorId[o.id] = o.pendiente);
+  });
+
+  const pendienteExigiblePorId = mapaPendientePorOperacion();
+
+  const totalPaginas = Math.max(1, Math.ceil(ops.length / LISTADO_PAGE_SIZE));
+  if(listadoPage > totalPaginas) listadoPage = totalPaginas;
+  if(listadoPage < 1) listadoPage = 1;
+  const inicio = (listadoPage - 1) * LISTADO_PAGE_SIZE;
+  const opsPagina = ops.slice(inicio, inicio + LISTADO_PAGE_SIZE);
+
+  tbody.innerHTML = opsPagina.map(o => {
+    const pendiente = coberturaPorId[o.id];
+    let coberturaHtml;
+    if(o.numFactura){
+      const pendExigible = pendienteExigiblePorId[o.id] || 0;
+      coberturaHtml = pendExigible > 0.5
+        ? `<span class="tag" style="background:#fee2e2;color:#991b1b;" title="Factura ${o.numFactura}">🧾 ${o.numFactura} · $${fmt2(pendExigible)} pend.</span>`
+        : `<span class="tag" style="background:#dbeafe;color:#1e40af;" title="Factura ${o.numFactura}">🧾 ${o.numFactura} ✅ cubierta</span>`;
+    } else if(pendiente > 0.5){
+      coberturaHtml = `<span class="tag" style="background:#fee2e2;color:#991b1b;">$${fmt2(pendiente)} pend.</span>`;
+    } else {
+      coberturaHtml = '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Cubierta</span>';
+    }
+    return `
+    <tr>
+      <td class="mono">${o.numOp||'-'}</td>
+      <td>${o.fecha||''}</td>
+      <td><strong>${o.despachante||''}</strong>${o.esPremium?'<span class="tag" style="background:#fef3c7;color:#92400e;margin-left:4px;">PREM</span>':o.esKotinya?'<span class="tag" style="background:#fef9c3;color:#92400e;margin-left:4px;">KOT</span>':o.esApoderado?`<span class="tag" style="background:#ede9fe;color:#5b21b6;margin-left:4px;">${o.tipoDespGlobal==='apoderado_basico'?'APOD':'APOD PREM'}</span>`:o.esTarifaPesos?'<span class="tag" style="background:#e0f2fe;color:#075985;margin-left:4px;">$ARS</span>':''}</td>
+      <td>${o.cliente||''}</td>
+      <td class="mono">${o.destinacion||''}</td>
+      <td class="mono">${o.mic||'-'}</td>
+      <td style="font-size:11px;color:#64748b;max-width:120px;overflow:hidden;text-overflow:ellipsis;" title="${o.toma||''}">${o.toma||'-'}</td>
+      <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
+      <td class="mono">${o.tc||''}</td>
+      <td class="mono">${o.totalUsd||''}</td>
+      <td style="color:#1e3a8a;font-weight:600;">$${fmt2(o.neto)}</td>
+      <td>$${fmt2(o.iva)}</td>
+      <td style="color:#059669;font-weight:700;">$${fmt2(o.bruto)}</td>
+      <td>
+        <input type="text" style="width:100px;border:1px solid #e2e8f0;border-radius:6px;padding:4px 6px;font-size:11px;font-family:monospace;"
+          value="${o.numFactura||''}" placeholder="s/fact"
+          onchange="asignarFactura('${o.id}', this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      </td>
+      <td>${coberturaHtml}</td>
+      <td>${o.adicionales ? o.adicionales.split(',').map(a=>`<span class="tag">${a.trim()}</span>`).join('') : '-'}</td>
+      <td style="color:#64748b;font-size:11px;">${o.obs||''}</td>
+      <td style="display:flex;gap:6px;">
+        <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarOperacion('${o.id}')">✏️ Editar</button>
+        <button class="btn-danger" onclick="eliminarOp('${o.id}')">✕</button>
+      </td>
+    </tr>
+  `;
+  }).join('');
+
+  const totNeto  = ops.reduce((a,b) => a+(b.neto||0), 0);
+  const totIva   = ops.reduce((a,b) => a+(b.iva||0), 0);
+  const totBruto = ops.reduce((a,b) => a+(b.bruto||0), 0);
+  const totUsd   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  document.getElementById('tfoot-ops').innerHTML = `
+    <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+      <td colspan="9">TOTAL (${ops.length} ops)</td>
+      <td class="mono">${totUsd.toFixed(2)}</td>
+      <td style="color:#1e3a8a;">$${fmt2(totNeto)}</td>
+      <td>$${fmt2(totIva)}</td>
+      <td style="color:#059669;">$${fmt2(totBruto)}</td>
+      <td colspan="5"></td>
+    </tr>`;
+
+  document.getElementById('listado-paginacion').innerHTML = `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaListado(-1)" ${listadoPage<=1?'disabled':''}>‹ Anterior</button>
+      <span>${listadoPage}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaListado(1)" ${listadoPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
+}
+window.renderTabla = renderTabla;
+
+window.cambiarPaginaListado = function(delta){
+  listadoPage += delta;
+  renderTabla();
+};
+
+window.resetPaginaListado = function(){
+  listadoPage = 1;
+  renderTabla();
+};
+
+// ── RENDER FILTROS ──
+function renderFiltros(){
+  const corrSel  = document.getElementById('filtro_despachante');
+  const mesSel   = document.getElementById('filtro_mes');
+  const corrSelD = document.getElementById('dash_despachante');
+  const mesSelD  = document.getElementById('dash_mes');
+  const loteSel  = document.getElementById('lote_despachante');
+
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  const meses   = [...new Set(operaciones.map(o => o.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+
+  [corrSel, corrSelD, loteSel].forEach(sel => {
+    if(!sel) return;
+    const v = sel.value;
+    sel.innerHTML = '<option value="">' + (sel===loteSel ? 'Seleccioná...' : 'Todos los despachantes') + '</option>';
+    nombres.forEach(n => { const opt = document.createElement('option'); opt.value=n; opt.textContent=n; sel.appendChild(opt); });
+    sel.value = v;
+  });
+  [mesSel, mesSelD].forEach(sel => {
+    if(!sel) return;
+    const v = sel.value;
+    sel.innerHTML = '<option value="">Todos los meses</option>';
+    meses.forEach(m => { const opt = document.createElement('option'); opt.value=m; opt.textContent=m; sel.appendChild(opt); });
+    sel.value = v;
+    const mesActual = mesLocalISO();
+    if(![...sel.options].some(o => o.value === mesActual)){
+      const opt = document.createElement('option');
+      opt.value = mesActual;
+      opt.textContent = mesActual;
+      sel.insertBefore(opt, sel.options[1] || null);
+    }
+    if(sel === mesSelD && !usuarioEligioMesDash){
+      sel.value = mesActual;
+    }
+    if(sel === mesSel && !usuarioEligioMesListado){
+      sel.value = mesActual;
+    }
+  });
+}
+
+// ══════════════════════════════ HELPERS DE FECHA Y CORTES (Dashboard como cuenta corriente) ══════════════════════════════
+
+// Normaliza una fecha (ISO o dd/mm/yyyy) a 'YYYY-MM-DD'
+function fechaISO(f){
+  if(!f) return '';
+  const s = String(f).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+}
+window.fechaISO = fechaISO;
+
+function inicioDeMes(mes){ return mes + '-01'; }
+function inicioMesSiguiente(mes){
+  let [y,m] = mes.split('-').map(Number);
+  m++; if(m > 12){ m = 1; y++; }
+  return `${y}-${String(m).padStart(2,'0')}-01`;
+}
+
+// Saldo de un despachante ANTES de una fecha (excluye esa fecha): exigible acumulado − pagos acumulados.
+// Sin FIFO: es una cuenta corriente simple, por eso Saldo inicial + Exigible − Cobrado = Saldo final siempre cuadra.
+function saldoAntesDeFecha(nombre, fechaExclusiva){
+  const exigible = operaciones
+    .filter(o => o.despachante === nombre && (o.fecha||'') < fechaExclusiva)
+    .reduce((a,o) => a + montoExigible(o), 0);
+  const pagado = pagos
+    .filter(p => p.despachante === nombre && fechaISO(p.fecha) < fechaExclusiva)
+    .reduce((a,p) => a + (p.monto||0), 0);
+  return exigible - pagado;
+}
+window.saldoAntesDeFecha = saldoAntesDeFecha;
+
+// ── COBROS DE MUDANZAS CON FECHA ──
+// Devuelve [{fecha, monto, mudanzaId, legacy}]. Usa el historial (corresponsales_mudanzas_cobros)
+// y, para lo que ya figuraba como cobrado en la mudanza pero no tiene historial (datos viejos),
+// lo atribuye a la fecha de la mudanza. Nunca supera lo que dice montoCobrado de cada mudanza.
+function listarCobrosMudanzas(){
+  const out = [];
+  mudanzas.forEach(m => {
+    const cobradoTotal = estadoCobro(m).cobrado;
+    if(cobradoTotal <= 0.005) return;
+    const cobrosM = mudanzasCobros
+      .filter(c => c.mudanzaId === m.id)
+      .map(c => ({ fecha: fechaISO(c.fecha), monto: c.monto||0 }))
+      .sort((a,b) => a.fecha.localeCompare(b.fecha));
+    let acum = 0;
+    cobrosM.forEach(c => {
+      const tomar = Math.min(c.monto, cobradoTotal - acum);
+      if(tomar > 0.005){ out.push({ fecha:c.fecha, monto:tomar, mudanzaId:m.id, legacy:false }); acum += tomar; }
+    });
+    const resto = cobradoTotal - acum;
+    if(resto > 0.005) out.push({ fecha: fechaISO(m.fecha), monto: resto, mudanzaId: m.id, legacy: true });
+  });
+  return out;
+}
+window.listarCobrosMudanzas = listarCobrosMudanzas;
+
+// Saldo de mudanzas antes de una fecha: facturado (bruto) − cobrado, acumulado
+function saldoMudanzasAntesDeFecha(fechaExclusiva, cobros){
+  const facturado = mudanzas.filter(m => (m.fecha||'') < fechaExclusiva).reduce((a,m) => a + (m.bruto||0), 0);
+  const cobrado   = cobros.filter(c => c.fecha < fechaExclusiva).reduce((a,c) => a + c.monto, 0);
+  return facturado - cobrado;
+}
+
+// ── REGISTRAR COBRO DE UNA MUDANZA (con fecha real) ──
+window.registrarCobroMudanza = async function(id){
+  const m = mudanzas.find(x => x.id === id);
+  if(!m) return;
+  const est = estadoCobro(m);
+  const saldo = Math.max(0, est.saldo);
+  const montoTxt = prompt(`Cobro de la mudanza de ${m.cliente||''}${m.clienteFinal ? ' / '+m.clienteFinal : ''}\nBruto: $${fmt2(m.bruto)} · Cobrado: $${fmt2(est.cobrado)} · Saldo: $${fmt2(saldo)}\n\nMonto cobrado ahora ($):`, saldo > 0 ? String(Math.round(saldo*100)/100) : '');
+  if(montoTxt === null) return;
+  const monto = parseFloat(String(montoTxt).replace(',','.'));
+  if(!monto || monto <= 0){ toast('⚠️ Monto inválido'); return; }
+  if(monto > saldo + 0.5 && !confirm(`El monto ($${fmt2(monto)}) supera el saldo pendiente ($${fmt2(saldo)}). ¿Registrar igual?`)) return;
+  const fecha = prompt('Fecha del cobro (AAAA-MM-DD):', fechaLocalISO());
+  if(fecha === null) return;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha.trim())){ toast('⚠️ Fecha inválida, usá AAAA-MM-DD'); return; }
+
+  try {
+    await addDoc(collection(db,'corresponsales_mudanzas_cobros'), {
+      mudanzaId: id, fecha: fecha.trim(), monto,
+      cargadoPor: user.username, ts: Date.now()
+    });
+    const nuevoCobrado = est.cobrado + monto;
+    await updateDoc(doc(db,'corresponsales_mudanzas', id), {
+      montoCobrado: nuevoCobrado,
+      cobrado: nuevoCobrado >= (m.bruto||0) - 0.5
+    });
+    toast('✅ Cobro registrado: $' + fmt(monto));
+  } catch(e){
+    toast('❌ Error al registrar el cobro: ' + e.message);
+  }
+};
+
+// ── RENDER DASHBOARD (estado de cuenta: Saldo inicial + Exigible − Cobrado = Saldo final) ──
+window.renderDashboard = function(){
+  const filtMes  = document.getElementById('dash_mes')?.value || '';
+  const filtCorr = document.getElementById('dash_despachante')?.value || '';
+  let ops = [...operaciones];
+  if(filtMes)  ops = ops.filter(o => mesDeFecha(o.fecha) === filtMes);
+  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
+
+  const mudFiltradas = mudanzas.filter(m => !filtMes || mesDeFecha(m.fecha) === filtMes);
+  const incluirMudEnTotales = !filtCorr;
+
+  // ── Facturado del período (trabajo hecho) ──
+  const totBrutoOps = ops.reduce((a,b) => a+(b.bruto||0), 0);
+  const totNetoOps  = ops.reduce((a,b) => a+(b.neto||0), 0);
+  const totUsdOps   = ops.reduce((a,b) => a+(b.totalUsd||0), 0);
+  const totBrutoMud = mudFiltradas.reduce((a,b) => a+(b.bruto||0), 0);
+  const totNetoMud  = mudFiltradas.reduce((a,b) => a+(b.honorNeto||0), 0);
+  const totUsdMud   = mudFiltradas.reduce((a,b) => a+(b.valorUsd||0), 0);
+
+  const totBruto = totBrutoOps + (incluirMudEnTotales ? totBrutoMud : 0);
+  const totNeto  = totNetoOps  + (incluirMudEnTotales ? totNetoMud  : 0);
+  const totUsd   = totUsdOps   + (incluirMudEnTotales ? totUsdMud   : 0);
+  const cantTotal = ops.length + (incluirMudEnTotales ? mudFiltradas.length : 0);
+
+  const canales  = {V:0,N:0,R:0};
+  ops.forEach(o => { if(canales[o.canal]!==undefined) canales[o.canal]++; });
+
+  // ── Estado de cuenta por despachante ──
+  // Cortes: inicio = fechas < 1° del mes; cierre = inicio + exigible del mes − pagos del mes.
+  const corteIni = filtMes ? inicioDeMes(filtMes) : '';
+  const nombresBase = filtCorr
+    ? [filtCorr]
+    : [...new Set([
+        ...clientes.map(c => c.nombre),
+        ...operaciones.map(o => o.despachante),
+        ...pagos.map(p => p.despachante)
+      ].filter(Boolean))].sort();
+
+  const estadoDesp = nombresBase.map(n => {
+    const opsMes = operaciones.filter(o => o.despachante === n && (!filtMes || mesDeFecha(o.fecha) === filtMes));
+    const pagosMes = pagos.filter(p => p.despachante === n && (!filtMes || mesDeFecha(p.fecha) === filtMes));
+    const ini    = filtMes ? saldoAntesDeFecha(n, corteIni) : 0;
+    const exig   = opsMes.reduce((a,o) => a + montoExigible(o), 0);
+    const bruto  = opsMes.reduce((a,o) => a + (o.bruto||0), 0);
+    const cob    = pagosMes.reduce((a,p) => a + (p.monto||0), 0);
+    const cierre = ini + exig - cob;
+    const hoy    = calcularSaldoDespachante(n).saldo;
+    return { nombre:n, ops:opsMes.length, ini, exig, bruto, cob, cierre, hoy, nPagos: pagosMes.length };
+  });
+
+  const cobradoDesp   = estadoDesp.reduce((a,e) => a + e.cob, 0);
+  const nPagosPeriodo = estadoDesp.reduce((a,e) => a + e.nPagos, 0);
+  const deudaIniDesp    = estadoDesp.reduce((a,e) => a + Math.max(0, e.ini), 0);
+  const deudaCierreDesp = estadoDesp.reduce((a,e) => a + Math.max(0, e.cierre), 0);
+  const deudaHoyDesp    = estadoDesp.reduce((a,e) => a + Math.max(0, e.hoy), 0);
+  const aFavorHoy       = estadoDesp.reduce((a,e) => a + Math.max(0, -e.hoy), 0);
+
+  // ── Mudanzas: cobrado por FECHA REAL de cobro ──
+  const cobrosMud = listarCobrosMudanzas();
+  const cobradoMudPeriodo = cobrosMud
+    .filter(c => !filtMes || c.fecha.slice(0,7) === filtMes)
+    .reduce((a,c) => a + c.monto, 0);
+  const saldoMud = m => Math.max(0, estadoCobro(m).saldo);
+  const mudPendienteHoy = filtCorr ? 0 : mudanzas.reduce((a,b) => a + saldoMud(b), 0);
+  const mudIni    = (filtMes && !filtCorr) ? Math.max(0, saldoMudanzasAntesDeFecha(corteIni, cobrosMud)) : 0;
+  const mudCierre = (filtMes && !filtCorr) ? Math.max(0, saldoMudanzasAntesDeFecha(inicioMesSiguiente(filtMes), cobrosMud)) : 0;
+
+  const totCobrado = cobradoDesp + (incluirMudEnTotales ? cobradoMudPeriodo : 0);
+  const deudaIni    = deudaIniDesp    + (incluirMudEnTotales ? mudIni    : 0);
+  const deudaCierre = deudaCierreDesp + (incluirMudEnTotales ? mudCierre : 0);
+  const deudaTotalHoy = deudaHoyDesp + mudPendienteHoy;
+
+  const etiquetaPeriodo = filtMes || 'histórico';
+  const incMudMonto = (x) => incluirMudEnTotales ? `<span style="color:#1e3a8a;font-weight:600;">📦 incluye mudanzas: $${fmt2(x)}</span>` : '<span style="color:#92400e;font-weight:600;">sin mudanzas</span>';
+  const incMud = incluirMudEnTotales ? '<span style="color:#1e3a8a;font-weight:600;">📦 incluye mudanzas</span>' : '<span style="color:#92400e;font-weight:600;">sin mudanzas</span>';
+  const kpiIniCierre = filtMes ? `
+    <div class="kpi" style="border-color:#fde68a;background:#fffbeb;">
+      <div class="kpi-label">📂 Deuda al inicio (1/${filtMes.slice(5,7)})</div>
+      <div class="kpi-val" style="color:#b45309;">$${fmt2(deudaIni)}</div>
+      <div class="kpi-sub">Lo que quedaba por cobrar antes de ${filtMes} · ${incMudMonto(mudIni)}</div>
+    </div>
+    <div class="kpi" style="border-color:${deudaCierre>0.005?'#fca5a5':'#86efac'};background:${deudaCierre>0.005?'#fef2f2':'#f0fdf4'};">
+      <div class="kpi-label">📕 Deuda al cierre de ${filtMes}</div>
+      <div class="kpi-val" style="color:${deudaCierre>0.005?'#dc2626':'#059669'};">$${fmt2(deudaCierre)}</div>
+      <div class="kpi-sub">Inicio + exigible del mes − cobrado del mes · ${incMudMonto(mudCierre)}</div>
+    </div>` : '';
+
+  document.getElementById('kpis-wrap').innerHTML = `
+    <div class="kpi accent">
+      <div class="kpi-label">Operaciones${incluirMudEnTotales?' + Mudanzas':''}</div>
+      <div class="kpi-val">${cantTotal}</div>
+      <div class="kpi-sub">V:${canales.V} N:${canales.N} R:${canales.R}${incluirMudEnTotales?` · Mudanzas: ${mudFiltradas.length}`:''}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">🧾 Facturado (${etiquetaPeriodo})</div>
+      <div class="kpi-val">$${fmt2(totBruto)}</div>
+      <div class="kpi-sub">Neto: $${fmt2(totNeto)} · trabajo hecho en el período · ${incMudMonto(totBrutoMud)}</div>
+    </div>
+    <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
+      <div class="kpi-label">💰 Cobrado (${etiquetaPeriodo}) — plata que entró</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt2(totCobrado)}</div>
+      <div class="kpi-sub">Despachantes: $${fmt2(cobradoDesp)} (${nPagosPeriodo} pago${nPagosPeriodo===1?'':'s'}) · ${incMudMonto(cobradoMudPeriodo)}</div>
+    </div>
+    ${kpiIniCierre}
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
+      <div class="kpi-label">🔴 Deuda total pendiente HOY</div>
+      <div class="kpi-val" style="color:#dc2626;font-size:30px;">$${fmt2(deudaTotalHoy)}</div>
+      <div class="kpi-sub">${filtCorr ? `Solo ${filtCorr}` : `Despachantes: $${fmt2(deudaHoyDesp)} · Mudanzas: $${fmt2(mudPendienteHoy)}`}${aFavorHoy>0.005?` · A favor: $${fmt2(aFavorHoy)}`:''} · ${incMudMonto(mudPendienteHoy)}</div>
+    </div>
+    ${!incluirMudEnTotales && mudFiltradas.length ? `
+    <div class="kpi" style="border-color:#bfdbfe;background:#eff6ff;">
+      <div class="kpi-label">📦 Mudanzas del período (aparte)</div>
+      <div class="kpi-val" style="color:#1e3a8a;">$${fmt2(totBrutoMud)}</div>
+      <div class="kpi-sub">${mudFiltradas.length} mudanza(s) · no se filtran por despachante</div>
+    </div>` : ''}
+  `;
+
+  // ── Tabla: estado de cuenta por despachante ──
+  const filasEstado = estadoDesp
+    .filter(e => filtCorr || e.ops || e.nPagos || Math.abs(e.ini) > 0.005 || Math.abs(e.cierre) > 0.005)
+    .sort((a,b) => b.cierre - a.cierre);
+
+  const totIni = filasEstado.reduce((a,e) => a + e.ini, 0);
+  const totExig = filasEstado.reduce((a,e) => a + e.exig, 0);
+  const totCob = filasEstado.reduce((a,e) => a + e.cob, 0);
+  const totCierre = filasEstado.reduce((a,e) => a + e.cierre, 0);
+  const totOpsTabla = filasEstado.reduce((a,e) => a + e.ops, 0);
+
+  const colorSaldo = s => s > 0.005 ? '#dc2626' : (s < -0.005 ? '#059669' : '#64748b');
+  const th = 'padding:5px 6px;text-align:right;';
+
+  const tituloDespachantes = filtMes
+    ? `📒 Estado de cuenta — ${filtMes}${filtCorr ? ' · ' + filtCorr : ''}`
+    : `📒 Estado de cuenta — histórico${filtCorr ? ' · ' + filtCorr : ''}`;
+
+  const cardDespachantes = `
+    <div class="section-card" style="margin:0;grid-column:1 / -1;">
+      <h3>${tituloDespachantes}</h3>
+      <div style="overflow-x:auto;">
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;">
+          <th style="padding:5px 6px;text-align:left;">Despachante</th>
+          <th style="${th}">Saldo anterior $</th>
+          <th style="${th}">Ops</th>
+          <th style="${th}">Exigible del mes $</th>
+          <th style="${th}">Pagó en el mes $</th>
+          <th style="${th}">Saldo al cierre $</th>
+          <th style="${th}">Saldo HOY $</th>
+        </tr></thead>
+        <tbody>
+          ${filasEstado.map(e => `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+              <td style="padding:5px 6px;"><strong>${e.nombre}</strong></td>
+              <td style="${th}color:${colorSaldo(e.ini)};">$${fmt2(e.ini)}</td>
+              <td style="${th}">${e.ops}</td>
+              <td style="${th}font-weight:600;color:#1e3a8a;">$${fmt2(e.exig)}</td>
+              <td style="${th}color:#059669;">$${fmt2(e.cob)}</td>
+              <td style="${th}font-weight:700;color:${colorSaldo(e.cierre)};">$${fmt2(e.cierre)}</td>
+              <td style="${th}color:${colorSaldo(e.hoy)};">$${fmt2(e.hoy)}</td>
+            </tr>`).join('') || `<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:12px;">Sin movimientos en ${etiquetaPeriodo}</td></tr>`}
+        </tbody>
+        <tfoot>
+          <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+            <td style="padding:6px;">TOTAL</td>
+            <td style="${th}">$${fmt2(totIni)}</td>
+            <td style="${th}">${totOpsTabla}</td>
+            <td style="${th}color:#1e3a8a;">$${fmt2(totExig)}</td>
+            <td style="${th}color:#059669;">$${fmt2(totCob)}</td>
+            <td style="${th}color:${colorSaldo(totCierre)};">$${fmt2(totCierre)}</td>
+            <td style="${th}"></td>
+          </tr>
+        </tfoot>
+      </table>
       </div>
-      <div id="ramiro-paginacion"></div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:8px;">💡 Cada fila cuadra: <strong>Saldo anterior + Exigible del mes − Pagó en el mes = Saldo al cierre</strong>. "Pagó en el mes" son los pagos con <strong>fecha de pago</strong> dentro del mes (aunque correspondan a operaciones de meses anteriores). "Exigible" es el Neto de las operaciones sin N° de factura y el Neto+IVA de las ya facturadas (igual que en Saldos). Los saldos son una cuenta corriente acumulada, sin reparto FIFO; el detalle de qué operación puntual quedó impaga está en el Listado. Si no elegís mes, se muestra todo el histórico.</div>
+    </div>`;
+
+  const byClienteMud = {};
+  mudFiltradas.forEach(m => {
+    const cl = m.cliente || 'Sin nombre';
+    if(!byClienteMud[cl]) byClienteMud[cl] = {cant:0, bruto:0};
+    byClienteMud[cl].cant++;
+    byClienteMud[cl].bruto += m.bruto||0;
+  });
+
+  const mudResidenciaPendiente = mudanzas
+    .map(m => ({ ...m, _est: estadoResidencia(m) }))
+    .filter(m => m._est.clase !== 'ok')
+    .sort((a,b) => (a.vencimientoResidencia||'').localeCompare(b.vencimientoResidencia||''));
+
+  const cardResidencia = `
+    <div class="section-card" style="margin:0;">
+      <h3>🏠 Residencia pendiente</h3>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente final</th><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:left;">Vencimiento</th><th style="padding:5px 6px;text-align:left;">Estado</th></tr></thead>
+        <tbody>
+          ${mudResidenciaPendiente.map(m =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:5px 6px;"><strong>${m.clienteFinal||'-'}</strong></td><td style="padding:5px 6px;">${m.cliente||''}</td><td style="padding:5px 6px;" class="mono">${m.vencimientoResidencia||''}</td><td style="padding:5px 6px;"><span class="tag" style="background:${m._est.bg};color:${m._est.color};">${m._est.label}</span></td></tr>`
+          ).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:12px;">Sin residencias pendientes 🎉</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+
+  const cardMudanzas = `
+    <div class="section-card" style="margin:0;">
+      <h3>📦 Mudanzas por cliente</h3>
+      <table style="width:100%;font-size:11.5px;border-collapse:collapse;">
+        <thead><tr style="background:#f0f4f8;color:#1e3a8a;"><th style="padding:5px 6px;text-align:left;">Cliente</th><th style="padding:5px 6px;text-align:right;">Cant.</th><th style="padding:5px 6px;text-align:right;">Total $</th></tr></thead>
+        <tbody>
+          ${Object.entries(byClienteMud).sort((a,b)=>b[1].bruto-a[1].bruto).map(([k,v]) =>
+            `<tr style="border-bottom:1px solid #f1f5f9;"><td style="padding:7px;">${k}</td><td style="padding:7px;text-align:right;">${v.cant}</td><td style="padding:7px;text-align:right;font-weight:700;color:#059669;">$${fmt2(v.bruto)}</td></tr>`
+          ).join('') || '<tr><td colspan="3" style="text-align:center;color:#94a3b8;padding:12px;">Sin mudanzas en el período</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('dash-detalle').innerHTML = filtCorr
+    ? cardDespachantes
+    : (cardDespachantes + cardResidencia + cardMudanzas);
+};
+
+// ── CORREGIR ETIQUETAS VIEJAS (Sobre→Armado, SENASA-P→SENASA-Embalaje) ──
+window.migrarEtiquetasAdicionales = async function(){
+  if(!confirm('Esto va a corregir el texto de "Sobre" → "Armado", "SENASA-P" → "SENASA-Embalaje" y va a quitar el canal (V/N/R) de las operaciones MIC y Multinota ya guardadas. ¿Continuar?')) return;
+
+  const btn = document.getElementById('btn-corregir-etiquetas');
+  const textoOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner dark"></span> Corrigiendo...';
+
+  try {
+    let corregidas = 0;
+    for(const o of operaciones){
+      const cambios = {};
+
+      if(o.adicionales){
+        const nuevo = o.adicionales
+          .replace(/\bSobre\b/g, 'Armado')
+          .replace(/SENASA-P(?=×|,|$)/g, 'SENASA-Embalaje');
+        if(nuevo !== o.adicionales) cambios.adicionales = nuevo;
+      }
+
+      if((o.tipo === 'MIC' || o.tipo === 'MULTINOTA') && o.canal){
+        cambios.canal = '';
+      }
+
+      if(Object.keys(cambios).length){
+        await updateDoc(doc(db,'despachantees_ops', o.id), cambios);
+        corregidas++;
+      }
+    }
+    toast(corregidas ? `✅ ${corregidas} operaciones corregidas` : 'No había operaciones para corregir');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = textoOriginal;
+  }
+};
+
+// ── MONTO EXIGIBLE POR OPERACIÓN (usado SOLO para calcular saldos) ──
+function montoExigible(o){
+  const facturada = !!(o.numFactura && String(o.numFactura).trim());
+  return facturada ? (o.bruto||0) : (o.neto||0);
+}
+window.montoExigible = montoExigible;
+
+// ── NORMALIZAR FECHA A "YYYY-MM" (soporta ISO y formato argentino) ──
+function mesDeFecha(fecha){
+  if(!fecha) return '';
+  const f = String(fecha).trim();
+  if(/^\d{4}-\d{2}/.test(f)) return f.slice(0,7);
+  const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return `${m[3]}-${m[2].padStart(2,'0')}`;
+  return '';
+}
+window.mesDeFecha = mesDeFecha;
+
+function anioDeFecha(fecha){
+  const m = mesDeFecha(fecha);
+  return m ? m.slice(0,4) : '';
+}
+window.anioDeFecha = anioDeFecha;
+
+// ── COBERTURA FIFO SOBRE LO EXIGIBLE (para el saldo por mes en Saldos) ──
+function calcularCoberturaExigibleFIFO(nombre){
+  const pagosDesp = pagos.filter(p => p.despachante === nombre);
+  const pagosConFactura = pagosDesp.filter(p => p.numFactura && String(p.numFactura).trim());
+  const pagosGenericos  = pagosDesp.filter(p => !(p.numFactura && String(p.numFactura).trim()));
+
+  const ops = operaciones.filter(o => o.despachante === nombre)
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||'') || (a.ts||0)-(b.ts||0))
+    .map(o => ({ ...o, exigible: montoExigible(o), cubierto: 0 }));
+
+  let poolGenerico = pagosGenericos.reduce((a,b) => a + (b.monto||0), 0);
+
+  pagosConFactura.forEach(p => {
+    const numFact = String(p.numFactura).trim().toUpperCase();
+    const opsFactura = ops.filter(o => o.numFactura && String(o.numFactura).trim().toUpperCase() === numFact);
+    let restante = p.monto || 0;
+    opsFactura.forEach(o => {
+      if(restante <= 0) return;
+      const falta = o.exigible - o.cubierto;
+      const aplicar = Math.min(falta, restante);
+      o.cubierto += aplicar;
+      restante -= aplicar;
+    });
+    if(restante > 0) poolGenerico += restante;
+  });
+
+  let restanteGenerico = poolGenerico;
+  ops.forEach(o => {
+    if(restanteGenerico <= 0) return;
+    const falta = o.exigible - o.cubierto;
+    const aplicar = Math.min(falta, restanteGenerico);
+    o.cubierto += aplicar;
+    restanteGenerico -= aplicar;
+  });
+
+  return ops.map(o => ({ ...o, pendiente: o.exigible - o.cubierto }));
+}
+window.calcularCoberturaExigibleFIFO = calcularCoberturaExigibleFIFO;
+
+// ── PAGOS Y SALDOS POR DESPACHANTE ──
+function calcularSaldoDespachante(nombre, mes){
+  if(!mes){
+    const ops = operaciones.filter(o => o.despachante === nombre);
+    const facturado = ops.reduce((a,b) => a + (b.bruto||0), 0);
+    const exigible  = ops.reduce((a,b) => a + montoExigible(b), 0);
+    const pagado    = pagos.filter(p => p.despachante === nombre).reduce((a,b) => a + (b.monto||0), 0);
+    return { facturado, exigible, pagado, saldo: exigible - pagado };
+  }
+  const cobertura = calcularCoberturaExigibleFIFO(nombre);
+  const opsDelMes = cobertura.filter(o => mesDeFecha(o.fecha) === mes);
+  const facturado = opsDelMes.reduce((a,b) => a + (b.bruto||0), 0);
+  const exigible  = opsDelMes.reduce((a,b) => a + b.exigible, 0);
+  const cubierto  = opsDelMes.reduce((a,b) => a + b.cubierto, 0);
+  const saldo     = opsDelMes.reduce((a,b) => a + b.pendiente, 0);
+  return { facturado, exigible, pagado: cubierto, saldo };
+}
+window.calcularSaldoDespachante = calcularSaldoDespachante;
+
+window.guardarPago = async function(){
+  const despachante = document.getElementById('pago_despachante').value;
+  const fecha       = document.getElementById('pago_fecha').value;
+  const monto       = parseFloat(document.getElementById('pago_monto').value);
+  const obs         = document.getElementById('pago_obs').value.trim();
+
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  if(!fecha){ toast('Ingresá la fecha del pago'); return; }
+  if(!monto || monto <= 0){ toast('Ingresá un monto de pago válido'); return; }
+
+  try {
+    await addDoc(collection(db,'despachantees_pagos'), {
+      despachante, fecha, monto, obs,
+      cargadoPor: user.username,
+      ts: Date.now()
+    });
+    toast('✅ Pago registrado: $' + fmt(monto) + ' — ' + despachante);
+    document.getElementById('pago_monto').value = '';
+    document.getElementById('pago_obs').value = '';
+  } catch(e){
+    toast('❌ Error al registrar el pago: ' + e.message);
+  }
+};
+
+window.eliminarPago = async function(id){
+  if(!confirm('¿Eliminar este pago?')) return;
+  await deleteDoc(doc(db,'despachantees_pagos', id));
+  toast('Pago eliminado');
+};
+
+function poblarSelectorMesSaldos(){
+  const sel = document.getElementById('saldos_filtro_mes');
+  if(!sel) return;
+  const v = sel.value;
+  const mesesOps   = operaciones.map(o => mesDeFecha(o.fecha)).filter(Boolean);
+  const mesesPagos = pagos.map(p => mesDeFecha(p.fecha)).filter(Boolean);
+  const mesActual  = mesLocalISO();
+  const meses = [...new Set([...mesesOps, ...mesesPagos, mesActual])].sort().reverse();
+  sel.innerHTML = '<option value="">Todos los meses (histórico)</option>' +
+    meses.map(m => `<option value="${m}">${m}</option>`).join('');
+  sel.value = v;
+}
+
+function poblarSelectorDespachanteSaldos(){
+  const sel = document.getElementById('saldos_filtro_despachante');
+  if(!sel) return;
+  const v = sel.value;
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  sel.innerHTML = '<option value="">Todos los despachantes</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = v;
+}
+
+function renderSaldos(){
+  const sel = document.getElementById('pago_despachante');
+  if(sel){
+    const v = sel.value;
+    const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+    sel.innerHTML = '<option value="">Seleccioná...</option>' +
+      nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+    sel.value = v;
+  }
+  const fechaEl = document.getElementById('pago_fecha');
+  if(fechaEl && !fechaEl.value) fechaEl.value = fechaLocalISO();
+
+  poblarSelectorMesSaldos();
+  const filtMesSaldos = document.getElementById('saldos_filtro_mes')?.value || '';
+
+  poblarSelectorDespachanteSaldos();
+  const filtDespSaldos = document.getElementById('saldos_filtro_despachante')?.value || '';
+
+  const notaPeriodoEl = document.getElementById('saldos-periodo-nota');
+  if(notaPeriodoEl){
+    const notaMes = filtMesSaldos
+      ? `📅 Mostrando solo <strong>${filtMesSaldos}</strong> — "Facturado" y "Exigible" son de las operaciones de ese mes. "Pagado" es lo que le tocó cubrir a esas operaciones: primero los pagos atados a su propia factura, y el resto (pagos sin factura o sobrantes) repartido por antigüedad (FIFO). "Saldo" es lo que de ese mes queda realmente sin cubrir.`
+      : `📅 Mostrando el <strong>histórico completo</strong> (todas las fechas). Elegí un mes arriba para ver la deuda real de un período puntual: los pagos con factura asignada cancelan esa operación puntual, y el resto se reparte empezando por las operaciones más antiguas.`;
+    const notaDesp = filtDespSaldos ? ` · 🔎 Filtrando solo a <strong>${filtDespSaldos}</strong>.` : '';
+    notaPeriodoEl.innerHTML = notaMes + notaDesp;
+  }
+
+  const tbodySaldos = document.getElementById('tbody-saldos');
+  if(tbodySaldos){
+    let nombresConOps;
+    if(filtMesSaldos){
+      nombresConOps = [...new Set(operaciones.filter(o => mesDeFecha(o.fecha) === filtMesSaldos).map(o => o.despachante).filter(Boolean))].sort();
+    } else {
+      nombresConOps = [...new Set(operaciones.map(o => o.despachante).filter(Boolean))].sort();
+    }
+    if(filtDespSaldos){
+      nombresConOps = [filtDespSaldos];
+    }
+
+    if(!nombresConOps.length){
+      tbodySaldos.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:16px;">${filtMesSaldos ? 'Sin operaciones en ' + filtMesSaldos : 'Sin operaciones cargadas'}</td></tr>`;
+    } else {
+      tbodySaldos.innerHTML = nombresConOps.map(n => {
+        const { facturado, pagado, saldo } = calcularSaldoDespachante(n, filtMesSaldos);
+        const colorSaldo = saldo > 0.005 ? '#dc2626' : (saldo < -0.005 ? '#059669' : '#64748b');
+        const etiqueta    = saldo > 0.005 ? '⚠️ Debe' : (saldo < -0.005 ? '✅ A favor' : '✔ Al día');
+        const opsDelDesp = operaciones.filter(o => o.despachante === n && (!filtMesSaldos || mesDeFecha(o.fecha) === filtMesSaldos));
+        const tieneSinFacturar = opsDelDesp.some(o => !(o.numFactura && String(o.numFactura).trim()));
+        const ivaNoExigible = opsDelDesp
+          .filter(o => !(o.numFactura && String(o.numFactura).trim()))
+          .reduce((a,b) => a + (b.iva||0), 0);
+        const notaIva = tieneSinFacturar && ivaNoExigible > 0.005
+          ? ` <span class="tag" style="background:#fef9c3;color:#92400e;" title="IVA aún no exigible (sin factura emitida) — no está incluido en el saldo">IVA s/facturar: $${fmt2(ivaNoExigible)}</span>`
+          : '';
+        return `<tr>
+          <td><strong>${n}</strong></td>
+          <td>$${fmt2(facturado)}</td>
+          <td style="color:#059669;">$${fmt2(pagado)}</td>
+          <td style="font-weight:700;color:${colorSaldo};">$${fmt2(saldo)} <span style="font-weight:600;font-size:11px;">${etiqueta}</span>${notaIva}</td>
+        </tr>`;
+      }).join('');
+    }
+  }
+
+  const tablaSaldosCard = tbodySaldos ? tbodySaldos.closest('.section-card') : null;
+  if(tablaSaldosCard && !document.getElementById('nota-saldo-iva')){
+    const nota = document.createElement('div');
+    nota.id = 'nota-saldo-iva';
+    nota.style.cssText = 'font-size:11px;color:#94a3b8;margin-top:8px;';
+    nota.innerHTML = '💡 El <strong>Saldo pendiente</strong> se calcula sobre el <strong>Neto</strong> mientras la operación no tenga N° de factura cargado (el IVA es informativo hasta ese momento). Cuando se carga el N° de factura en el Listado, esa operación pasa a "Facturada" y su IVA se suma al saldo exigible.';
+    tablaSaldosCard.appendChild(nota);
+  }
+
+  const tbodyHist = document.getElementById('tbody-pagos-hist');
+  const pagosPaginacionEl = document.getElementById('pagos-paginacion');
+  if(tbodyHist){
+    if(!pagos.length){
+      tbodyHist.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:16px;">Sin pagos registrados</td></tr>';
+      if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = '';
+    } else {
+      const ordenados = [...pagos].sort((a,b) => fechaISO(b.fecha).localeCompare(fechaISO(a.fecha)) || (b.ts||0)-(a.ts||0));
+      const { pagina, page, totalPaginas } = paginarArray('pagos', ordenados, PAGE_SIZE_GENERICO);
+      tbodyHist.innerHTML = pagina.map(p => `
+        <tr>
+          <td>${p.fecha||''}</td>
+          <td><strong>${p.despachante||''}</strong>${p.numFactura?` <span class="tag" style="background:#dbeafe;color:#1e40af;">Fact. ${p.numFactura}</span>`:(p.origenCaja?' <span class="tag" style="background:#dcfce7;color:#166534;">Auto Caja</span>':'')}</td>
+          <td style="color:#059669;font-weight:700;">$${fmt2(p.monto)}</td>
+          <td style="font-size:11px;color:#64748b;">${p.obs||''}</td>
+          <td><button class="btn-danger" onclick="eliminarPago('${p.id}')">✕</button></td>
+        </tr>
+      `).join('');
+      if(pagosPaginacionEl) pagosPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'pagos');
+    }
+  }
+}
+window.renderSaldos = renderSaldos;
+
+// ── Menú desplegable de Saldos (se abre al pasar el mouse por la pestaña "Saldos") ──
+const SALDOS_SECCIONES = {
+  pago:  'saldos-sec-pago',
+  saldo: 'saldos-sec-saldo',
+  hist:  'saldos-sec-hist',
+  vinc:  'saldos-sec-vinc'
+};
+let _saldosMenuTimer = null;
+function abrirMenuSaldos(){
+  clearTimeout(_saldosMenuTimer);
+  const btn = document.getElementById('tab-btn-saldos');
+  const menu = document.getElementById('saldos-menu');
+  if(!btn || !menu) return;
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.max(4, Math.min(r.left, window.innerWidth - menu.offsetWidth - 4)) + 'px';
+  menu.style.top = (r.bottom + 2) + 'px';
+  menu.classList.add('abierto');
+}
+function cerrarMenuSaldosConDemora(){
+  clearTimeout(_saldosMenuTimer);
+  _saldosMenuTimer = setTimeout(() => document.getElementById('saldos-menu')?.classList.remove('abierto'), 180);
+}
+(function initMenuSaldos(){
+  const btn = document.getElementById('tab-btn-saldos');
+  const menu = document.getElementById('saldos-menu');
+  if(!btn || !menu) return;
+  btn.addEventListener('mouseenter', abrirMenuSaldos);
+  btn.addEventListener('mouseleave', cerrarMenuSaldosConDemora);
+  menu.addEventListener('mouseenter', () => clearTimeout(_saldosMenuTimer));
+  menu.addEventListener('mouseleave', cerrarMenuSaldosConDemora);
+  window.addEventListener('scroll', () => menu.classList.remove('abierto'), { passive:true });
+})();
+window.seleccionarSeccionSaldos = function(key){
+  if(!SALDOS_SECCIONES[key]) key = 'saldo';
+  switchTab('saldos');
+  Object.entries(SALDOS_SECCIONES).forEach(([k, id]) => {
+    const el = document.getElementById(id);
+    if(el) el.style.display = (k===key) ? '' : 'none';
+  });
+  document.querySelectorAll('#saldos-menu .saldos-menu-item[data-sec]').forEach(b => {
+    b.classList.toggle('activo', b.dataset.sec === key);
+  });
+  document.getElementById('saldos-menu')?.classList.remove('abierto');
+};
+window.exportarDesdeMenuSaldos = function(){
+  // El filtro de despachante vive en "Saldo por despachante": se muestra esa sección antes de exportar
+  seleccionarSeccionSaldos('saldo');
+  exportarSaldosExcel();
+};
+
+// ── EXPORTAR MOVIMIENTOS DE UN DESPACHANTE (pestaña Saldos) ──
+window.exportarSaldosExcel = function(){
+  const despachante = document.getElementById('saldos_filtro_despachante')?.value || '';
+  if(!despachante){
+    toast('⚠️ Elegí un despachante en el filtro de arriba (junto al de Mes) para exportar su historial');
+    return;
+  }
+
+  const opsDesp   = operaciones.filter(o => o.despachante === despachante);
+  const pagosDesp = pagos.filter(p => p.despachante === despachante);
+
+  if(!opsDesp.length && !pagosDesp.length){
+    toast('No hay operaciones ni pagos registrados para ' + despachante);
+    return;
+  }
+
+  const fmtFechaMostrar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)){
+      const [y,m,d] = f.slice(0,10).split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return f;
+  };
+  const fechaISOparaOrdenar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0,10);
+    const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return '';
+  };
+  const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
+
+  const filasOps = opsDesp.map(o => {
+    const exigible = montoExigible(o);
+    return {
+      fechaISO: o.fecha || '',
+      tipo: 'OPERACIÓN',
+      fechaMostrar: fmtFechaMostrar(o.fecha),
+      cliente: o.cliente || '',
+      detalle: [o.destinacion, o.mic ? 'MIC:'+o.mic : ''].filter(Boolean).join(' ') || '-',
+      canal: (o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO'||o.tipo==='ADICIONALES') ? '' : (o.canal||''),
+      neto: o.neto||0,
+      iva: o.iva||0,
+      bruto: o.bruto||0,
+      exigible,
+      pagado: 0,
+      numFactura: o.numFactura ? o.numFactura : 'Sin factura (exigible: Neto)',
+      obs: [o.obs, o.adicionales].filter(Boolean).join(' | ')
+    };
+  });
+
+  const filasPagos = pagosDesp.map(p => {
+    const refFactura = p.numFactura ? `Fact. ${p.numFactura}` : 'Pago genérico (se aplica por antigüedad)';
+    const origen = p.origenCaja ? ' · Automático desde Caja' : ' · Cargado manual';
+    return {
+      fechaISO: fechaISOparaOrdenar(p.fecha),
+      tipo: 'PAGO',
+      fechaMostrar: fmtFechaMostrar(p.fecha),
+      cliente: 'PAGO',
+      detalle: refFactura + origen,
+      canal: '',
+      neto: 0, iva: 0, bruto: 0,
+      exigible: 0,
+      pagado: p.monto || 0,
+      numFactura: p.numFactura || '',
+      obs: p.obs || ''
+    };
+  });
+
+  const filas = [...filasOps, ...filasPagos].sort((a,b) =>
+    a.fechaISO.localeCompare(b.fechaISO) || (a.tipo==='PAGO'?1:-1) - (b.tipo==='PAGO'?1:-1));
+
+  let acumExigible = 0, acumPagado = 0;
+  const rows = filas.map(f => {
+    acumExigible += f.exigible;
+    acumPagado   += f.pagado;
+    const saldoCorrido = acumExigible - acumPagado;
+    return [
+      f.fechaMostrar, f.tipo, f.cliente, f.detalle, f.canal,
+      f.tipo==='OPERACIÓN' ? dec2(f.neto) : '',
+      f.tipo==='OPERACIÓN' ? dec2(f.iva)  : '',
+      f.tipo==='OPERACIÓN' ? dec2(f.bruto): '',
+      f.numFactura,
+      f.tipo==='PAGO' ? dec2(f.pagado) : '',
+      dec2(saldoCorrido),
+      f.obs
+    ].map(puntoSiVacio);
+  });
+
+  const header = ['FECHA','TIPO','CLIENTE','DETALLE','CANAL','NETO $','IVA $','BRUTO $','N° FACTURA','PAGO $','SALDO ACUMULADO $','OBSERVACIONES'];
+
+  const { facturado, pagado, saldo } = calcularSaldoDespachante(despachante);
+  const totalRow = ['TOTAL', `${opsDesp.length} operación(es) · ${pagosDesp.length} pago(s)`, '', '', '',
+    '', '', dec2(facturado), '', dec2(pagado), dec2(saldo), ''].map(puntoSiVacio);
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:11},{wch:16},{wch:26},{wch:7},
+    {wch:12},{wch:11},{wch:12},{wch:18},{wch:12},{wch:16},{wch:32}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length;
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} movimiento(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" movimiento(s)"` };
+    [7,9].forEach(c => {
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [5,6,7,9,10],
+    colsNumericas: [5,6,7,9,10]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Movimientos');
+
+  const nombreArchivo = `movimientos_${despachante}.xlsx`.replace(/\s+/g,'_');
+  XLSX.writeFile(wb, nombreArchivo);
+  toast('📥 Excel de movimientos generado para ' + despachante);
+};
+
+// ── RENDER TABLA CLIENTES (DESPACHANTES) ──
+function renderTablaClientes(){
+  const tbody = document.getElementById('tbody-clientes');
+  const paginacionEl = document.getElementById('clientes-paginacion');
+  if(!clientes.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Sin despachantes cargados</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
+    return;
+  }
+  const ordenados = [...clientes].sort((a,b) => (a.nombre||'').localeCompare(b.nombre||''));
+  const { pagina, page, totalPaginas } = paginarArray('clientesDesp', ordenados, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(c => {
+    const opsCount = operaciones.filter(o => o.despachante === c.nombre).length;
+    const et = etiquetaTipoDespachante(c.tipo);
+    return `<tr>
+      <td><strong>${c.nombre}</strong></td>
+      <td><span class="tag" style="${et.style}">${et.txt}</span></td>
+      <td>${c.factura||'-'}</td>
+      <td>${c.tieneFactura === 'no' ? '❌ No' : '✅ Sí'}</td>
+      <td class="mono">${c.cuit||'-'}</td>
+      <td style="text-align:center;">${opsCount}</td>
+      <td style="white-space:nowrap;"><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarCliente('${c.id}')">✏️ Editar</button> <button class="btn-danger" onclick="eliminarCliente('${c.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'clientesDesp');
+}
+
+// ── EXPORTAR EXCEL: estilo unificado (Arial 7) usado por TODAS las planillas del módulo ──
+function estilizarHojaExcel(ws, opts){
+  const { numCols, numDataRows, colsDecimal2 = [], colsNumericas = [], headerRowIndex = 0 } = opts;
+  const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+  const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+  const formatoDecimal = '#,##0.00';
+  const totalRowIdx = headerRowIndex + 1 + numDataRows;
+
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for(let R = range.s.r; R <= range.e.r; R++){
+    for(let C = range.s.c; C <= range.e.c; C++){
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      if(!ws[addr]) ws[addr] = { t: 's', v: '' };
+
+      if(R !== totalRowIdx && colsDecimal2.includes(C) && typeof ws[addr].v === 'number'){
+        ws[addr].z = formatoDecimal;
+      }
+
+      if(R < headerRowIndex){
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: '92400E' } },
+          fill: { fgColor: { rgb: 'FEF3C7' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else if(R === headerRowIndex){
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+          fill: { fgColor: { rgb: '1E3A8A' } },
+          border: bordeTodo,
+          alignment: { horizontal: 'center', vertical: 'center' }
+        };
+      } else if(R === totalRowIdx){
+        ws[addr].s = {
+          font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'DC2626' } },
+          fill: { fgColor: { rgb: 'FEF2F2' } },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      } else {
+        ws[addr].s = {
+          font: { sz: 7, name: 'Arial' },
+          border: bordeTodo,
+          alignment: { horizontal: colsNumericas.includes(C) ? 'right' : 'left' },
+          numFmt: colsDecimal2.includes(C) ? formatoDecimal : undefined
+        };
+      }
+    }
+  }
+}
+window.estilizarHojaExcel = estilizarHojaExcel;
+
+// ── EXPORTAR EXCEL (Listado) ──
+// Se agregó la columna N° FACTURA (entre VALOR USD y ESTADO PAGO) y el filtro por
+// árbol de Año/Mes/Día del Listado (se combina con despachante, mes simple, rango de
+// fechas y "pendiente/cubierta", igual que en la tabla en pantalla).
+window.exportarExcel = function(){
+  const filtCorr = document.getElementById('filtro_despachante').value;
+  const filtMes  = document.getElementById('filtro_mes').value;
+  const filtDesde = document.getElementById('filtro_fecha_desde')?.value || '';
+  const filtHasta = document.getElementById('filtro_fecha_hasta')?.value || '';
+  const filtPendiente = document.getElementById('filtro_pendiente')?.value || '';
+  let ops = [...operaciones];
+  if(filtCorr) ops = ops.filter(o => o.despachante === filtCorr);
+  if(filtMes)  ops = ops.filter(o => o.fecha?.startsWith(filtMes));
+  if(filtDesde) ops = ops.filter(o => (o.fecha||'') >= filtDesde);
+  if(filtHasta) ops = ops.filter(o => (o.fecha||'') <= filtHasta);
+  ops = aplicarFiltroArbolFechas(ops);
+  ops = aplicarFiltroPendiente(ops, filtPendiente);
+
+  if(!ops.length){ toast('No hay operaciones para exportar con esos filtros'); return; }
+
+  // Pagos que corresponden a los mismos filtros (mismo despachante / mismo rango de fechas de pago)
+  let pagosFiltrados = [...pagos];
+  if(filtCorr) pagosFiltrados = pagosFiltrados.filter(p => p.despachante === filtCorr);
+  if(filtMes)  pagosFiltrados = pagosFiltrados.filter(p => p.fecha?.startsWith(filtMes));
+  if(filtDesde) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') >= filtDesde);
+  if(filtHasta) pagosFiltrados = pagosFiltrados.filter(p => (p.fecha||'') <= filtHasta);
+  if(listadoFechasSeleccionadas.size){
+    pagosFiltrados = pagosFiltrados.filter(p => {
+      const iso = /^\d{4}-\d{2}-\d{2}/.test(String(p.fecha||'').trim())
+        ? String(p.fecha).trim().slice(0,10)
+        : (() => {
+            const m = String(p.fecha||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            return m ? `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` : '';
+          })();
+      return listadoFechasSeleccionadas.has(iso);
+    });
+  }
+
+  const fmtFechaAR = (iso) => {
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const fmtFechaMostrar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return fmtFechaAR(f.slice(0,10));
+    return f;
+  };
+  const fechaISOparaOrdenar = (fecha) => {
+    if(!fecha) return '';
+    const f = String(fecha).trim();
+    if(/^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0,10);
+    const m = f.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+    return '';
+  };
+
+  const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  // Se agregó N° FACTURA entre VALOR USD y ESTADO PAGO (nueva columna, índice 11).
+  const header = ['FECHA','DESPACHANTE','CLIENTE','DESTINACIÓN','CANAL','ZPA','VALOR','IVA','SUB TOTAL','TC','VALOR USD','N° FACTURA','ESTADO PAGO','PAGOS','OBSERVAC'];
+
+  const pendienteMap = mapaPendientePorOperacion();
+
+  const filasOps = ops.map(o => {
+    const obsCompleto = [o.obs, o.adicionales].filter(Boolean).join(' | ');
+    const pend = pendienteMap[o.id] || 0;
+    const estadoPago = pend > 0.5 ? 'PENDIENTE' : 'PAGADO/CUBIERTO';
+    return {
+      fechaISO: o.fecha || '',
+      row: [
+        fmtFechaAR(o.fecha),
+        o.despachante || '',
+        o.cliente || '',
+        o.destinacion || '',
+        o.canal || '',
+        o.zpa || '',
+        dec2(o.neto),
+        dec2(o.iva),
+        dec2(o.bruto),
+        o.tc || '',
+        o.totalUsd || '',
+        o.numFactura || '',
+        estadoPago,
+        '', // PAGOS: vacío en las filas de operación
+        obsCompleto
+      ].map(puntoSiVacio)
+    };
+  });
+
+  const filasPagos = pagosFiltrados.map(p => {
+    const refFactura = p.numFactura ? `Fact. ${p.numFactura}` : 'Pago genérico (sin factura)';
+    const origen = p.origenCaja ? ' · Auto Caja' : '';
+    const obsPago = [p.obs, refFactura + origen].filter(Boolean).join(' | ');
+    return {
+      fechaISO: fechaISOparaOrdenar(p.fecha),
+      row: [
+        fmtFechaMostrar(p.fecha),
+        p.despachante || '',
+        'PAGO',
+        '', '', '',
+        '', '', '', '', '',      // VALOR, IVA, SUB TOTAL, TC, VALOR USD: vacío en filas de pago
+        p.numFactura || '',      // N° FACTURA (referencia, si el pago está atado a una)
+        '',                      // ESTADO PAGO: vacío en filas de pago
+        dec2(p.monto || 0),      // PAGOS
+        obsPago
+      ].map(puntoSiVacio)
+    };
+  });
+
+  const filasCombinadas = [...filasOps, ...filasPagos]
+    .sort((a,b) => a.fechaISO.localeCompare(b.fechaISO) || (a.row[2]==='PAGO'?1:-1) - (b.row[2]==='PAGO'?1:-1));
+  const rows = filasCombinadas.map(f => f.row);
+
+  const totNeto   = ops.reduce((a,b) => a + (b.neto||0), 0);
+  const totIva    = ops.reduce((a,b) => a + (b.iva||0), 0);
+  const totBruto  = ops.reduce((a,b) => a + (b.bruto||0), 0);
+  const totPagado = pagosFiltrados.reduce((a,b) => a + (b.monto||0), 0);
+
+  const totalRow = ['TOTAL',`${ops.length} op(s) · ${pagosFiltrados.length} pago(s)`,'','','','', dec2(totNeto), dec2(totIva), dec2(totBruto), '', '', '', '', dec2(totPagado), ''].map(puntoSiVacio);
+
+  // ── SALDO ANTERIOR (igual que antes; OBSERVAC ahora queda en el índice 14, no 13) ──
+  let saldoAnteriorRows = [];
+  let deudaTotalRows = [];
+  let headerRowIndex = 0;
+  let saldoAnterior = 0;
+  let hayDeudaAnterior = false;
+  if(filtCorr && (filtMes || filtDesde)){
+    const cutoff = filtDesde || (filtMes + '-01');
+    const cobertura = calcularCoberturaExigibleFIFO(filtCorr);
+    saldoAnterior = cobertura
+      .filter(o => (o.fecha||'') < cutoff)
+      .reduce((a,b) => a + b.pendiente, 0);
+    hayDeudaAnterior = true;
+    const filaSaldo = new Array(header.length).fill('');
+    filaSaldo[0] = 'SALDO ANTERIOR';
+    filaSaldo[1] = filtCorr;
+    filaSaldo[8] = dec2(saldoAnterior); // SUB TOTAL (no se movió)
+    filaSaldo[14] = `Deuda pendiente de operaciones anteriores al ${fmtFechaAR(cutoff)}`; // OBSERVAC
+    saldoAnteriorRows = [filaSaldo.map(puntoSiVacio)];
+    headerRowIndex = 1;
+
+    const filaDeudaTotal = new Array(header.length).fill('');
+    filaDeudaTotal[0] = 'DEUDA TOTAL A LA FECHA';
+    filaDeudaTotal[8] = dec2(saldoAnterior + totBruto);
+    filaDeudaTotal[14] = 'Saldo anterior + Subtotal del período filtrado';
+    deudaTotalRows = [filaDeudaTotal.map(puntoSiVacio)];
+  }
+
+  const aoa = [...saldoAnteriorRows, header, ...rows, totalRow, ...deudaTotalRows];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:18},{wch:22},{wch:20},{wch:7},{wch:7},
+    {wch:12},{wch:12},{wch:14},{wch:8},{wch:10},{wch:14},{wch:16},{wch:12},{wch:32}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const headerRowNum = 1 + headerRowIndex;
+  const firstDataRow = headerRowNum + 1;
+  const lastDataRow  = headerRowNum + rows.length;
+  const totalRowNum  = lastDataRow + 1;
+  ws['!autofilter'] = { ref: `A${headerRowNum}:${lastCol}${lastDataRow}` };
+
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} fila(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" fila(s)"` };
+
+    [6,7,8,13].forEach(c => { // VALOR, IVA, SUB TOTAL, PAGOS (PAGOS ahora en índice 13)
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  if(hayDeudaAnterior){
+    const deudaRowIdx = totalRowNum;
+    const saldoAnteriorCellAddr = XLSX.utils.encode_cell({ r: 0, c: 8 });
+    const subtotalCellAddr      = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 8 });
+    const addrValor = XLSX.utils.encode_cell({ r: deudaRowIdx, c: 8 });
+    ws[addrValor] = { t:'n', v: dec2(saldoAnterior + totBruto), f: `${saldoAnteriorCellAddr}+${subtotalCellAddr}` };
+
+    const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+    const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+    for(let c = 0; c < header.length; c++){
+      const addr = XLSX.utils.encode_cell({ r: deudaRowIdx, c });
+      if(!ws[addr]) ws[addr] = { t:'s', v:'' };
+      ws[addr].s = {
+        font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '166534' } },
+        border: bordeTodo,
+        alignment: { horizontal: c === 8 ? 'right' : 'left' },
+        numFmt: c === 8 ? '#,##0.00' : undefined
+      };
+    }
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [6,7,8,13],       // VALOR, IVA, SUB TOTAL, PAGOS
+    colsNumericas: [6,7,8,9,10,13], // VALOR, IVA, SUB TOTAL, TC, VALOR USD, PAGOS
+    headerRowIndex
+  });
+
+  if(hayDeudaAnterior){
+    const deudaRowIdx = totalRowNum;
+    const finoGris  = { style: 'thin', color: { rgb: 'B8C2CC' } };
+    const bordeTodo = { top: finoGris, bottom: finoGris, left: finoGris, right: finoGris };
+    for(let c = 0; c < header.length; c++){
+      const addr = XLSX.utils.encode_cell({ r: deudaRowIdx, c });
+      ws[addr].s = {
+        font: { bold: true, sz: 7, name: 'Arial', color: { rgb: 'FFFFFF' } },
+        fill: { fgColor: { rgb: '166534' } },
+        border: bordeTodo,
+        alignment: { horizontal: c === 8 ? 'right' : 'left' },
+        numFmt: c === 8 ? '#,##0.00' : undefined
+      };
+    }
+  }
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Operaciones');
+
+  const rangoNombre = (filtDesde || filtHasta) ? `${filtDesde||'inicio'}_a_${filtHasta||'hoy'}` : (filtMes||'todos');
+  const sufijoPendiente = filtPendiente === 'pendiente' ? '_pendientes' : (filtPendiente === 'cubierta' ? '_cubiertas' : '');
+  const sufijoArbol = listadoFechasSeleccionadas.size ? `_${listadoFechasSeleccionadas.size}fechas` : '';
+  const nombreArchivo = `operaciones_${filtCorr||'todos'}_${rangoNombre}${sufijoPendiente}${sufijoArbol}.xlsx`
+    .replace(/\s+/g,'_');
+
+  XLSX.writeFile(wb, nombreArchivo);
+};
+
+// ── MUDANZAS ──
+window.recalcMudanza = function(){
+  const tcInputEl = document.getElementById('mud_tc');
+  const tcInput   = tcInputEl.value;
+  const tcFalta   = tcInput === '' || isNaN(parseFloat(tcInput)) || parseFloat(tcInput) <= 0;
+  const tc        = tcFalta ? 0 : parseFloat(tcInput);
+  const usd       = parseFloat(document.getElementById('mud_valor_usd').value) || 0;
+  const ramiroUsd = parseFloat(document.getElementById('mud_ramiro').value) || 190;
+  const precinto  = parseFloat(document.getElementById('mud_precinto').value) || 0;
+  const fiscal    = parseFloat(document.getElementById('mud_fiscal').value) || 0;
+  const digitalizacion = parseFloat(document.getElementById('mud_digitalizacion').value) || 0;
+  const otros     = parseFloat(document.getElementById('mud_otros').value) || 0;
+  const mudTieneFactura = document.getElementById('mud_tiene_factura').value !== 'no';
+
+  const honorNeto   = usd * tc;
+  const iva         = mudTieneFactura ? honorNeto * 0.21 : 0;
+  const bruto       = honorNeto + iva;
+  const gastoRamiro = ramiroUsd * tc;
+  const totalGastos = precinto + fiscal + digitalizacion + gastoRamiro + otros;
+  const netofinal   = honorNeto - totalGastos;
+
+  const montoCobradoInput = document.getElementById('mud_monto_cobrado');
+  const montoCobrado = montoCobradoInput ? (parseFloat(montoCobradoInput.value) || 0) : 0;
+  const saldoCobro = bruto - montoCobrado;
+  const cobradoCompleto = montoCobrado >= (bruto - 0.5);
+
+  const vencResidencia = document.getElementById('mud_venc_residencia')?.value || '';
+  const residenciaCancelada = document.getElementById('mud_residencia_cancelada')?.value === 'si';
+  const estRes = estadoResidencia({ vencimientoResidencia: vencResidencia, residenciaCancelada });
+
+  if(tcFalta){
+    tcInputEl.style.borderColor = '#dc2626';
+    tcInputEl.style.background  = '#fef2f2';
+    document.getElementById('mud_neto').textContent        = '⚠️ Falta TC';
+    document.getElementById('mud_iva').textContent         = '⚠️ Falta TC';
+    document.getElementById('mud_bruto').textContent       = '⚠️ Falta TC';
+    document.getElementById('mud_gastos_total').textContent = '⚠️ Falta TC';
+    document.getElementById('mud_neto_final').textContent  = '⚠️ Falta TC';
+    document.getElementById('mud_desglose').innerHTML = '<span style="color:#dc2626;font-weight:700;">⚠️ Ingresá el Tipo de Cambio (TC) para calcular la liquidación. No se puede guardar sin este dato.</span>';
+    return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada, montoCobrado, cobrado: cobradoCompleto };
+  }
+
+  tcInputEl.style.borderColor = '';
+  tcInputEl.style.background  = '';
+
+  document.getElementById('mud_neto').textContent        = '$ ' + fmt2(honorNeto);
+  document.getElementById('mud_iva').textContent         = mudTieneFactura ? '$ ' + fmt2(iva) : '— Sin factura';
+  document.getElementById('mud_bruto').textContent       = '$ ' + fmt2(bruto);
+  document.getElementById('mud_gastos_total').textContent = '$ ' + fmt2(totalGastos);
+  document.getElementById('mud_neto_final').textContent  = '$ ' + fmt2(netofinal);
+
+  const items = [
+    `USD ${usd} × TC ${tc} = $${fmt2(honorNeto)}`,
+    mudTieneFactura ? `IVA 21%: $${fmt2(iva)}` : `Sin factura (sin IVA)`,
+    `Precinto: $${fmt2(precinto)}`,
+    `Fiscal: $${fmt2(fiscal)}`,
+    digitalizacion > 0 ? `Digitalización: $${fmt2(digitalizacion)}` : null,
+    `Ramiro: USD ${ramiroUsd} × TC ${tc} = $${fmt2(gastoRamiro)}`,
+    otros > 0 ? `Otros: $${fmt2(otros)}` : null,
+    vencResidencia ? `Residencia: ${estRes.label}` : null,
+    montoCobrado > 0
+      ? (cobradoCompleto
+          ? `✅ Cobrado: $${fmt2(montoCobrado)}`
+          : `🟡 Cobrado: $${fmt2(montoCobrado)} de $${fmt2(bruto)} (saldo $${fmt2(saldoCobro)})`)
+      : (bruto > 0 ? `❌ Sin cobrar (saldo $${fmt2(bruto)})` : null)
+  ].filter(Boolean);
+  document.getElementById('mud_desglose').innerHTML = items.map(i => `<span class="tag">${i}</span>`).join(' ');
+
+  return { tc, usd, honorNeto, iva, bruto, totalGastos, netofinal, gastoRamiro, precinto, fiscal, digitalizacion, otros, ramiroUsd, tcFalta, tieneFactura: mudTieneFactura, vencimientoResidencia: vencResidencia, residenciaCancelada, montoCobrado, cobrado: cobradoCompleto };
+};
+
+window.guardarMudanza = async function(){
+  const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
+  const destinacion = document.getElementById('mud_destinacion').value.trim().toUpperCase();
+  const fecha   = document.getElementById('mud_fecha').value;
+  const tcVal   = parseFloat(document.getElementById('mud_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la mudanza — es obligatorio para guardar');
+    document.getElementById('mud_tc').focus();
+    return;
+  }
+  if(!cliente){ toast('Ingresá el cliente'); return; }
+  if(!fecha)  { toast('Ingresá la fecha'); return; }
+
+  const vals = recalcMudanza();
+  const mud = {
+    fecha, cliente, clienteFinal, destinacion,
+    tc: vals.tc,
+    valorUsd: vals.usd,
+    honorNeto: vals.honorNeto,
+    iva: vals.iva,
+    bruto: vals.bruto,
+    precinto: vals.precinto,
+    fiscal: vals.fiscal,
+    digitalizacion: vals.digitalizacion,
+    ramiroUsd: vals.ramiroUsd,
+    gastoRamiro: vals.gastoRamiro,
+    otros: vals.otros,
+    totalGastos: vals.totalGastos,
+    netoFinal: vals.netofinal,
+    tieneFactura: vals.tieneFactura,
+    vencimientoResidencia: vals.vencimientoResidencia || '',
+    residenciaCancelada: !!vals.residenciaCancelada,
+    ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    montoCobrado: vals.montoCobrado,
+    cobrado: vals.cobrado,
+    obs: document.getElementById('mud_obs').value.trim(),
+    cargadoPor: user.username,
+    ts: Date.now()
+  };
+
+  try {
+    const ref = await addDoc(collection(db,'corresponsales_mudanzas'), mud);
+    // Si ya se carga con un monto cobrado, queda registrado como cobro de la fecha de la mudanza
+    if(vals.montoCobrado > 0){
+      await addDoc(collection(db,'corresponsales_mudanzas_cobros'), {
+        mudanzaId: ref.id, fecha, monto: vals.montoCobrado,
+        cargadoPor: user.username, ts: Date.now()
+      });
+    }
+    toast('✅ Mudanza guardada');
+    limpiarMudanza();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  }
+};
+
+window.limpiarMudanza = function(){
+  document.getElementById('mud_cliente').value = '';
+  document.getElementById('mud_cliente_final').value = '';
+  document.getElementById('mud_destinacion').value = '';
+  document.getElementById('mud_valor_usd').value = '';
+  document.getElementById('mud_precinto').value = '0';
+  document.getElementById('mud_fiscal').value = '0';
+  document.getElementById('mud_digitalizacion').value = '0';
+  document.getElementById('mud_ramiro').value = '190';
+  document.getElementById('mud_otros').value = '0';
+  document.getElementById('mud_obs').value = '';
+  document.getElementById('mud_ramiro_pagado').value = 'no';
+  const montoCobradoEl = document.getElementById('mud_monto_cobrado');
+  if(montoCobradoEl) montoCobradoEl.value = '0';
+  document.getElementById('mud_tc').value = '';
+  document.getElementById('mud_tiene_factura').value = 'si';
+  document.getElementById('mud_venc_residencia').value = '';
+  document.getElementById('mud_residencia_cancelada').value = 'no';
+  recalcMudanza();
+};
+
+window.eliminarMudanza = async function(id){
+  if(!confirm('¿Eliminar esta mudanza?')) return;
+  await deleteDoc(doc(db,'corresponsales_mudanzas',id));
+  // También se borran sus cobros registrados, para que no queden huérfanos
+  for(const c of mudanzasCobros.filter(x => x.mudanzaId === id)){
+    await deleteDoc(doc(db,'corresponsales_mudanzas_cobros', c.id));
+  }
+  toast('Mudanza eliminada');
+};
+
+// ── EDITAR MUDANZA ──
+let mudanzaEditandoId = null;
+
+window.editarMudanza = function(id){
+  const m = mudanzas.find(x => x.id === id);
+  if(!m) return;
+  mudanzaEditandoId = id;
+
+  document.getElementById('mud_fecha').value       = m.fecha || '';
+  document.getElementById('mud_cliente').value     = m.cliente || '';
+  document.getElementById('mud_cliente_final').value = m.clienteFinal || '';
+  document.getElementById('mud_destinacion').value = m.destinacion || '';
+  document.getElementById('mud_tc').value          = m.tc || 1440;
+  document.getElementById('mud_valor_usd').value    = m.valorUsd || '';
+  document.getElementById('mud_precinto').value    = m.precinto || 0;
+  document.getElementById('mud_fiscal').value      = m.fiscal || 0;
+  document.getElementById('mud_digitalizacion').value = m.digitalizacion || 0;
+  document.getElementById('mud_ramiro').value      = m.ramiroUsd || 190;
+  document.getElementById('mud_otros').value       = m.otros || 0;
+  document.getElementById('mud_obs').value         = m.obs || '';
+  document.getElementById('mud_ramiro_pagado').value = m.ramiroPagado || 'no';
+  const montoCobradoEl = document.getElementById('mud_monto_cobrado');
+  if(montoCobradoEl){
+    montoCobradoEl.value = (m.montoCobrado !== undefined && m.montoCobrado !== null)
+      ? m.montoCobrado
+      : (m.cobrado ? (m.bruto || 0) : 0);
+  }
+  document.getElementById('mud_tiene_factura').value = m.tieneFactura === false ? 'no' : 'si';
+  document.getElementById('mud_venc_residencia').value = m.vencimientoResidencia || '';
+  document.getElementById('mud_residencia_cancelada').value = m.residenciaCancelada ? 'si' : 'no';
+
+  document.getElementById('mud-form-titulo').textContent = '✏️ Editando mudanza: ' + m.cliente;
+  document.getElementById('mud-btn-guardar').style.display  = 'none';
+  document.getElementById('mud-btn-actualizar').style.display = 'inline-flex';
+  document.getElementById('mud-btn-cancelar').style.display   = 'inline-flex';
+
+  document.getElementById('tab-mudanzas').scrollIntoView({behavior:'smooth'});
+  recalcMudanza();
+  toast('✏️ Mudanza cargada para editar');
+};
+
+window.actualizarMudanza = async function(){
+  if(!mudanzaEditandoId) return;
+  const cliente = document.getElementById('mud_cliente').value.trim().toUpperCase();
+  const clienteFinal = document.getElementById('mud_cliente_final').value.trim().toUpperCase();
+  const destinacion = document.getElementById('mud_destinacion').value.trim().toUpperCase();
+  const fecha   = document.getElementById('mud_fecha').value;
+  const tcVal   = parseFloat(document.getElementById('mud_tc').value);
+  if(!tcVal || tcVal <= 0){
+    toast('⚠️ Falta el TC de la mudanza — es obligatorio para guardar');
+    document.getElementById('mud_tc').focus();
+    return;
+  }
+  if(!cliente){ toast('Ingresá el cliente'); return; }
+  if(!fecha)  { toast('Ingresá la fecha');   return; }
+
+  const vals = recalcMudanza();
+  const datos = {
+    fecha, cliente, clienteFinal, destinacion,
+    tc: vals.tc,
+    valorUsd: vals.usd,
+    honorNeto: vals.honorNeto,
+    iva: vals.iva,
+    bruto: vals.bruto,
+    precinto: vals.precinto,
+    fiscal: vals.fiscal,
+    digitalizacion: vals.digitalizacion,
+    ramiroUsd: vals.ramiroUsd,
+    gastoRamiro: vals.gastoRamiro,
+    otros: vals.otros,
+    totalGastos: vals.totalGastos,
+    netoFinal: vals.netofinal,
+    tieneFactura: vals.tieneFactura,
+    vencimientoResidencia: vals.vencimientoResidencia || '',
+    residenciaCancelada: !!vals.residenciaCancelada,
+    ramiroPagado: document.getElementById('mud_ramiro_pagado').value,
+    montoCobrado: vals.montoCobrado,
+    cobrado: vals.cobrado,
+    obs: document.getElementById('mud_obs').value.trim(),
+    modificadoPor: user.username,
+    tsEdit: Date.now()
+  };
+
+  try {
+    await updateDoc(doc(db,'corresponsales_mudanzas', mudanzaEditandoId), datos);
+    toast('✅ Mudanza actualizada');
+    cancelarEdicionMudanza();
+  } catch(e){
+    toast('❌ Error: ' + e.message);
+  }
+};
+
+window.cancelarEdicionMudanza = function(){
+  mudanzaEditandoId = null;
+  document.getElementById('mud-form-titulo').textContent = '📦 Nueva mudanza';
+  document.getElementById('mud-btn-guardar').style.display    = 'inline-flex';
+  document.getElementById('mud-btn-actualizar').style.display = 'none';
+  document.getElementById('mud-btn-cancelar').style.display   = 'none';
+  limpiarMudanza();
+};
+
+// Paginación del listado de mudanzas
+let mudanzasPage = 1;
+const MUDANZAS_PAGE_SIZE = 15;
+
+window.resetPaginaMudanzas = function(){
+  mudanzasPage = 1;
+  renderMudanzas();
+};
+
+window.cambiarPaginaMudanzas = function(delta){
+  mudanzasPage += delta;
+  renderMudanzas();
+};
+
+function renderFiltrosMudanzas(){
+  const cliSel = document.getElementById('mud_filtro_cliente');
+  if(!cliSel) return;
+  const v = cliSel.value;
+  const nombres = [...new Set(mudanzas.map(m => m.cliente).filter(Boolean))].sort();
+  cliSel.innerHTML = '<option value="">Todos los clientes</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  cliSel.value = v;
+
+  const mesSel = document.getElementById('mud_filtro_mes');
+  if(mesSel){
+    const vm = mesSel.value;
+    const meses = [...new Set(mudanzas.map(m => m.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+    mesSel.innerHTML = '<option value="">Todos los meses</option>' +
+      meses.map(m => `<option value="${m}">${m}</option>`).join('');
+    mesSel.value = vm;
+  }
+}
+
+function filtrarMudanzas(){
+  const filtCliente = document.getElementById('mud_filtro_cliente')?.value || '';
+  const filtMes     = document.getElementById('mud_filtro_mes')?.value || '';
+  const filtDesde   = document.getElementById('mud_filtro_fecha_desde')?.value || '';
+  const filtHasta   = document.getElementById('mud_filtro_fecha_hasta')?.value || '';
+  let out = [...mudanzas];
+  if(filtCliente) out = out.filter(m => m.cliente === filtCliente);
+  if(filtMes)      out = out.filter(m => m.fecha && m.fecha.startsWith(filtMes));
+  if(filtDesde)    out = out.filter(m => (m.fecha||'') >= filtDesde);
+  if(filtHasta)    out = out.filter(m => (m.fecha||'') <= filtHasta);
+  out.sort((a,b) => (b.fecha||'').localeCompare(a.fecha||'') || (b.ts||0)-(a.ts||0));
+  return out;
+}
+window.filtrarMudanzas = filtrarMudanzas;
+
+function renderMudanzas(){
+  renderFiltrosMudanzas();
+  const tbody = document.getElementById('tbody-mudanzas');
+  const tfoot = document.getElementById('tfoot-mudanzas');
+  const todas = filtrarMudanzas();
+
+  if(!todas.length){
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#94a3b8;padding:24px;">Sin mudanzas registradas</td></tr>';
+    if(tfoot) tfoot.innerHTML = '';
+    document.getElementById('mudanzas-paginacion').innerHTML = '';
+    return;
+  }
+
+  const totalPaginas = Math.max(1, Math.ceil(todas.length / MUDANZAS_PAGE_SIZE));
+  if(mudanzasPage > totalPaginas) mudanzasPage = totalPaginas;
+  if(mudanzasPage < 1) mudanzasPage = 1;
+  const inicio = (mudanzasPage - 1) * MUDANZAS_PAGE_SIZE;
+  const pagina = todas.slice(inicio, inicio + MUDANZAS_PAGE_SIZE);
+
+  tbody.innerHTML = pagina.map(m => {
+    const estRes = estadoResidencia(m);
+    const estCobro = estadoCobro(m);
+    return `
+    <tr>
+      <td>${m.fecha||''}</td>
+      <td><strong>${m.cliente||''}</strong></td>
+      <td><strong style="background:${estRes.bg};color:${estRes.color};padding:2px 8px;border-radius:6px;" title="Residencia: ${estRes.label}">${m.clienteFinal||'-'}</strong></td>
+      <td class="mono">${m.destinacion||'-'}</td>
+      <td class="mono">${m.tc||''}</td>
+      <td class="mono">${m.valorUsd||''}</td>
+      <td style="color:#1e3a8a;font-weight:600;">$${fmt(m.honorNeto)}</td>
+      <td>${m.tieneFactura === false ? '— s/fact' : '$'+fmt(m.iva)}</td>
+      <td style="font-weight:700;">$${fmt(m.bruto)}</td>
+      <td style="color:#dc2626;">$${fmt(m.totalGastos)}</td>
+      <td style="color:#059669;font-weight:700;">$${fmt(m.netoFinal)}</td>
+      <td><span class="tag" style="background:${estCobro.bg};color:${estCobro.color};">${estCobro.label}</span></td>
+      <td>${m.ramiroPagado === 'si'
+        ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
+        : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}</td>
+      <td><span class="tag" style="background:${estRes.bg};color:${estRes.color};">${m.vencimientoResidencia ? m.vencimientoResidencia+' · ' : ''}${estRes.label}</span></td>
+      <td style="font-size:11px;color:#64748b;">${m.obs||''}</td>
+      <td style="display:flex;gap:6px;">
+        ${estCobro.estado !== 'si' ? `<button class="btn-success" style="padding:4px 10px;font-size:12px;" title="Registrar un cobro con su fecha" onclick="registrarCobroMudanza('${m.id}')">💰 Cobro</button>` : ''}
+        <button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="editarMudanza('${m.id}')">✏️ Editar</button>
+        <button class="btn-danger" onclick="eliminarMudanza('${m.id}')">✕</button>
+      </td>
+    </tr>
+  `;
+  }).join('');
+
+  if(tfoot){
+    const totUsd    = todas.reduce((a,b)=>a+(b.valorUsd||0),0);
+    const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
+    const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
+    const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
+    const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
+    const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
+    tfoot.innerHTML = `
+      <tr style="background:#f0f4f8;font-weight:700;border-top:2px solid #1e3a8a;">
+        <td colspan="5">TOTAL (${todas.length} mudanzas)</td>
+        <td class="mono">${totUsd.toFixed(2)}</td>
+        <td style="color:#1e3a8a;">$${fmt(totNeto)}</td>
+        <td>$${fmt(totIva)}</td>
+        <td style="color:#059669;">$${fmt(totBruto)}</td>
+        <td style="color:#dc2626;">$${fmt(totGastos)}</td>
+        <td style="color:#059669;">$${fmt(totQueda)}</td>
+        <td colspan="5"></td>
+      </tr>`;
+  }
+
+  document.getElementById('mudanzas-paginacion').innerHTML = `
+    <div class="pagin-bar">
+      <button onclick="cambiarPaginaMudanzas(-1)" ${mudanzasPage<=1?'disabled':''}>‹ Anterior</button>
+      <span>${mudanzasPage}/${totalPaginas}</span>
+      <button onclick="cambiarPaginaMudanzas(1)" ${mudanzasPage>=totalPaginas?'disabled':''}>Siguiente ›</button>
+    </div>`;
+}
+
+window.exportarMudanzas = function(){
+  const todas = filtrarMudanzas();
+  if(!todas.length){ toast('No hay mudanzas para exportar con esos filtros'); return; }
+
+  const fmtFechaAR = (iso) => {
+    if(!iso) return '';
+    const [y,m,d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+  const dec2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  const header = ['FECHA','CLIENTE','CLIENTE FINAL','DESTINACIÓN','TC','USD','HONOR. NETO','IVA','BRUTO','GASTOS','NOS QUEDA','COBRADO','MONTO COBRADO','SALDO A COBRAR','RAMIRO PAGADO','FACTURA','VENC. RESIDENCIA','ESTADO RESIDENCIA','OBS'];
+
+  const ordenadas = [...todas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const rows = ordenadas.map(m => {
+    const estRes = estadoResidencia(m);
+    const ec = estadoCobro(m);
+    const cobradoTxt = ec.estado === 'si' ? 'SI' : (ec.estado === 'parcial' ? 'PARCIAL' : 'NO');
+    return [
+      fmtFechaAR(m.fecha), m.cliente||'', m.clienteFinal||'', m.destinacion||'',
+      m.tc||'', m.valorUsd||'',
+      dec2(m.honorNeto), dec2(m.iva), dec2(m.bruto), dec2(m.totalGastos), dec2(m.netoFinal),
+      cobradoTxt,
+      dec2(ec.cobrado),
+      dec2(ec.saldo),
+      m.ramiroPagado === 'si' ? 'SI' : 'NO',
+      m.tieneFactura === false ? 'NO' : 'SI',
+      m.vencimientoResidencia ? fmtFechaAR(m.vencimientoResidencia) : '',
+      estRes.label,
+      m.obs || ''
+    ].map(puntoSiVacio);
+  });
+
+  const totNeto   = todas.reduce((a,b)=>a+(b.honorNeto||0),0);
+  const totIva    = todas.reduce((a,b)=>a+(b.iva||0),0);
+  const totBruto  = todas.reduce((a,b)=>a+(b.bruto||0),0);
+  const totGastos = todas.reduce((a,b)=>a+(b.totalGastos||0),0);
+  const totQueda  = todas.reduce((a,b)=>a+(b.netoFinal||0),0);
+  const totCobrado = todas.reduce((a,b) => a + estadoCobro(b).cobrado, 0);
+  const totSaldoCobro = todas.reduce((a,b) => a + estadoCobro(b).saldo, 0);
+
+  const totalRow = ['TOTAL', `${todas.length} mudanza(s)`, '', '', '', '', dec2(totNeto), dec2(totIva), dec2(totBruto), dec2(totGastos), dec2(totQueda), '', dec2(totCobrado), dec2(totSaldoCobro), '', '', '', '', ''].map(puntoSiVacio);
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:11},{wch:20},{wch:20},{wch:16},{wch:8},{wch:8},
+    {wch:13},{wch:12},{wch:13},{wch:12},{wch:13},{wch:9},{wch:13},{wch:13},{wch:12},{wch:9},{wch:13},{wch:14},{wch:28}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length;
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} mudanza(s)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" mudanza(s)"` };
+
+    [6,7,8,9,10,12,13].forEach(c => {
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [6,7,8,9,10,12,13],
+    colsNumericas: [4,5,6,7,8,9,10,12,13]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mudanzas');
+
+  const filtCliente = document.getElementById('mud_filtro_cliente')?.value || 'todos';
+  const filtMes     = document.getElementById('mud_filtro_mes')?.value || 'todos';
+  const nombreArchivo = `mudanzas_${filtCliente}_${filtMes}.xlsx`.replace(/\s+/g,'_');
+
+  XLSX.writeFile(wb, nombreArchivo);
+};
+
+// ══════════════════════════════ CUENTA RAMIRO ══════════════════════════════
+
+let ramiroMesesSeleccionados = new Set(); // vacío = todos los meses
+let ramiroMesesDisponibles = []; // se recalcula en cada renderRamiro()
+
+window.toggleRamiroMesesDropdown = function(){
+  const dd = document.getElementById('ramiro-meses-dropdown');
+  dd.classList.toggle('show');
+};
+
+document.addEventListener('click', function(e){
+  const dd  = document.getElementById('ramiro-meses-dropdown');
+  const btn = document.getElementById('ramiro-meses-btn');
+  if(!dd || !btn) return;
+  if(dd.classList.contains('show') && !dd.contains(e.target) && !btn.contains(e.target)){
+    dd.classList.remove('show');
+  }
+});
+
+window.seleccionarTodosMesesRamiro = function(todos){
+  if(todos){
+    ramiroMesesSeleccionados = new Set(ramiroMesesDisponibles);
+  } else {
+    ramiroMesesSeleccionados = new Set();
+  }
+  renderRamiro();
+};
+
+window.toggleRamiroMes = function(mes, checked){
+  if(checked) ramiroMesesSeleccionados.add(mes);
+  else ramiroMesesSeleccionados.delete(mes);
+  renderRamiro();
+};
+
+function renderRamiroMesesDropdown(){
+  const checksEl = document.getElementById('ramiro-meses-checks');
+  const badgeEl  = document.getElementById('ramiro-meses-badge');
+  if(!checksEl) return;
+
+  if(!ramiroMesesDisponibles.length){
+    checksEl.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px;">Sin registros</div>';
+  } else {
+    checksEl.innerHTML = ramiroMesesDisponibles.map(m => `
+      <label class="multisel-item">
+        <input type="checkbox" ${ramiroMesesSeleccionados.has(m)?'checked':''} onchange="toggleRamiroMes('${m}', this.checked)">
+        ${m}
+      </label>
+    `).join('');
+  }
+
+  const hayFiltro = ramiroMesesSeleccionados.size > 0 && ramiroMesesSeleccionados.size < ramiroMesesDisponibles.length;
+  if(hayFiltro){
+    badgeEl.style.display = 'inline-block';
+    badgeEl.textContent = ramiroMesesSeleccionados.size;
+  } else {
+    badgeEl.style.display = 'none';
+  }
+}
+
+let ramiroSeleccionadas = new Set();
+let ramiroItemsPorKey = {};
+
+function keyRamiro(col, id){ return col + '_' + id; }
+
+window.toggleRamiroItemSeleccion = function(key, checked){
+  if(checked) ramiroSeleccionadas.add(key);
+  else ramiroSeleccionadas.delete(key);
+  actualizarInfoSeleccionRamiro();
+  const chkTodas = document.getElementById('ramiro_chk_todas');
+  if(chkTodas){
+    const keysFiltradas = Object.keys(ramiroItemsPorKey);
+    chkTodas.checked = keysFiltradas.length > 0 && keysFiltradas.every(k => ramiroSeleccionadas.has(k));
+  }
+};
+
+window.toggleRamiroSeleccionTodas = function(checked){
+  Object.keys(ramiroItemsPorKey).forEach(k => {
+    if(checked) ramiroSeleccionadas.add(k);
+    else ramiroSeleccionadas.delete(k);
+  });
+  renderRamiro();
+};
+
+function actualizarInfoSeleccionRamiro(){
+  const infoEl = document.getElementById('ramiro-seleccion-info');
+  if(!infoEl) return;
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){
+    infoEl.textContent = 'Ninguna operación seleccionada para el reporte';
+    return;
+  }
+  const totalPesos = seleccionadas.reduce((a,b) => a + b.pesos, 0);
+  const totalUsd   = seleccionadas.reduce((a,b) => a + b.ramiroUsd, 0);
+  infoEl.textContent = `${seleccionadas.length} seleccionada(s) — USD ${fmt(totalUsd)} · $${fmt(totalPesos)}`;
+}
+
+window.renderRamiro = function(){
+  const filtEstado = document.getElementById('ramiro_filtro_estado')?.value || '';
+  const filtFecha   = document.getElementById('ramiro_filtro_fecha')?.value || '';
+  const tc = 1440;
+
+  const itemsTodos = [];
+
+  operaciones.filter(o => o.esKotinya).forEach(o => {
+    itemsTodos.push({
+      tipo: 'Kotinya',
+      fecha: o.fecha,
+      cliente: o.cliente || '',
+      destinacion: o.destinacion || '',
+      detalle: o.obs || '',
+      ramiroUsd: o.ramiroDeuda || 30,
+      pesos: (o.ramiroDeuda || 30) * (o.tc || tc),
+      estado: o.ramiroOPagado || 'no',
+      cobrado: true,
+      id: o.id,
+      col: 'ops'
+    });
+  });
+
+  mudanzas.forEach(m => {
+    itemsTodos.push({
+      tipo: 'Mudanza',
+      fecha: m.fecha,
+      cliente: m.cliente || '',
+      destinacion: m.destinacion || '',
+      detalle: m.obs || '',
+      ramiroUsd: m.ramiroUsd || 190,
+      pesos: m.gastoRamiro || (m.ramiroUsd || 190) * (m.tc || tc),
+      estado: m.ramiroPagado || 'no',
+      cobrado: estadoCobro(m).ramiroHabilitado,
+      id: m.id,
+      col: 'mudanzas'
+    });
+  });
+
+  itemsTodos.sort((a,b) => a.fecha > b.fecha ? -1 : 1);
+
+  ramiroMesesDisponibles = [...new Set(itemsTodos.map(i => i.fecha?.slice(0,7)).filter(Boolean))].sort().reverse();
+  ramiroMesesSeleccionados = new Set([...ramiroMesesSeleccionados].filter(m => ramiroMesesDisponibles.includes(m)));
+  renderRamiroMesesDropdown();
+
+  let items = [...itemsTodos];
+  if(ramiroMesesSeleccionados.size > 0){
+    items = items.filter(i => i.fecha && ramiroMesesSeleccionados.has(i.fecha.slice(0,7)));
+  }
+  if(filtFecha) items = items.filter(i => i.fecha === filtFecha);
+
+  const filtrados = filtEstado ? items.filter(i => i.estado === filtEstado) : items;
+
+  ramiroItemsPorKey = {};
+  filtrados.forEach(i => { ramiroItemsPorKey[keyRamiro(i.col, i.id)] = i; });
+  ramiroSeleccionadas = new Set([...ramiroSeleccionadas].filter(k => ramiroItemsPorKey[k]));
+
+  const totalUsd      = items.reduce((a,b) => a + b.ramiroUsd, 0);
+  const totalPesos    = items.reduce((a,b) => a + b.pesos, 0);
+  const pendienteUsd  = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.ramiroUsd, 0);
+  const pagadoUsd     = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.ramiroUsd, 0);
+  const pagadoPesos   = items.filter(i => i.estado === 'si').reduce((a,b) => a + b.pesos, 0);
+  const pendientePesos = items.filter(i => i.estado === 'no').reduce((a,b) => a + b.pesos, 0);
+
+  document.getElementById('ramiro-kpis').innerHTML = `
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
+      <div class="kpi-label">Total a pagar (histórico)</div>
+      <div class="kpi-val" style="color:#dc2626;">$${fmt(totalPesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(totalUsd)}</div>
+    </div>
+    <div class="kpi" style="border-color:#fca5a5;background:#fef2f2;">
+      <div class="kpi-label">⚠️ Pendiente de pago</div>
+      <div class="kpi-val" style="color:#dc2626;">$${fmt(pendientePesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(pendienteUsd)}</div>
+    </div>
+    <div class="kpi" style="border-color:#86efac;background:#f0fdf4;">
+      <div class="kpi-label">✅ Ya pagado</div>
+      <div class="kpi-val" style="color:#059669;">$${fmt(pagadoPesos)}</div>
+      <div class="kpi-sub">≈ USD ${fmt(pagadoUsd)}</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Mudanzas</div>
+      <div class="kpi-val">${items.filter(i=>i.tipo==='Mudanza').length}</div>
+      <div class="kpi-sub">Kotinya: ${items.filter(i=>i.tipo==='Kotinya').length}</div>
+    </div>
+  `;
+
+  const tbodyRamiro = document.getElementById('tbody-ramiro');
+  const ramiroPaginacionEl = document.getElementById('ramiro-paginacion');
+
+  if(!filtrados.length){
+    tbodyRamiro.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros</td></tr>';
+    if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = '';
+    actualizarInfoSeleccionRamiro();
+    const chkTodasVacio = document.getElementById('ramiro_chk_todas');
+    if(chkTodasVacio) chkTodasVacio.checked = false;
+    return;
+  }
+
+  const { pagina, page, totalPaginas } = paginarArray('ramiro', filtrados, PAGE_SIZE_GENERICO);
+
+  tbodyRamiro.innerHTML = pagina.map(i => {
+    const key = keyRamiro(i.col, i.id);
+    const tildada = ramiroSeleccionadas.has(key);
+    return `
+      <tr>
+        <td><input type="checkbox" ${tildada?'checked':''} onchange="toggleRamiroItemSeleccion('${key}', this.checked)"></td>
+        <td><span class="tag" style="${i.tipo==='Kotinya'?'background:#fef9c3;color:#92400e':'background:#dbeafe;color:#1e3a8a'}">${i.tipo}</span></td>
+        <td>${i.fecha||''}</td>
+        <td><strong>${i.cliente}</strong></td>
+        <td class="mono">${i.destinacion||'-'}</td>
+        <td style="font-size:12px;color:#64748b;">${i.detalle}</td>
+        <td style="font-weight:700;color:#dc2626;">USD ${i.ramiroUsd}</td>
+        <td>$${fmt(i.pesos)}</td>
+        <td>
+          ${i.estado === 'si'
+            ? '<span class="tag" style="background:#dcfce7;color:#166534;">✅ Pagado</span>'
+            : '<span class="tag" style="background:#fee2e2;color:#991b1b;">❌ Pendiente</span>'}
+        </td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${i.estado === 'no'
+            ? (i.col === 'mudanzas' && !i.cobrado
+                ? '<span class="tag" style="background:#fee2e2;color:#991b1b;">⏳ Falta cobrar el 50%</span>'
+                : `<button class="btn-success" style="font-size:11px;padding:4px 10px;" onclick="pagarRamiroItem('${i.id}','${i.col}')">Marcar pagado</button>`)
+            : `<button class="btn-outline" style="font-size:11px;padding:4px 10px;" onclick="editarRamiroItem('${i.id}','${i.col}')">✏️ Editar</button>`}
+          <button class="btn-danger" onclick="eliminarRamiroItem('${i.id}','${i.col}','${i.tipo}')">🗑</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if(ramiroPaginacionEl) ramiroPaginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'ramiro');
+
+  const keysFiltradas = Object.keys(ramiroItemsPorKey);
+  const chkTodas = document.getElementById('ramiro_chk_todas');
+  if(chkTodas) chkTodas.checked = keysFiltradas.length > 0 && keysFiltradas.every(k => ramiroSeleccionadas.has(k));
+
+  actualizarInfoSeleccionRamiro();
+};
+
+window.marcarPagadasSeleccionRamiro = async function(){
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){ toast('⚠️ No hay operaciones seleccionadas'); return; }
+
+  const pendientes = seleccionadas.filter(i => i.estado !== 'si');
+  if(!pendientes.length){ toast('Las seleccionadas ya están todas pagadas'); return; }
+
+  const bloqueadas = pendientes.filter(i => i.col === 'mudanzas' && !i.cobrado);
+  const aplicar = pendientes.filter(i => !(i.col === 'mudanzas' && !i.cobrado));
+
+  if(!aplicar.length){
+    toast('⚠️ Todas las seleccionadas son mudanzas que todavía no cobraron el 50%');
+    return;
+  }
+
+  if(!confirm(`¿Marcar ${aplicar.length} operación(es) como pagadas a Ramiro?${bloqueadas.length ? ` (${bloqueadas.length} quedan afuera por no tener el 50% cobrado)` : ''}`)) return;
+
+  for(const i of aplicar){
+    const colName = i.col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+    const campo   = i.col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+    await updateDoc(doc(db, colName, i.id), { [campo]: 'si' });
+  }
+  toast(`✅ ${aplicar.length} registro(s) marcados como pagados`);
+};
+
+window.exportarRamiroExcel = function(){
+  const seleccionadas = [...ramiroSeleccionadas].map(k => ramiroItemsPorKey[k]).filter(Boolean);
+  if(!seleccionadas.length){
+    toast('⚠️ Tildá al menos una operación de la tabla para armar el reporte');
+    return;
+  }
+
+  const dec2 = (n) => Math.round(((n||0) + Number.EPSILON) * 100) / 100;
+
+  const ordenadas = [...seleccionadas].sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const header = ['TIPO','FECHA','CLIENTE','DESTINACIÓN','DETALLE','USD RAMIRO','$ (TC)','ESTADO'];
+
+  const rows = ordenadas.map(i => [
+    i.tipo,
+    i.fecha || '',
+    i.cliente || '',
+    i.destinacion || '',
+    i.detalle || '',
+    dec2(i.ramiroUsd),
+    dec2(i.pesos),
+    i.estado === 'si' ? 'PAGADO' : 'PENDIENTE'
+  ].map(puntoSiVacio));
+
+  const totUsd   = ordenadas.reduce((a,b) => a + (b.ramiroUsd||0), 0);
+  const totPesos = ordenadas.reduce((a,b) => a + (b.pesos||0), 0);
+  const totalRow = ['TOTAL', `${ordenadas.length} operación(es)`, '', '', '', dec2(totUsd), dec2(totPesos), ''].map(puntoSiVacio);
+
+  const aoa = [header, ...rows, totalRow];
+  const ws  = XLSX.utils.aoa_to_sheet(aoa);
+
+  ws['!cols'] = [
+    {wch:10},{wch:11},{wch:20},{wch:18},{wch:26},{wch:12},{wch:12},{wch:11}
+  ];
+
+  const lastCol = XLSX.utils.encode_col(header.length - 1);
+  const firstDataRow = 2;
+  const lastDataRow  = 1 + rows.length;
+  const totalRowNum  = 2 + rows.length;
+  ws['!autofilter'] = { ref: `A1:${lastCol}${lastDataRow}` };
+
+  {
+    const addrCant = XLSX.utils.encode_cell({ r: totalRowNum - 1, c: 1 });
+    ws[addrCant] = { t:'str', v: `${rows.length} operación(es)`, f: `SUBTOTAL(103,A${firstDataRow}:A${lastDataRow})&" operación(es)"` };
+    [5,6].forEach(c => {
+      const colLetter = XLSX.utils.encode_col(c);
+      const addr = XLSX.utils.encode_cell({ r: totalRowNum - 1, c });
+      ws[addr] = { t:'n', v: totalRow[c], f: `SUBTOTAL(109,${colLetter}${firstDataRow}:${colLetter}${lastDataRow})` };
+    });
+  }
+
+  estilizarHojaExcel(ws, {
+    numCols: header.length,
+    numDataRows: rows.length,
+    colsDecimal2: [5,6],
+    colsNumericas: [5,6]
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Pago Ramiro');
+
+  const hoy = fechaLocalISO();
+  const nombreArchivo = `pago_ramiro_${hoy}_${ordenadas.length}ops.xlsx`.replace(/\s+/g,'_');
+  XLSX.writeFile(wb, nombreArchivo);
+  toast('📥 Excel generado: ' + ordenadas.length + ' operación(es) por $' + fmt(totPesos));
+};
+
+window.editarRamiroItem = async function(id, col){
+  if(!confirm('¿Volver a marcar este pago de Ramiro como PENDIENTE?')) return;
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+  await updateDoc(doc(db, colName, id), { [campo]: 'no' });
+  toast('↩️ Revertido a pendiente');
+};
+
+window.eliminarRamiroItem = async function(id, col, tipo){
+  const msg = tipo === 'Mudanza'
+    ? '¿Eliminar esta mudanza? Se borra el registro completo, no solo la deuda de Ramiro.'
+    : '¿Eliminar esta operación Kotinya? Se borra el registro completo, no solo la deuda de Ramiro.';
+  if(!confirm(msg)) return;
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+  await deleteDoc(doc(db, colName, id));
+  if(col === 'mudanzas'){
+    for(const c of mudanzasCobros.filter(x => x.mudanzaId === id)){
+      await deleteDoc(doc(db,'corresponsales_mudanzas_cobros', c.id));
+    }
+  }
+  toast('Registro eliminado');
+};
+
+window.pagarRamiroItem = async function(id, col){
+  const colName = col === 'ops' ? 'despachantees_ops' : 'corresponsales_mudanzas';
+  const campo   = col === 'ops' ? 'ramiroOPagado' : 'ramiroPagado';
+  await updateDoc(doc(db, colName, id), { [campo]: 'si' });
+  toast('✅ Marcado como pagado');
+};
+
+window.marcarTodoPagadoRamiro = async function(){
+  if(!confirm('¿Marcar TODOS los pendientes como pagados a Ramiro? (Solo se marcarán mudanzas con 50% o más ya cobrado)')) return;
+  const pending = [
+    ...operaciones.filter(o => o.esKotinya && o.ramiroOPagado !== 'si').map(o => ({id:o.id, col:'despachantees_ops', campo:'ramiroOPagado'})),
+    ...mudanzas.filter(m => m.ramiroPagado !== 'si' && estadoCobro(m).ramiroHabilitado).map(m => ({id:m.id, col:'corresponsales_mudanzas', campo:'ramiroPagado'}))
+  ];
+  for(const p of pending){
+    await updateDoc(doc(db, p.col, p.id), { [p.campo]: 'si' });
+  }
+  toast(`✅ ${pending.length} registros marcados como pagados`);
+};
+
+// ── RECIBOS ──
+const EMPRESA_REMITO = {
+  nombre: 'GLOBALCOMINT SAS',
+  subtitulo: 'Despachante de Aduana',
+  direccion: 'Mendoza, Argentina', // TODO: confirmar (Ej: PTM Of. 14 / Puerto Seco Of. A4)
+  telefono: '261 701-6488',
+  cuit: '30-71614367-4'
+};
+
+let remitos = [];
+let remitoSeleccionadas = new Set();
+
+onSnapshot(collection(db,'despachantees_remitos'), snap => {
+  remitos = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => (b.numero||0)-(a.numero||0));
+  renderHistorialRemitos();
+});
+
+function poblarSelectRemitoDespachante(){
+  const sel = document.getElementById('remito_despachante');
+  if(!sel) return;
+  const v = sel.value;
+  const nombres = [...new Set(clientes.map(c => c.nombre))].sort();
+  sel.innerHTML = '<option value="">Seleccioná un despachante...</option>' +
+    nombres.map(n => `<option value="${n}">${n}</option>`).join('');
+  sel.value = v;
+}
+
+window.onCambiarConceptoGenerico = function(){
+  const sel = document.getElementById('recgen_concepto_sel').value;
+  document.getElementById('recgen_concepto_otro_wrap').style.display = sel === 'otro' ? '' : 'none';
+};
+
+function construirHtmlReciboGenerico(numero, de, fecha, concepto, monto){
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;color:#1e293b;padding:40px;max-width:700px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px;}
+  .empresa-nombre{font-size:22px;font-weight:700;color:#1e3a8a;}
+  .empresa-sub{font-size:12px;color:#64748b;margin-top:2px;}
+  .empresa-datos{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;}
+  .recibo-titulo{text-align:right;}
+  .recibo-titulo .tag{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:15px;padding:6px 16px;border-radius:8px;display:inline-block;}
+  .recibo-num{font-size:12px;color:#64748b;margin-top:6px;}
+  .datos-recibo{display:flex;justify-content:space-between;margin-bottom:28px;font-size:13px;}
+  .cuerpo{font-size:15px;line-height:1.9;background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px;}
+  .cuerpo strong{color:#1e3a8a;}
+  .monto-destacado{font-size:26px;font-weight:700;color:#059669;margin:14px 0;}
+  .firma-box{display:flex;justify-content:space-between;margin-top:70px;}
+  .firma{width:220px;border-top:1px solid #94a3b8;text-align:center;padding-top:6px;font-size:11px;color:#64748b;}
+  @media print{ body{padding:20px;} }
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div class="empresa-nombre">${EMPRESA_REMITO.nombre}</div>
+      <div class="empresa-sub">${EMPRESA_REMITO.subtitulo}</div>
+      <div class="empresa-datos">
+        ${EMPRESA_REMITO.direccion}<br>
+        Tel: ${EMPRESA_REMITO.telefono}${EMPRESA_REMITO.cuit ? '<br>CUIT: '+EMPRESA_REMITO.cuit : ''}
+      </div>
+    </div>
+    <div class="recibo-titulo">
+      <span class="tag">RECIBO</span>
+      <div class="recibo-num">N° ${String(numero).padStart(5,'0')}</div>
     </div>
   </div>
 
-  <!-- ═══════════════ TAB: RECIBOS ═══════════════ -->
-  <div id="tab-remitos" style="display:none;">
-
-    <div class="section-card">
-      <h3>🧾 Recibo genérico (fotocopias, MIC, varios)</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Recibimos de</label>
-          <input type="text" id="recgen_de" placeholder="Nombre de quien paga">
-        </div>
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="recgen_fecha">
-        </div>
-        <div class="form-group">
-          <label>Concepto</label>
-          <select id="recgen_concepto_sel" onchange="onCambiarConceptoGenerico()">
-            <option value="Impresión de fotocopias">Impresión de fotocopias</option>
-            <option value="Impresión de MIC">Impresión de MIC</option>
-            <option value="otro">Otro (especificar)</option>
-          </select>
-        </div>
-        <div class="form-group" id="recgen_concepto_otro_wrap" style="display:none;">
-          <label>Especificar concepto</label>
-          <input type="text" id="recgen_concepto_otro" placeholder="Detalle del concepto">
-        </div>
-        <div class="form-group">
-          <label>Monto ($)</label>
-          <input type="number" id="recgen_monto" placeholder="$ 0" step="0.01">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-success" onclick="generarReciboGenerico()">🧾 Generar recibo</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="section-card">
-      <h3>🧾 Generar recibo por operaciones</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Despachante</label>
-          <select id="remito_despachante" onchange="renderRemitos()">
-            <option value="">Seleccioná un despachante...</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Fecha desde</label>
-          <input type="date" id="remito_fecha_desde" onchange="renderRemitos()">
-        </div>
-        <div class="form-group">
-          <label>Fecha hasta</label>
-          <input type="date" id="remito_fecha_hasta" onchange="renderRemitos()">
-        </div>
-        <div class="form-group">
-          <label>Mostrar</label>
-          <select id="remito_filtro_estado" onchange="renderRemitos()">
-            <option value="todas">Todas las operaciones</option>
-            <option value="sin_remito">Solo sin recibo emitido</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <div class="section-card" id="remito-lista-card" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-        <h3 style="margin:0;">Operaciones de <span id="remito-desp-nombre" style="color:#1e3a8a;"></span></h3>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <span id="remito-total-sel" style="font-size:13px;font-weight:700;color:#1e3a8a;"></span>
-          <button class="btn-success" onclick="generarRemito()">🧾 Generar Recibo con seleccionadas</button>
-        </div>
-      </div>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th style="width:36px;"><input type="checkbox" id="remito_chk_todas" onchange="toggleRemitoTodas(this.checked)"></th>
-              <th>Fecha</th>
-              <th>Cliente</th>
-              <th>Destinación</th>
-              <th>Canal</th>
-              <th>Valor $</th>
-              <th>Recibo previo</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-remito-ops"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="section-card">
-      <h3>📜 Historial de recibos emitidos</h3>
-      <div class="tabla-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>N° Recibo</th>
-              <th>Fecha</th>
-              <th>Despachante</th>
-              <th>Ops</th>
-              <th>Total $</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="tbody-remitos-hist">
-            <tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div id="remitos-paginacion"></div>
-    </div>
-
+  <div class="datos-recibo">
+    <div><strong>Recibimos de:</strong> ${de || '-'}</div>
+    <div><strong>Fecha de emisión:</strong> ${fecha}</div>
   </div>
 
-  <!-- ═══════════════ TAB: TIPO DE CAMBIO ═══════════════ -->
-  <div id="tab-tc" style="display:none;">
+  <div class="cuerpo">
+    Recibimos la suma de
+    <div class="monto-destacado">$ ${fmt2(monto)}</div>
+    (Pesos Argentinos) en concepto de: <strong>${concepto}</strong>.
+  </div>
 
-    <div class="section-card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <h3 style="margin:0;">💵 Dólar oficial · Banco Nación · hoy</h3>
-        <button class="btn-outline" onclick="renderTipoCambio(true)">🔄 Actualizar</button>
-      </div>
-      <div id="tc-hoy"></div>
-      <div style="font-size:12px;color:#64748b;margin-top:12px;background:#eff6ff;border-radius:8px;padding:10px 12px;">
-        Se usa el valor de <b>venta</b> (el más alto del oficial). Es el mismo que se carga solo en el campo TC cuando elegís el tipo de operación <b>MIC</b> en una operación nueva, según la fecha de esa operación.
+  <div class="firma-box">
+    <div class="firma">Recibí conforme</div>
+    <div class="firma">Aclaración / DNI</div>
+  </div>
+
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`;
+}
+
+window.generarReciboGenerico = async function(){
+  const de = document.getElementById('recgen_de').value.trim();
+  const fecha = document.getElementById('recgen_fecha').value || fechaLocalISO();
+  const selConcepto = document.getElementById('recgen_concepto_sel').value;
+  const concepto = selConcepto === 'otro'
+    ? document.getElementById('recgen_concepto_otro').value.trim()
+    : selConcepto;
+  const monto = parseFloat(document.getElementById('recgen_monto').value);
+
+  if(!concepto){ toast('⚠️ Ingresá el concepto del recibo'); return; }
+  if(!monto || monto <= 0){ toast('⚠️ Ingresá un monto válido'); return; }
+
+  const numero = remitos.length + 1;
+
+  try {
+    await addDoc(collection(db,'despachantees_remitos'), {
+      numero, fecha, total: monto, concepto, de,
+      generico: true,
+      despachante: de || 'Genérico',
+      ops: [],
+      generadoPor: user.username, ts: Date.now()
+    });
+
+    const html = construirHtmlReciboGenerico(numero, de, fecha, concepto, monto);
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+
+    document.getElementById('recgen_de').value = '';
+    document.getElementById('recgen_monto').value = '';
+    document.getElementById('recgen_concepto_otro').value = '';
+    toast('✅ Recibo genérico N° ' + numero + ' generado');
+  } catch(e){
+    toast('❌ Error al generar el recibo: ' + e.message);
+  }
+};
+
+window.renderRemitos = function(){
+  poblarSelectRemitoDespachante();
+  const desp = document.getElementById('remito_despachante').value;
+  const desde = document.getElementById('remito_fecha_desde').value;
+  const hasta = document.getElementById('remito_fecha_hasta').value;
+  const filtroEstado = document.getElementById('remito_filtro_estado').value;
+  const card = document.getElementById('remito-lista-card');
+
+  if(!desp){
+    card.style.display = 'none';
+    return;
+  }
+  card.style.display = 'block';
+  document.getElementById('remito-desp-nombre').textContent = desp;
+
+  let ops = operaciones.filter(o => o.despachante === desp);
+  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
+  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
+  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
+  ops = ops.sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''));
+
+  const idsVisibles = new Set(ops.map(o => o.id));
+  [...remitoSeleccionadas].forEach(id => { if(!idsVisibles.has(id)) remitoSeleccionadas.delete(id); });
+
+  const tbody = document.getElementById('tbody-remito-ops');
+  if(!ops.length){
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:20px;">Sin operaciones con esos filtros</td></tr>';
+  } else {
+    tbody.innerHTML = ops.map(o => `
+      <tr>
+        <td><input type="checkbox" ${remitoSeleccionadas.has(o.id)?'checked':''} onchange="toggleRemitoOp('${o.id}', this.checked)"></td>
+        <td>${o.fecha||''}</td>
+        <td>${o.cliente||'-'}</td>
+        <td class="mono">${o.destinacion||'-'}</td>
+        <td>${(o.tipo==='MIC'||o.tipo==='MULTINOTA'||o.tipo==='OFICIO'||o.tipo==='ADICIONALES') ? '-' : `<span class="canal-badge canal-${o.canal||'V'}">${o.canal||'V'}</span>`}</td>
+        <td style="font-weight:700;color:#059669;">$${fmt2(o.bruto)}</td>
+        <td>${o.numRemito ? `<span class="tag" style="background:#fef9c3;color:#92400e;">N° ${o.numRemito}</span>` : '<span class="tag" style="background:#f1f5f9;color:#64748b;">Sin recibo</span>'}</td>
+      </tr>
+    `).join('');
+  }
+
+  document.getElementById('remito_chk_todas').checked = ops.length > 0 && ops.every(o => remitoSeleccionadas.has(o.id));
+  actualizarTotalRemito();
+};
+
+window.toggleRemitoOp = function(id, checked){
+  if(checked) remitoSeleccionadas.add(id);
+  else remitoSeleccionadas.delete(id);
+  actualizarTotalRemito();
+};
+
+window.toggleRemitoTodas = function(checked){
+  const desp = document.getElementById('remito_despachante').value;
+  const desde = document.getElementById('remito_fecha_desde').value;
+  const hasta = document.getElementById('remito_fecha_hasta').value;
+  const filtroEstado = document.getElementById('remito_filtro_estado').value;
+  let ops = operaciones.filter(o => o.despachante === desp);
+  if(desde) ops = ops.filter(o => (o.fecha||'') >= desde);
+  if(hasta) ops = ops.filter(o => (o.fecha||'') <= hasta);
+  if(filtroEstado === 'sin_remito') ops = ops.filter(o => !o.numRemito);
+  ops.forEach(o => { if(checked) remitoSeleccionadas.add(o.id); else remitoSeleccionadas.delete(o.id); });
+  renderRemitos();
+};
+
+function actualizarTotalRemito(){
+  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
+  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
+  document.getElementById('remito-total-sel').textContent =
+    seleccionadas.length ? `${seleccionadas.length} operación(es) seleccionada(s) — Total $${fmt2(total)}` : 'Ninguna operación seleccionada';
+}
+
+function renderHistorialRemitos(){
+  const tbody = document.getElementById('tbody-remitos-hist');
+  const paginacionEl = document.getElementById('remitos-paginacion');
+  if(!tbody) return;
+  if(!remitos.length){
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:16px;">Sin recibos emitidos</td></tr>';
+    if(paginacionEl) paginacionEl.innerHTML = '';
+    return;
+  }
+  const { pagina, page, totalPaginas } = paginarArray('remitosHist', remitos, PAGE_SIZE_GENERICO);
+  tbody.innerHTML = pagina.map(r => `
+    <tr>
+      <td class="mono">${r.numero||''}</td>
+      <td>${r.fecha||''}</td>
+      <td><strong>${r.despachante||''}</strong>${r.generico ? ` <span class="tag" style="background:#fef9c3;color:#92400e;">Genérico${r.concepto ? ': '+r.concepto : ''}</span>` : ''}</td>
+      <td style="text-align:center;">${r.generico ? '-' : (r.ops||[]).length}</td>
+      <td style="font-weight:700;color:#059669;">$${fmt2(r.total)}</td>
+      <td><button class="btn-outline" style="padding:4px 10px;font-size:12px;" onclick="reimprimirRemito('${r.id}')">🖨️ Reimprimir</button> <button class="btn-danger" onclick="eliminarRecibo('${r.id}')">✕</button></td>
+    </tr>
+  `).join('');
+  if(paginacionEl) paginacionEl.innerHTML = htmlPaginacionGenerica(page, totalPaginas, 'remitosHist');
+}
+
+function construirHtmlRemito(numero, despachante, fecha, opsData, total){
+  const filas = opsData.map(o => `
+    <tr>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.fecha||''}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;">${o.cliente||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-family:monospace;">${o.destinacion||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:center;">${o.canal||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-family:monospace;">${o.tc||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b;">${o.obs||'-'}</td>
+      <td style="padding:8px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:600;">$${fmt2(o.bruto)}</td>
+    </tr>
+  `).join('');
+
+  return `<!DOCTYPE html>
+<html lang="es"><head><meta charset="UTF-8"><title>Recibo N° ${numero} - ${despachante}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+  *{box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;color:#1e293b;padding:40px;max-width:800px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #1e3a8a;padding-bottom:16px;margin-bottom:24px;}
+  .empresa-nombre{font-size:22px;font-weight:700;color:#1e3a8a;}
+  .empresa-sub{font-size:12px;color:#64748b;margin-top:2px;}
+  .empresa-datos{font-size:11px;color:#64748b;margin-top:6px;line-height:1.5;}
+  .recibo-titulo{text-align:right;}
+  .recibo-titulo .tag{background:#eff6ff;color:#1e3a8a;font-weight:700;font-size:15px;padding:6px 16px;border-radius:8px;display:inline-block;}
+  .recibo-num{font-size:12px;color:#64748b;margin-top:6px;}
+  .datos-recibo{display:flex;justify-content:space-between;margin-bottom:20px;font-size:13px;}
+  table{width:100%;border-collapse:collapse;margin-top:10px;}
+  thead tr{background:#1e3a8a;color:#fff;}
+  th{padding:8px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.3px;}
+  .total-row{font-weight:700;font-size:15px;color:#1e3a8a;}
+  .firma-box{display:flex;justify-content:space-between;margin-top:60px;}
+  .firma{width:220px;border-top:1px solid #94a3b8;text-align:center;padding-top:6px;font-size:11px;color:#64748b;}
+  @media print{ body{padding:20px;} }
+</style></head>
+<body>
+  <div class="header">
+    <div>
+      <div class="empresa-nombre">${EMPRESA_REMITO.nombre}</div>
+      <div class="empresa-sub">${EMPRESA_REMITO.subtitulo}</div>
+      <div class="empresa-datos">
+        ${EMPRESA_REMITO.direccion}<br>
+        Tel: ${EMPRESA_REMITO.telefono}${EMPRESA_REMITO.cuit ? '<br>CUIT: '+EMPRESA_REMITO.cuit : ''}
       </div>
     </div>
-
-    <div class="section-card">
-      <h3>📅 Consultar otra fecha</h3>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Fecha</label>
-          <input type="date" id="tc_consulta_fecha">
-        </div>
-        <div class="form-group" style="align-self:end;">
-          <button class="btn-primary" onclick="consultarTCBnaFecha()">Consultar</button>
-        </div>
-      </div>
-      <div id="tc-consulta" style="margin-top:14px;"></div>
+    <div class="recibo-titulo">
+      <span class="tag">RECIBO</span>
+      <div class="recibo-num">N° ${String(numero).padStart(5,'0')}</div>
     </div>
+  </div>
 
-  </div><!-- /tab-tc -->
+  <div class="datos-recibo">
+    <div><strong>Despachante:</strong> ${despachante}</div>
+    <div><strong>Fecha de emisión:</strong> ${fecha}</div>
+  </div>
 
-</div><!-- /main -->
+  <table>
+    <thead>
+      <tr><th>Fecha</th><th>Cliente</th><th>Destinación</th><th>Canal</th><th>TC</th><th>Obs</th><th style="text-align:right;">Valor $</th></tr>
+    </thead>
+    <tbody>${filas}</tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="6" style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">TOTAL</td>
+        <td style="padding:10px 8px;text-align:right;border-top:2px solid #1e3a8a;">$${fmt2(total)}</td>
+      </tr>
+    </tfoot>
+  </table>
 
+  <div class="firma-box">
+    <div class="firma">Recibí conforme</div>
+    <div class="firma">Aclaración / DNI</div>
+  </div>
 
-<div class="toast" id="toast"></div>
+  <script>window.onload = () => window.print();<\/script>
+</body></html>`;
+}
 
-<script type="module" src="operaciones.js"></script>
-</body>
-</html>
+window.generarRemito = async function(){
+  const despachante = document.getElementById('remito_despachante').value;
+  if(!despachante){ toast('Seleccioná un despachante'); return; }
+  const seleccionadas = operaciones.filter(o => remitoSeleccionadas.has(o.id));
+  if(!seleccionadas.length){ toast('⚠️ Tildá al menos una operación'); return; }
+
+  const numero = remitos.length + 1;
+  const fechaHoy = fechaLocalISO();
+  const total = seleccionadas.reduce((a,b) => a + (b.bruto||0), 0);
+
+  const opsData = seleccionadas
+    .sort((a,b) => (a.fecha||'').localeCompare(b.fecha||''))
+    .map(o => ({ id:o.id, fecha:o.fecha||'', cliente:o.cliente||'', destinacion:o.destinacion||'', canal:o.canal||'', tc:o.tc||'', obs:o.obs||'', bruto:o.bruto||0 }));
+
+  try {
+    await addDoc(collection(db,'despachantees_remitos'), {
+      numero, despachante, fecha: fechaHoy, ops: opsData, total,
+      generadoPor: user.username, ts: Date.now()
+    });
+    for(const o of seleccionadas){
+      await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: numero });
+    }
+
+    const html = construirHtmlRemito(numero, despachante, fechaHoy, opsData, total);
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+
+    remitoSeleccionadas.clear();
+    toast('✅ Recibo N° ' + numero + ' generado');
+    renderRemitos();
+  } catch(e){
+    toast('❌ Error al generar el recibo: ' + e.message);
+  }
+};
+
+window.reimprimirRemito = function(id){
+  const r = remitos.find(x => x.id === id);
+  if(!r) return;
+  const html = r.generico
+    ? construirHtmlReciboGenerico(r.numero, r.de, r.fecha, r.concepto, r.total||0)
+    : construirHtmlRemito(r.numero, r.despachante, r.fecha, r.ops||[], r.total||0);
+  const w = window.open('', '_blank');
+  w.document.write(html);
+  w.document.close();
+};
+
+window.eliminarRecibo = async function(id){
+  const r = remitos.find(x => x.id === id);
+  if(!r) return;
+  const msg = r.generico
+    ? `¿Eliminar el recibo genérico N° ${r.numero}?`
+    : `¿Eliminar el recibo N° ${r.numero} de ${r.despachante}? Las operaciones incluidas quedarán marcadas como "Sin recibo" y se van a poder volver a incluir en uno nuevo.`;
+  if(!confirm(msg)) return;
+  try {
+    if(!r.generico){
+      for(const o of (r.ops||[])){
+        await updateDoc(doc(db,'despachantees_ops', o.id), { numRemito: null });
+      }
+    }
+    await deleteDoc(doc(db,'despachantees_remitos', id));
+    toast('Recibo eliminado');
+    renderRemitos();
+  } catch(e){
+    toast('❌ Error al eliminar el recibo: ' + e.message);
+  }
+};
+
+// ── INIT ──
+recalcularFormulario();
+recalcMudanza();
+renderListadoArbolFechas();
