@@ -837,6 +837,11 @@ function getUsers() { return { ...USERS_DEFAULT, ...allUsuarios }; }
 function fmtMoney(n) { return '$ ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtUSD(n) { return 'U$D ' + Number(n||0).toLocaleString('es-AR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function today() { return new Date().toLocaleDateString('es-AR'); }
+// Fecha ISO (AAAA-MM-DD) en hora local: es el formato que usa Operaciones para pagos
+function hoyISO(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
 function anioDeFecha(fecha){
   const p=(fecha||'').split('/');
   return p.length===3 ? Number(p[2]) : null;
@@ -1197,7 +1202,7 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
   if (facturaKey && opsPorFactura[facturaKey]) {
     const pagoRef = await addDoc(collection(db,'despachantees_pagos'), {
       despachante: clienteUpper,
-      fecha: today(),
+      fecha: hoyISO(),
       monto: importe,
       numFactura: facturaKey,
       obs: 'Auto desde Caja - Factura ' + facturaKey,
@@ -1212,7 +1217,7 @@ async function vincularIngresoConOperaciones({ cliente, factura, importe, detall
   else if (despachantesOp.includes(clienteUpper)) {
     const pagoRef = await addDoc(collection(db,'despachantees_pagos'), {
       despachante: clienteUpper,
-      fecha: today(),
+      fecha: hoyISO(),
       monto: importe,
       obs: 'Auto desde Caja (sin factura): ' + (detalle||''),
       cargadoPor: currentUser.nombre,
