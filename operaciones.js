@@ -4629,6 +4629,26 @@ window.eliminarRecibo = async function(id){
   }
 };
 
+// ── MIGRACIÓN ÚNICA: pagos con fecha dd/mm/aaaa (cargados desde Caja) -> AAAA-MM-DD ──
+// Se ejecuta a mano una sola vez desde la consola: migrarFechasPagos()
+window.migrarFechasPagos = async function(){
+  try {
+    const snap = await getDocs(collection(db,'despachantees_pagos'));
+    let n = 0;
+    for(const d of snap.docs){
+      const m = String(d.data().fecha||'').trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if(m){
+        await _updateDoc(d.ref, { fecha: `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}` });
+        n++;
+      }
+    }
+    toast(`✅ ${n} pagos corregidos`);
+    await cargarHistorico(true);
+  } catch(e){
+    toast('❌ Error al migrar fechas: ' + e.message, true);
+  }
+};
+
 // ── INIT ──
 recalcularFormulario();
 recalcMudanza();
