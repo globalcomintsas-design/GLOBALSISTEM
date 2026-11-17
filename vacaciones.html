@@ -170,13 +170,13 @@ tr:hover td{background:#fafbff;}
       </div>
     </div>
 
-    <!-- Registrar vacaciones (solo admin) -->
+    <!-- Registrar / editar vacaciones (solo admin) -->
     <div class="registros-card" id="cardRegistrar" style="display:none">
       <div class="registros-card-header" onclick="toggleCard('cardRegistrar')">
         <div class="registros-card-header-left">
           <div class="registros-card-icon">➕</div>
           <div>
-            <div class="registros-card-title">Registrar vacaciones</div>
+            <div class="registros-card-title" id="tituloRegistrar">Registrar vacaciones</div>
             <div class="registros-card-sub">Cargar un nuevo período de vacaciones</div>
           </div>
         </div>
@@ -191,7 +191,10 @@ tr:hover td{background:#fafbff;}
           <div class="field full"><label>Observaciones (opcional)</label><input type="text" id="vacObs" placeholder="Ej: vacaciones anuales, día por estudio, etc." /></div>
         </div>
         <div id="vacNota" style="font-size:11px;color:#d97706;margin:-4px 0 10px;"></div>
-        <button class="btn btn-primary" onclick="guardarVacacion()">💾 Guardar vacaciones</button>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btnGuardarVac" onclick="guardarVacacion()">💾 Guardar vacaciones</button>
+          <button class="btn btn-outline" id="btnCancelarEdicion" style="display:none" onclick="cancelarEdicionVac()">✕ Cancelar edición</button>
+        </div>
       </div>
     </div>
 
@@ -297,6 +300,7 @@ let EMPLEADOS = [
 
 // Estado en memoria
 let currentUser = null;
+let editandoVacId = null;  // id del registro que se está editando (null = alta nueva)
 let allVac = [];           // todos los registros de vacaciones (cargados UNA vez, actualizados localmente después)
 let topePorEmpleado = {};  // topes "viejos" (sin año): { 'Bruno Cola': 14, ... }. Se interpretan como los de 2026 y anteriores.
 let topesPorAnio = {};     // topes por año: { 2026:{...}, 2027:{...} }. Cada año tiene los suyos y no pisa a los demás.
@@ -628,7 +632,41 @@ window.calcularDiasVac=function(){
   }
 };
 
-// ── GUARDAR / ELIMINAR ───────────────────────────────────
+// ── GUARDAR / EDITAR / ELIMINAR ──────────────────────────
+// Vuelve el formulario al modo "alta nueva" y lo limpia
+function resetFormVac(){
+  editandoVacId = null;
+  ['vacDesde','vacHasta','vacObs','vacDias'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  const n=document.getElementById('vacNota'); if(n) n.textContent='';
+  const bg=document.getElementById('btnGuardarVac'); if(bg) bg.textContent='💾 Guardar vacaciones';
+  const bc=document.getElementById('btnCancelarEdicion'); if(bc) bc.style.display='none';
+  const t=document.getElementById('tituloRegistrar'); if(t) t.textContent='Registrar vacaciones';
+}
+window.cancelarEdicionVac = resetFormVac;
+
+// Carga un registro existente en el formulario para editarlo
+window.editarVac=function(id){
+  if(currentUser?.rol!=='admin'){toast('Sin permiso','error');return;}
+  const r=allVac.find(v=>v.id===id); if(!r) return;
+  editandoVacId=id;
+  const sel=document.getElementById('vacEmpleado');
+  // si el empleado ya no está en la lista, lo agrega para no perder el dato
+  if(![...sel.options].some(o=>o.value===r.empleado)){
+    const o=document.createElement('option'); o.value=o.textContent=r.empleado; sel.appendChild(o);
+  }
+  sel.value=r.empleado;
+  document.getElementById('vacDesde').value=r.desde||'';
+  document.getElementById('vacHasta').value=r.hasta||'';
+  document.getElementById('vacObs').value=r.obs||'';
+  calcularDiasVac();
+  document.getElementById('btnGuardarVac').textContent='💾 Guardar cambios';
+  document.getElementById('btnCancelarEdicion').style.display='';
+  document.getElementById('tituloRegistrar').textContent='Editando vacaciones de '+r.empleado;
+  const card=document.getElementById('cardRegistrar');
+  card.classList.add('open');
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+};
+
 window.guardarVacacion=async function(){
   if(currentUser?.rol!=='admin'){toast('Sin permiso. Solo admin puede cargar vacaciones.','error');return;}
   const empleado=document.getElementById('vacEmpleado').value;
@@ -640,10 +678,12 @@ window.guardarVacacion=async function(){
   if(calc.total<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
   const dias=calc.dias;
   if(dias<=0){toast('El período solo incluye lunes feriados: no suma días','error');return;}
+
   // Aviso (no bloqueante) si se pasa del tope anual efectivo (base + acumulado de años anteriores)
   const anioActual=new Date(desde+'T00:00:00').getFullYear();  // año al que pertenece este período
+  // al editar, el registro original no se cuenta como ya tomado
   const yaTomados=allVac
-    .filter(v=>v.empleado===empleado)
+    .filter(v=>v.empleado===empleado && v.id!==editandoVacId)
     .reduce((s,v)=>s+(Number(v.dias)||0)*((new Date(v.desde+'T00:00:00').getFullYear()===anioActual)?1:0),0);
   const topeBase = topeDe(empleado, anioActual);
   const acum = saldoAcumulado(empleado, anioActual);
@@ -653,19 +693,30 @@ window.guardarVacacion=async function(){
     if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+msgAcum+'.\n\n¿Querés registrar igual?')) return;
   }
   try {
-    const nuevo={ empleado, desde, hasta, dias, obs, creadoPor:currentUser.nombre, ts:Date.now() };
-    if(calc.lunes.length) nuevo.lunesFeriados = calc.lunes.map(x=>x.fecha);
-    const ref = await addDoc(collection(db,'vacaciones'), nuevo);
-    nuevo.id = ref.id;
-    // Actualiza el array local en vez de releer toda la colección
-    allVac.unshift(nuevo);
-    document.getElementById('vacDesde').value='';
-    document.getElementById('vacHasta').value='';
-    document.getElementById('vacObs').value='';
-    document.getElementById('vacDias').value='';
-    const _n=document.getElementById('vacNota'); if(_n) _n.textContent='';
-    renderVacaciones();
-    toast('Vacaciones guardadas ✓','success');
+    if(editandoVacId){
+      // ── EDICIÓN: reemplaza el documento completo
+      const prev=allVac.find(v=>v.id===editandoVacId);
+      const upd={ empleado, desde, hasta, dias, obs,
+        creadoPor:prev?.creadoPor||currentUser.nombre, ts:prev?.ts||Date.now(),
+        editadoPor:currentUser.nombre, editadoTs:Date.now() };
+      if(calc.lunes.length) upd.lunesFeriados = calc.lunes.map(x=>x.fecha);
+      await setDoc(doc(db,'vacaciones',editandoVacId), upd);
+      allVac = allVac.map(v=>v.id===editandoVacId ? {...upd,id:editandoVacId} : v);
+      resetFormVac();
+      renderVacaciones();
+      toast('Vacaciones actualizadas ✓','success');
+    } else {
+      // ── ALTA NUEVA
+      const nuevo={ empleado, desde, hasta, dias, obs, creadoPor:currentUser.nombre, ts:Date.now() };
+      if(calc.lunes.length) nuevo.lunesFeriados = calc.lunes.map(x=>x.fecha);
+      const ref = await addDoc(collection(db,'vacaciones'), nuevo);
+      nuevo.id = ref.id;
+      // Actualiza el array local en vez de releer toda la colección
+      allVac.unshift(nuevo);
+      resetFormVac();
+      renderVacaciones();
+      toast('Vacaciones guardadas ✓','success');
+    }
   } catch(e){ toast('Error: '+e.message,'error'); }
 };
 
@@ -674,6 +725,7 @@ window.eliminarVac=async function(id){
   if(!confirm('¿Eliminar estas vacaciones? Esta acción no se puede deshacer.')) return;
   await deleteDoc(doc(db,'vacaciones',id));
   allVac = allVac.filter(v=>v.id!==id);
+  if(editandoVacId===id) resetFormVac();  // si se estaba editando este registro, se cancela la edición
   renderVacaciones();
   toast('Vacaciones eliminadas','error');
 };
@@ -748,8 +800,8 @@ window.renderVacaciones=function(){
   // ── Tabla de registros
   const esAdmin=currentUser?.rol==='admin';
   const esCargador=currentUser?.rol==='cargador';
-  // Tanto admin como cargador pueden eliminar registros (por si se equivocan al cargar)
-  // Viewer no ve el botón.
+  // Solo admin edita. Admin y cargador pueden eliminar registros (por si se equivocan al cargar).
+  // Viewer no ve botones.
   document.getElementById('tablaVac').innerHTML=fil.map(r=>`
     <tr>
       <td><strong>${r.empleado}</strong></td>
@@ -758,7 +810,7 @@ window.renderVacaciones=function(){
       <td style="color:#d97706;font-weight:600">${r.dias||0} día${(r.dias||0)===1?'':'s'}</td>
       <td>${r.obs||'-'}</td>
       <td style="font-size:11px;color:#888">${r.creadoPor||''}</td>
-      <td>${(esAdmin||esCargador)?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑 Eliminar</button>`:''}</td>
+      <td>${esAdmin?`<button class="btn btn-outline btn-sm" onclick="editarVac('${r.id}')">✏️ Editar</button> `:''}${(esAdmin||esCargador)?`<button class="btn btn-danger btn-sm" onclick="eliminarVac('${r.id}')">🗑 Eliminar</button>`:''}</td>
     </tr>
   `).join('')||'<tr><td colspan="7" style="text-align:center;color:#888;padding:20px">Sin registros</td></tr>';
 
