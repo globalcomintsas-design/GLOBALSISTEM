@@ -551,22 +551,38 @@ function refrescarSelectsEmpleados(){
 function isoLocal(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-// Días de vacaciones a descontar: días corridos del rango MENOS los lunes feriados
-// (cuando el feriado cae lunes, el conteo sigue desde el día siguiente).
+// Días de vacaciones a descontar: días corridos del rango (fines de semana y feriados
+// del medio SÍ cuentan). Solo se excluyen feriados en los extremos:
+//  - si el período arranca en feriado (o varios seguidos), se cuenta desde el primer día hábil siguiente
+//  - si termina en feriado (o varios seguidos), se cuenta hasta el último día hábil anterior
+// Si entre el feriado y el día hábil hay fin de semana, también se saltea (no se cuenta como vacaciones).
+function esFinDeSemana(d){ const w=d.getDay(); return w===0||w===6; }
 function diasVacaciones(desde, hasta){
   const total = diasEntre(desde, hasta);
-  const lunes = [];
-  if(total>0){
-    const d = new Date(desde+'T00:00:00');
-    for(let i=0;i<total;i++){
-      if(d.getDay()===1){
-        const k = isoLocal(d);
-        if(FERIADOS[k]) lunes.push({fecha:k, nombre:FERIADOS[k]});
-      }
-      d.setDate(d.getDate()+1);
+  const excluidos = [];
+  if(total<=0) return { total, dias:0, lunes:excluidos };
+  const ini = new Date(desde+'T00:00:00');
+  const fin = new Date(hasta+'T00:00:00');
+  const esFer = d => !!FERIADOS[isoLocal(d)];
+  // Extremo inicial
+  if(esFer(ini)){
+    while(ini<=fin && (esFer(ini) || esFinDeSemana(ini))){
+      const k=isoLocal(ini);
+      if(FERIADOS[k]) excluidos.push({fecha:k, nombre:FERIADOS[k]});
+      ini.setDate(ini.getDate()+1);
     }
   }
-  return { total, dias: total-lunes.length, lunes };
+  // Extremo final
+  if(ini<=fin && esFer(fin)){
+    while(fin>=ini && (esFer(fin) || esFinDeSemana(fin))){
+      const k=isoLocal(fin);
+      if(FERIADOS[k]) excluidos.push({fecha:k, nombre:FERIADOS[k]});
+      fin.setDate(fin.getDate()-1);
+    }
+  }
+  const dias = ini<=fin ? Math.round((fin-ini)/86400000)+1 : 0;
+  excluidos.sort((x,y)=>x.fecha<y.fecha?-1:1);
+  return { total, dias, lunes:excluidos, desdeEfectivo:isoLocal(ini), hastaEfectivo:isoLocal(fin) };
 }
 
 // Años disponibles en el selector: el actual, el siguiente a partir de octubre,
@@ -600,12 +616,12 @@ function renderFeriados(anio){
     const d = new Date(k+'T00:00:00');
     const esL = d.getDay()===1;
     if(esL) lun++;
-    return `<tr><td>${k.split('-').reverse().join('/')}</td><td>${nombres[d.getDay()]}</td><td>${FERIADOS[k]}</td><td>${esL?'<span style="color:#d97706;font-weight:600">Lunes: no se cuenta</span>':''}</td></tr>`;
+    return `<tr><td>${k.split('-').reverse().join('/')}</td><td>${nombres[d.getDay()]}</td><td>${FERIADOS[k]}</td><td><span style="color:#888">Solo no se cuenta si es el primer o último día</span></td></tr>`;
   }).join('');
   body.innerHTML = lista.length
     ? `<div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Día</th><th>Feriado</th><th>Vacaciones</th></tr></thead><tbody>${filas}</tbody></table></div>`
     : `<div style="color:#888;padding:8px">No hay feriados cargados para ${anio}.</div>`;
-  if(sub) sub.textContent = `${anio}: ${lista.length} feriados · ${lun} caen lunes (no se cuentan en vacaciones)`;
+  if(sub) sub.textContent = `${anio}: ${lista.length} feriados · solo se descuentan si caen al inicio o al final de las vacaciones`;
 }
 // Días naturales entre dos fechas (inclusivo). Ej: 2024-06-10 a 2024-06-14 = 5 días.
 function diasEntre(desde, hasta){
@@ -626,8 +642,9 @@ window.calcularDiasVac=function(){
   if(el) el.value=dias>0?dias+' día'+(dias===1?'':'s'):'';
   const nota=document.getElementById('vacNota');
   if(nota){
-    nota.textContent = r.lunes.length
-      ? '📌 '+r.total+' días corridos − '+r.lunes.length+' lunes feriado'+(r.lunes.length===1?'':'s')+' (no se cuenta'+(r.lunes.length===1?'':'n')+'): '+r.lunes.map(x=>x.fecha.split('-').reverse().join('/')+' '+x.nombre).join(', ')
+    const f = x=>x.split('-').reverse().join('/');
+    nota.textContent = r.lunes.length && r.dias>0
+      ? '📌 '+r.total+' días corridos − '+(r.total-r.dias)+' por feriado al inicio/fin ('+r.lunes.map(x=>f(x.fecha)+' '+x.nombre).join(', ')+'). Se cuenta del '+f(r.desdeEfectivo)+' al '+f(r.hastaEfectivo)+'.'
       : '';
   }
 };
@@ -677,7 +694,7 @@ window.guardarVacacion=async function(){
   const calc=diasVacaciones(desde,hasta);
   if(calc.total<=0){toast('La fecha hasta debe ser posterior o igual a la desde','error');return;}
   const dias=calc.dias;
-  if(dias<=0){toast('El período solo incluye lunes feriados: no suma días','error');return;}
+  if(dias<=0){toast('El período solo incluye feriados: no suma días','error');return;}
 
   // Aviso (no bloqueante) si se pasa del tope anual efectivo (base + acumulado de años anteriores)
   const anioActual=new Date(desde+'T00:00:00').getFullYear();  // año al que pertenece este período
@@ -699,7 +716,7 @@ window.guardarVacacion=async function(){
       const upd={ empleado, desde, hasta, dias, obs,
         creadoPor:prev?.creadoPor||currentUser.nombre, ts:prev?.ts||Date.now(),
         editadoPor:currentUser.nombre, editadoTs:Date.now() };
-      if(calc.lunes.length) upd.lunesFeriados = calc.lunes.map(x=>x.fecha);
+      if(calc.lunes.length) upd.feriadosExcluidos = calc.lunes.map(x=>x.fecha);
       await setDoc(doc(db,'vacaciones',editandoVacId), upd);
       allVac = allVac.map(v=>v.id===editandoVacId ? {...upd,id:editandoVacId} : v);
       resetFormVac();
@@ -708,7 +725,7 @@ window.guardarVacacion=async function(){
     } else {
       // ── ALTA NUEVA
       const nuevo={ empleado, desde, hasta, dias, obs, creadoPor:currentUser.nombre, ts:Date.now() };
-      if(calc.lunes.length) nuevo.lunesFeriados = calc.lunes.map(x=>x.fecha);
+      if(calc.lunes.length) nuevo.feriadosExcluidos = calc.lunes.map(x=>x.fecha);
       const ref = await addDoc(collection(db,'vacaciones'), nuevo);
       nuevo.id = ref.id;
       // Actualiza el array local en vez de releer toda la colección
