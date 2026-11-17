@@ -370,14 +370,13 @@ function diasTomadosEnAnio(empleado, anio){
     },0);
 }
 
-// Saldo acumulado de años anteriores (días no tomados que se arrastran al año actual).
-// Recorre desde el primer año con registro hasta el año anterior al actual,
-// sumando (tope_del_empleado - dias_tomados) de cada año. Si el resultado es negativo, se ignora (no se puede deber).
-// NOTA: este cálculo necesita el historial COMPLETO de allVac (no solo un
-// período puntual), por eso esta pantalla carga toda la colección de una
-// vez en memoria en vez de filtrar por mes como en movilidad/sueldos.
+// Saldo arrastrado de años anteriores al año actual (puede ser POSITIVO o NEGATIVO).
+// Se encadena año por año: tope efectivo del año = tope propio + saldo que venía;
+// saldo que pasa al año siguiente = tope efectivo - días tomados.
+//  - Si sobraron días, se suman al año siguiente.
+//  - Si se pasó (tomó más que su tope efectivo), el exceso se DESCUENTA del año siguiente.
+// NOTA: necesita el historial COMPLETO de allVac (por eso se carga toda la colección en memoria).
 function saldoAcumulado(empleado, anioActual){
-  // Encontrar el primer año con vacaciones registradas para este empleado
   let primerAnio = anioActual;
   allVac.forEach(v=>{
     if(v.empleado===empleado && v.desde){
@@ -385,14 +384,10 @@ function saldoAcumulado(empleado, anioActual){
       if(a<primerAnio) primerAnio=a;
     }
   });
-  // Sumar saldos no negativos de cada año desde primerAnio hasta anioActual-1
   let saldo=0;
   for(let a=primerAnio; a<anioActual; a++){
-    const topeAnio = topeDe(empleado, a);  // tope propio de cada año
-    const tomados = diasTomadosEnAnio(empleado, a);
-    const saldoAnio = topeAnio - tomados;
-    if(saldoAnio>0) saldo += saldoAnio;
-    // Si saldoAnio es negativo o cero, no acumula (no se puede deber vacaciones)
+    const efectivo = topeDe(empleado, a) + saldo;
+    saldo = efectivo - diasTomadosEnAnio(empleado, a);
   }
   return saldo;
 }
@@ -705,7 +700,7 @@ window.guardarVacacion=async function(){
   const topeBase = topeDe(empleado, anioActual);
   const acum = saldoAcumulado(empleado, anioActual);
   const topeEmp = topeBase + acum;  // tope efectivo = base + saldo acumulado
-  const msgAcum = acum>0 ? ` (base ${topeBase} + ${acum} acumulados de años anteriores)` : '';
+  const msgAcum = acum>0 ? ` (base ${topeBase} + ${acum} acumulados de años anteriores)` : (acum<0 ? ` (base ${topeBase} − ${-acum} de exceso de años anteriores)` : '');
   if(yaTomados+dias>topeEmp){
     if(!confirm('Atención: '+empleado+' ya tomó '+yaTomados+' días en '+anioActual+'. Con estas '+dias+' sumará '+(yaTomados+dias)+' días, superando su tope de '+topeEmp+msgAcum+'.\n\n¿Querés registrar igual?')) return;
   }
@@ -790,8 +785,7 @@ window.renderVacaciones=function(){
   document.getElementById('totDiasAnio').previousElementSibling.textContent='Días tomados en '+anioActual;
 
   // Días disponibles = suma de topes efectivos (base + acumulado) - díasAnio
-  const sumaTopes = EMPLEADOS.reduce((s,e)=>s+topeEfectivo(e.nombre, anioActual),0);
-  const diasDisp=Math.max(0, sumaTopes - diasAnio);
+  const diasDisp = EMPLEADOS.reduce((s,e)=>s+Math.max(0, topeEfectivo(e.nombre, anioActual)-diasTomadosEnAnio(e.nombre, anioActual)),0);
   document.getElementById('totDiasDisp').textContent=diasDisp;
   document.getElementById('totDiasDisp').previousElementSibling.textContent='Días disponibles '+anioActual+' (tope)';
 
@@ -871,7 +865,7 @@ window.renderVacaciones=function(){
       <td><strong>${e.nombre}</strong></td>
       <td style="color:#d97706;font-weight:600">${m.dias}</td>
       <td>${topeBase}</td>
-      <td style="color:${acum>0?'#16a34a':'#94a3b8'};font-weight:600">${acum>0?'+'+acum:'—'}</td>
+      <td style="color:${acum>0?'#16a34a':(acum<0?'#dc2626':'#94a3b8')};font-weight:600">${acum>0?'+'+acum:(acum<0?'−'+(-acum):'—')}</td>
       <td style="font-weight:700;color:#1e3a8a">${topeTotal}</td>
       <td style="color:${disp>0?'#16a34a':'#dc2626'};font-weight:600">${disp}</td>
       <td><span class="badge ${badgeClass}">${badge}</span></td>
